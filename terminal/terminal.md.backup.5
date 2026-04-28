@@ -1,0 +1,299 @@
+# Portable terminal environment via xxh
+
+Carries a full shell environment (fish + starship prompt) to any remote host over SSH without installing anything permanently. The remote host is left completely clean after disconnect.
+
+## How it works
+
+[xxh](https://github.com/xxh/xxh) uploads a self-contained shell bundle to the remote over SCP on every connect, starts the session inside it, and removes everything when you disconnect. The remote host never sees a package manager, never gets a modified `.bashrc`, and nothing persists in the home directory after you leave.
+
+**On connect** (~51 MB uploaded via SCP every time):
+- `~/.xxh/` is created on the remote
+- The portable fish shell binary (`fish-portable`) is uploaded
+- The starship binary and `starship.toml` config are uploaded
+- The fish session config (`xxh-config.fish`) is uploaded
+- The session starts with `HOME` pointing to your real home (`/home/<you>`) but all XDG dirs (`~/.config`, `~/.local`, `~/.cache`) redirected into `~/.xxh/` so nothing leaks to the real home
+- The SSH alias you used to connect (e.g. `j2admin`) is forwarded as `$XXH_SSH_ALIAS` so the starship prompt can display it
+
+**On disconnect**:
+- `~/.xxh/` is deleted entirely — no files remain
+- `.bashrc`, `.bash_profile`, `.profile` are never touched
+- No binaries are left in `PATH`
+- No processes are left running
+
+---
+
+## Prerequisites (local Mac)
+
+- [xxh](https://github.com/xxh/xxh) installed via pipx
+- [fish](https://fishshell.com) installed (Homebrew)
+- [starship](https://starship.rs) installed (Homebrew) — macOS binary, used locally only
+- Static Linux x86-64 binaries staged in `~/.xxh/bin/`:
+  - `starship` — from the [starship releases page](https://github.com/starship/starship/releases) (`starship-x86_64-unknown-linux-musl.tar.gz`)
+  - `fzf` — staged for future use
+  - `atuin` — staged for future use
+- xxh fish shell plugin installed: `xxh +I xxh-shell-fish`
+
+---
+
+## File layout
+
+```
+~/.config/xxh/config.xxhc           # xxh connection config (all hosts)
+~/.config/starship.toml              # starship config — source of truth for both local and remote
+~/.config/fish/config.fish           # local Mac fish config (starship, fzf, atuin init)
+~/.config/fish/functions/xxhc.fish   # connect wrapper function
+
+~/.xxh/ssh-wrapper.sh                # forces ControlMaster=no for rsync compat
+~/.xxh/bin/starship                  # static Linux x86-64 starship binary (source)
+~/.xxh/bin/fzf                       # static Linux x86-64 fzf binary (staged, unused)
+~/.xxh/bin/atuin                     # static Linux x86-64 atuin binary (staged, unused)
+
+# xxh-shell-fish local staging area — everything here is uploaded on every connect:
+~/.xxh/.xxh/shells/xxh-shell-fish/build/
+  entrypoint.sh                      # starts the fish session (managed by xxh, don't edit)
+  fish-portable/                     # self-contained portable fish binary (~39 MB)
+  xxh-config.fish                    # fish session init — sources plugins and starship
+  starship.toml                      # copy of ~/.config/starship.toml
+  bin/starship                       # copy of ~/.xxh/bin/starship
+```
+
+> **Two-copy rule:** `starship.toml` and `bin/starship` each live in two places. The source of truth is `~/.config/starship.toml` and `~/.xxh/bin/starship`. After changing either one, copy it into the build dir (see [Updating](#updating)).
+
+---
+
+## Setup tutorial
+
+### 1. Install xxh
+
+```sh
+pipx install xxh-xxh
+```
+
+### 2. Install the fish shell plugin
+
+```sh
+xxh +I xxh-shell-fish
+```
+
+### 3. Create the ssh-wrapper
+
+Required because xxh's built-in rsync command conflicts with SSH ControlMaster multiplexing. Even though we use SCP for uploads, the wrapper is kept in case rsync is ever used.
+
+```sh
+mkdir -p ~/.xxh
+cat > ~/.xxh/ssh-wrapper.sh << 'EOF'
+#!/bin/bash
+exec ssh -o ControlMaster=no -o ControlPath=none "$@"
+EOF
+chmod +x ~/.xxh/ssh-wrapper.sh
+```
+
+### 4. Stage the Linux static binaries
+
+Download static Linux x86-64 builds and place them in `~/.xxh/bin/`:
+
+```sh
+mkdir -p ~/.xxh/bin
+# download starship-x86_64-unknown-linux-musl.tar.gz from github.com/starship/starship/releases
+# download fzf-*-linux_amd64.tar.gz from github.com/junegunn/fzf/releases
+# download atuin-x86_64-unknown-linux-musl.tar.gz from github.com/atuinsh/atuin/releases
+chmod +x ~/.xxh/bin/starship ~/.xxh/bin/fzf ~/.xxh/bin/atuin
+```
+
+### 5. Write the xxh config
+
+`~/.config/xxh/config.xxhc`:
+
+```yaml
+hosts:
+  ".*":
+    +s: xxh-shell-fish
+    ++pexpect-timeout: "30"
+    ++copy-method: scp
+    +if:
+    +hhh: "~"
+    +hhr:
+    -o:
+      - ControlMaster=no
+      - ControlPath=none
+```
+
+| Option | Effect |
+|---|---|
+| `+s: xxh-shell-fish` | Use the portable fish shell plugin |
+| `++pexpect-timeout: "30"` | Allow 30 s for slow hosts to respond during handshake |
+| `++copy-method: scp` | Use SCP instead of rsync (rsync has a flag conflict in this setup) |
+| `+if:` | Always install without prompting — needed because `+hhr` wipes the remote on every disconnect, so xxh would otherwise ask "Install? [Y/n]" on every connect |
+| `+hhh: "~"` | Set `HOME` to your real home on the remote, not `~/.xxh` |
+| `+hhr:` | Delete `~/.xxh` on the remote after disconnect (zero footprint) |
+| `-o ControlMaster=no` | Prevent SSH multiplexing conflicts |
+
+### 6. Stage starship into the fish build dir
+
+```sh
+mkdir -p ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin
+cp ~/.config/starship.toml ~/.xxh/.xxh/shells/xxh-shell-fish/build/starship.toml
+cp ~/.xxh/bin/starship     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
+chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
+```
+
+### 7. Wire starship into the fish session config
+
+Edit `~/.xxh/.xxh/shells/xxh-shell-fish/build/xxh-config.fish` — add before the final `cd ~`:
+
+```fish
+if test -f $CURRENT_DIR/bin/starship
+    set -x PATH $CURRENT_DIR/bin $PATH
+    set -x STARSHIP_CONFIG $CURRENT_DIR/starship.toml
+    starship init fish | source
+end
+```
+
+`$CURRENT_DIR` is set by xxh-config.fish itself to the build directory path on the remote, so these paths resolve correctly regardless of username.
+
+### 8. Add the connect wrapper to local fish
+
+`~/.config/fish/functions/xxhc.fish`:
+
+```fish
+function xxhc --description "xxh with SSH alias forwarded to remote prompt"
+    set -l target $argv[1]
+    env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target +e "XXH_SSH_ALIAS=$target" $argv[2..-1]
+end
+```
+
+This does three things: sets `RSYNC_RSH` so rsync bypasses ControlMaster, passes the SSH alias as `XXH_SSH_ALIAS` so starship can display it in the prompt, and forwards any extra xxh flags you add after the hostname.
+
+### 9. Configure starship
+
+`~/.config/starship.toml` — applies both to the local Mac prompt and the remote session (via the copy in the build dir):
+
+```toml
+format = """
+$username$hostname${env_var.XXH_SSH_ALIAS}$directory$git_branch$git_status
+$character"""
+
+[username]
+show_always = false
+style_user = "green bold"
+format = "[$user]($style)"
+
+[hostname]
+ssh_only = true
+format = "[ @ $hostname]($style) "
+style = "yellow bold"
+
+[directory]
+truncation_length = 3
+
+[git_branch]
+format = "[$symbol$branch]($style) "
+style = "cyan"
+
+[env_var.XXH_SSH_ALIAS]
+variable = "XXH_SSH_ALIAS"
+format = "\\([$env_value]($style)\\) "
+style = "blue bold"
+
+[character]
+success_symbol = "[›](green)"
+error_symbol = "[›](red)"
+```
+
+`hostname` uses `ssh_only = true` so it only shows on remote sessions. `env_var.XXH_SSH_ALIAS` only renders when the variable is set, which only happens via `xxhc`. On the local Mac neither appears.
+
+After saving, sync to the build dir:
+
+```sh
+cp ~/.config/starship.toml ~/.xxh/.xxh/shells/xxh-shell-fish/build/starship.toml
+```
+
+### 10. Local fish config
+
+`~/.config/fish/config.fish` — initialises the local Mac environment:
+
+```fish
+starship init fish | source
+fzf --fish | source
+atuin init fish --disable-up-arrow | source
+```
+
+This is unrelated to the remote setup — it's just the local Mac prompt and tooling.
+
+---
+
+## Performance
+
+Benchmarked on a connect to `j2admin` (ETH network) with `time xxhc j2admin +hc "echo ok"`:
+
+```
+Executed in   15.36 secs    fish           external
+   usr time  419.69 millis  419.53 millis
+   sys time  609.37 millis  608.79 millis
+```
+
+~15 seconds wall time per connect. Nearly all of that is the ~51 MB SCP upload — once files are in place the session itself starts in under a second. This cost is unavoidable with `+hhr`: every connect is a cold upload.
+
+---
+
+## Connecting
+
+```sh
+xxhc j2admin
+```
+
+xxh uploads ~51 MB via SCP, then drops you into a fish session. The prompt looks like:
+
+```
+tmilata @ id-s4d-s08 (j2admin) ~
+›
+```
+
+- `tmilata` — your username (green)
+- `@ id-s4d-s08` — actual hostname of the remote (yellow), only shown on SSH sessions
+- `(j2admin)` — the SSH alias you connected with (blue), only shown via `xxhc`
+- `~` — current directory relative to your real home
+
+---
+
+## Updating
+
+### Starship config changed
+
+```sh
+cp ~/.config/starship.toml ~/.xxh/.xxh/shells/xxh-shell-fish/build/starship.toml
+xxhc j2admin   # uploads automatically on next connect
+```
+
+### Starship binary updated
+
+```sh
+cp ~/.xxh/bin/starship ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
+xxhc j2admin
+```
+
+Because `+if:` and `+hhr:` are both in the config, every connect wipes the remote and re-uploads the full build dir. There is no stale cache to worry about.
+
+---
+
+## Uninstall
+
+### Remove from remote
+
+Just disconnect — `+hhr` deletes `~/.xxh` automatically.
+
+If you connected without `+hhr` (e.g. a manual `xxh` call):
+
+```sh
+ssh <host> "rm -rf ~/.xxh"
+```
+
+### Remove everything locally
+
+```sh
+pipx uninstall xxh-xxh
+rm -rf ~/.xxh ~/.config/xxh
+rm ~/.config/fish/functions/xxhc.fish
+```
+
+Remove the `${env_var.XXH_SSH_ALIAS}` reference from the `format` line and the `[env_var.XXH_SSH_ALIAS]` section from `~/.config/starship.toml` to restore the plain local prompt.
