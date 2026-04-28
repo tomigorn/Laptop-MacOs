@@ -49,6 +49,7 @@ if test -f $CURRENT_DIR/bin/atuin
     atuin init fish | source
 
     function _xxhc_export_history --on-event fish_exit
+        # Export atuin history to /tmp so xxhc can retrieve it after disconnect
         if set -q XXH_SSH_ALIAS; and test -n "$XXH_SSH_ALIAS"
             set -l db $XDG_DATA_HOME/atuin/history.db
             set -l dst /tmp/.xxh_atuin_$XXH_SSH_ALIAS
@@ -58,6 +59,12 @@ if test -f $CURRENT_DIR/bin/atuin
                 test -f $db-wal && cp $db-wal $dst.db-wal 2>/dev/null
             end
         end
+
+        # Pre-emptively remove ~/.xxh so xxh's +hhr cleanup always succeeds.
+        # On NFS home directories, open files (e.g. fish completion generation)
+        # leave .nfsXXXX stubs that cause rm to report "Directory not empty".
+        # The fish binary and sourced config remain in memory after unlinking.
+        rm -rf $XXH_HOME 2>/dev/null
     end
 end
 
