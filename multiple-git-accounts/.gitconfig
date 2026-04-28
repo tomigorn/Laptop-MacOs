@@ -1,0 +1,9 @@
+; No [user] block here on purpose — prevents accidental identity leaks
+; outside the work/ and private/ trees. Commits outside those paths
+; will fail until you set user.name and user.email explicitly.
+
+[includeIf "gitdir:~/development/work/"]
+	path = ~/.gitconfig-work
+
+[includeIf "gitdir:~/development/private/"]
+	path = ~/.gitconfig-private

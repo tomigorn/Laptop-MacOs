@@ -1,0 +1,19 @@
+[user]
+	name = full name
+	email = work-email
+	signingkey = ~/.ssh/gitLab-ETH.pub
+
+[core]
+	sshCommand = ssh -i ~/.ssh/gitLab-ETH -o IdentitiesOnly=yes
+
+[gpg]
+	format = ssh
+
+[gpg "ssh"]
+	allowedSignersFile = ~/.ssh/allowed_signers-work
+
+[commit]
+	gpgsign = true
+
+[tag]
+	gpgsign = true
