@@ -29,19 +29,28 @@ end
 
 Shows OS, CPU, memory, uptime on every new shell. Works identically on macOS locally and Linux remotely — fastfetch auto-detects the system and shows the correct distro logo and info. All fastfetch cache and config go to `$XDG_CACHE_HOME` / `$XDG_CONFIG_HOME`, which are redirected into `~/.xxh/` on remote and wiped on disconnect.
 
+On remote sessions the greeting also prints the total time taken to connect and upload before the fastfetch output:
+
+```
+  Connected in 14.3s
+
+[fastfetch output]
+```
+
 ---
 
 ## Remote setup via xxh
 
 [xxh](https://github.com/xxh/xxh) carries a self-contained shell to any SSH host without installing anything permanently. On connect it uploads a bundle via SCP, starts a fish session inside it, and on disconnect removes everything.
 
-### What happens on connect (~51 MB uploaded every time)
+### What happens on connect (~61 MB uploaded every time)
 
 - `~/.xxh/` is created on the remote
 - Portable fish binary, static Linux starship and fastfetch binaries, starship config, and fish session config are uploaded
 - `HOME` is your real remote home (e.g. `/home/tomigorn`) — nothing lands in it
 - All XDG dirs (`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`) are redirected into `~/.xxh/` so fish configs and history never touch the real home
 - The SSH alias you typed (e.g. `myserver`) is forwarded as `$XXH_SSH_ALIAS` so the prompt can show it
+- A start timestamp is forwarded as `$XXH_CONNECT_START` so the greeting can display total connection time
 
 ### What happens on disconnect
 
@@ -150,11 +159,16 @@ hosts:
 ```fish
 function xxhc
     set -l target $argv[1]
-    env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target +e "XXH_SSH_ALIAS=$target" $argv[2..-1]
+    set -l start $EPOCHREALTIME
+    env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
+        +e "XXH_SSH_ALIAS=$target" \
+        +e "XXH_CONNECT_START=$start" \
+        $argv[2..-1]
 end
 ```
 
 - Sets `RSYNC_RSH` so rsync (if ever used) bypasses ControlMaster
+- Records `$EPOCHREALTIME` before connecting and forwards it as `XXH_CONNECT_START` — the remote greeting subtracts this from the remote clock to show total connection time
 - Passes the SSH alias as `XXH_SSH_ALIAS` so starship can display it
 - Forwards any extra xxh flags: `xxhc myserver +vv` works as expected
 
@@ -168,7 +182,7 @@ Benchmarked on local network with `time xxhc myserver +hc "echo ok"`:
 Executed in   15.36 secs
 ```
 
-Nearly all of that is the ~51 MB SCP upload. The session starts in under a second once files are in place. This cost is unavoidable with `+hhr` — every connect is a cold upload.
+Nearly all of that is the SCP upload (~61 MB: fish-portable 39 MB + starship 12 MB + fastfetch 10 MB). The session starts in under a second once files are in place. This cost is unavoidable with `+hhr` — every connect is a cold upload.
 
 ---
 
@@ -202,8 +216,9 @@ mkdir -p ~/.config/xxh ~/.config/fish/functions ~/.xxh
 ln -sf $BASE/.config/xxh/config.xxhc          ~/.config/xxh/config.xxhc
 ln -sf $BASE/.config/starship.toml             ~/.config/starship.toml
 ln -sf $BASE/.config/fish/config.fish          ~/.config/fish/config.fish
-ln -sf $BASE/.config/fish/functions/xxhc.fish  ~/.config/fish/functions/xxhc.fish
-ln -sf $BASE/.xxh/ssh-wrapper.sh               ~/.xxh/ssh-wrapper.sh
+ln -sf $BASE/.config/fish/functions/xxhc.fish          ~/.config/fish/functions/xxhc.fish
+ln -sf $BASE/.config/fish/functions/fish_greeting.fish ~/.config/fish/functions/fish_greeting.fish
+ln -sf $BASE/.xxh/ssh-wrapper.sh                       ~/.xxh/ssh-wrapper.sh
 
 # 4. symlink into the xxh build dir (makes edits here apply to remote uploads instantly)
 ln -sf $BASE/.xxh/xxh-config.fish  ~/.xxh/.xxh/shells/xxh-shell-fish/build/xxh-config.fish
