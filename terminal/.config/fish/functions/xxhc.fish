@@ -1,6 +1,6 @@
 function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     set -l target $argv[1]
-    set -l start $EPOCHREALTIME
+    set -l start (date +%s)
     env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
         +e "XXH_SSH_ALIAS=$target" \
         +e "XXH_CONNECT_START=$start" \

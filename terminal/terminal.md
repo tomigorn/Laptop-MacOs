@@ -159,7 +159,7 @@ hosts:
 ```fish
 function xxhc
     set -l target $argv[1]
-    set -l start $EPOCHREALTIME
+    set -l start (date +%s)
     env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
         +e "XXH_SSH_ALIAS=$target" \
         +e "XXH_CONNECT_START=$start" \
@@ -168,7 +168,7 @@ end
 ```
 
 - Sets `RSYNC_RSH` so rsync (if ever used) bypasses ControlMaster
-- Records `$EPOCHREALTIME` before connecting and forwards it as `XXH_CONNECT_START` — the remote greeting subtracts this from the remote clock to show total connection time
+- Records `date +%s` (Unix seconds) before connecting and forwards it as `XXH_CONNECT_START` — the remote greeting subtracts this from the remote clock to show total connection time
 - Passes the SSH alias as `XXH_SSH_ALIAS` so starship can display it
 - Forwards any extra xxh flags: `xxhc myserver +vv` works as expected
 
