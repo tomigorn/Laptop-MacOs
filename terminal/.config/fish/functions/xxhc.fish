@@ -30,7 +30,12 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
         scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
 
-        # sqlite3 automatically reads the WAL alongside the main file
+        # Checkpoint WAL into the main DB file so all data is in one place.
+        # Without this, the main file may have no schema (it's all in the WAL)
+        # and subsequent ATTACH and VACUUM INTO operations see an empty DB.
+        sqlite3 $tmp_db "PRAGMA wal_checkpoint(FULL);" 2>/dev/null
+
+        # sqlite3 now reads the fully checkpointed main file
         sqlite3 $local_db "
             ATTACH '$tmp_db' AS remote;
             INSERT OR IGNORE INTO main.history SELECT * FROM remote.history;
@@ -61,10 +66,10 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         set_color --bold red
         echo ""
         echo "  ╔══════════════════════════════════════════════════════════════╗"
-        echo "  ║                    CLEANUP FAILURE                          ║"
+        echo "  ║                    CLEANUP FAILURE                           ║"
         echo "  ║                                                              ║"
         printf "  ║  ~/.xxh was NOT removed on %-34s║\n" "$target "
-        echo "  ║  Other users on this shared host can see your files.        ║"
+        echo "  ║  Other users on this shared host can see your files.         ║"
         echo "  ║                                                              ║"
         printf "  ║  Fix now:  ssh %s \"rm -rf ~/.xxh\"\n" $target
         echo "  ║                                                              ║"

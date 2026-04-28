@@ -60,11 +60,11 @@ if test -f $CURRENT_DIR/bin/atuin
             end
         end
 
-        # Pre-emptively remove ~/.xxh so xxh's +hhr cleanup always succeeds.
-        # On NFS home directories, open files (e.g. fish completion generation)
-        # leave .nfsXXXX stubs that cause rm to report "Directory not empty".
-        # The fish binary and sourced config remain in memory after unlinking.
-        rm -rf $XXH_HOME 2>/dev/null
+        # Remove fish's generated_completions before xxh's +hhr cleanup runs.
+        # On NFS home directories, files open during completion generation leave
+        # .nfsXXXX stubs that cause rm to fail with "Directory not empty".
+        # Removing this dir here lets xxh's chmod + rm -rf succeed cleanly.
+        rm -rf $XDG_DATA_HOME/fish 2>/dev/null
     end
 end
 
