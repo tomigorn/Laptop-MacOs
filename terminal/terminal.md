@@ -101,9 +101,13 @@ tomigorn @ remote-host (myserver) ~
 
 ### What gets cleaned up on disconnect
 
-- `~/.xxh/` deleted entirely — fish binary, all uploaded tools, XDG config and cache dirs, atuin DB
+- `fish/generated_completions/` — removed by the fish_exit handler to avoid NFS stub file issues
+- `~/.xxh/` — deleted by xxh's `+hhr` cleanup (runs `chmod -R u+w` then `rm -rf`)
+- `/tmp/.xxh_atuin_*` — removed by `xxhc` after the history merge completes
 - `.bashrc`, `.bash_profile`, `.profile` — never touched
 - No binaries left in `PATH`, no background processes
+
+If `~/.xxh/` cannot be removed (permissions, filesystem issue), `xxhc` detects this by SSH-ing back after the session and shows a red warning box with the manual fix command.
 
 ### Remote atuin history sync
 
@@ -113,7 +117,7 @@ History flows in both directions so each host accumulates its own history across
 `xxhc` checks for a per-host history file at `~/.xxh/history/<alias>.db` on the Mac. If it exists (from a previous session), it SCPs it to `remote:/tmp/` before calling xxh. The remote fish startup (`xxh-config.fish`) picks this up and uses it to seed the atuin database — so you immediately have history from all previous sessions on that host.
 
 **On disconnect:**
-Before the remote fish session exits, it copies its atuin database to `/tmp/` (outside `~/.xxh/`, so `+hhr` doesn't wipe it). After `xxhc` returns, it SCPs that database back to the Mac, merges it into your local atuin database using `sqlite3`, and saves a fresh copy as `~/.xxh/history/<alias>.db` for the next connect. Records are merged with `INSERT OR IGNORE` so no duplicates accumulate.
+Before the remote fish session exits, it copies its atuin database (main file + WAL + SHM) to `/tmp/`. atuin uses SQLite WAL mode, meaning recent writes live in the `-wal` file rather than the main `.db` — without the WAL, the DB appears empty. After `xxhc` returns, all three files are SCP'd back to the Mac, a `PRAGMA wal_checkpoint(FULL)` merges the WAL into the main file, and the result is merged into your local atuin database with `INSERT OR IGNORE` (no duplicates). A clean single-file copy is saved as `~/.xxh/history/<alias>.db` for the next connect's preseed.
 
 The per-host files at `~/.xxh/history/` are not in git (personal history data). They grow over time and are the only persistent state on the Mac side of this system.
 
@@ -219,49 +223,108 @@ hosts:
 ```fish
 function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     set -l target $argv[1]
+    set -l host_db ~/.xxh/history/$target.db
+    set -l remote_preseed /tmp/.xxh_atuin_pre_$target.db
+    set -l remote_db /tmp/.xxh_atuin_$target.db
+    set -l local_db ~/.local/share/atuin/history.db
+    set -l tmp_db /tmp/.xxh_atuin_$target\_local.db
+
+    # Pre-seed remote with this host's accumulated history.
+    # Validate it has a history table, then send a clean WAL-free single-file copy.
+    if test -f $host_db
+        set -l has_table (sqlite3 $host_db "SELECT name FROM sqlite_master WHERE type='table' AND name='history';" 2>/dev/null)
+        if test "$has_table" = history
+            set -l clean_preseed /tmp/.xxh_atuin_pre_clean_$target.db
+            sqlite3 $host_db "VACUUM INTO '$clean_preseed';" 2>/dev/null
+            and scp -q -o ControlMaster=no -o ControlPath=none $clean_preseed "$target:$remote_preseed" 2>/dev/null
+            rm -f $clean_preseed
+        end
+    end
+
     set -l start (date +%s)
     env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
         +e "XXH_SSH_ALIAS=$target" \
         +e "XXH_CONNECT_START=$start" \
         $argv[2..-1]
 
-    # After session ends: retrieve remote atuin history and merge into local DB
-    set -l remote_db /tmp/.xxh_atuin_$target.db
-    set -l local_db ~/.local/share/atuin/history.db
-    set -l tmp_db /tmp/.xxh_atuin_$target\_local.db
-
+    # Retrieve remote atuin DB — fetch main file plus WAL files.
+    # atuin uses SQLite WAL mode: recent writes live in the -wal file, not the
+    # main .db file. Without the WAL files, the DB appears empty.
     if scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db" $tmp_db 2>/dev/null
+        scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
+        scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
+
+        # Checkpoint WAL into the main file so all data is in one place before
+        # any further sqlite3 operations read the DB.
+        sqlite3 $tmp_db "PRAGMA wal_checkpoint(FULL);" 2>/dev/null
+
         sqlite3 $local_db "
             ATTACH '$tmp_db' AS remote;
             INSERT OR IGNORE INTO main.history SELECT * FROM remote.history;
             DETACH remote;
         " 2>/dev/null
         and echo "  History from $target merged into local atuin"
-        ssh -q -o ControlMaster=no -o ControlPath=none $target "rm -f $remote_db" 2>/dev/null
-        rm -f $tmp_db
+
+        # Accumulate per-host history for the next connect's preseed.
+        # VACUUM INTO creates a clean single-file DB (no WAL artifacts).
+        mkdir -p ~/.xxh/history
+        if test -f $host_db
+            sqlite3 $host_db "
+                ATTACH '$tmp_db' AS new_session;
+                INSERT OR IGNORE INTO main.history SELECT * FROM new_session.history;
+                DETACH new_session;
+            " 2>/dev/null
+        else
+            sqlite3 $tmp_db "VACUUM INTO '$host_db';" 2>/dev/null
+        end
+
+        ssh -q -o ControlMaster=no -o ControlPath=none $target \
+            "rm -f $remote_db $remote_db-wal $remote_db-shm $remote_preseed" 2>/dev/null
+        rm -f $tmp_db $tmp_db-wal $tmp_db-shm
+    end
+
+    # Verify xxh cleaned up ~/.xxh — warn loudly if anything is left behind
+    if ssh -q -o ControlMaster=no -o ControlPath=none -o ConnectTimeout=10 $target "test -d ~/.xxh" 2>/dev/null
+        set_color --bold red
+        echo ""
+        echo "  ╔══════════════════════════════════════════════════════════════╗"
+        echo "  ║                    CLEANUP FAILURE                          ║"
+        echo "  ║  ~/.xxh was NOT removed on $target"
+        echo "  ║  Other users on this shared host can see your files.        ║"
+        echo "  ║  Fix now:  ssh $target \"rm -rf ~/.xxh\""
+        echo "  ╚══════════════════════════════════════════════════════════════╝"
+        echo ""
+        set_color normal
     end
 end
 ```
 
-- `RSYNC_RSH` — ensures rsync (if ever called internally by xxh) bypasses ControlMaster
-- `XXH_SSH_ALIAS` — the SSH alias you typed; forwarded to the remote so the prompt can show `(myserver)`
-- `XXH_CONNECT_START` — Unix timestamp captured before connecting; the remote greeting subtracts it from the remote clock to display total connection time
-- After `xxh` returns: SCP retrieves the remote atuin DB from `/tmp/`, merges it into the local DB, then cleans up both temp files. If the remote is unreachable after session (rare), the merge is silently skipped.
+- `RSYNC_RSH` — ensures rsync bypasses ControlMaster if ever called internally by xxh
+- `XXH_SSH_ALIAS` — the alias you typed; forwarded to the remote so the prompt shows `(myserver)`
+- `XXH_CONNECT_START` — Unix timestamp before connecting; remote greeting subtracts it to show total connection time
+- **Pre-seed**: before xxh runs, if `~/.xxh/history/<alias>.db` exists and has a history table, a clean WAL-free copy is SCP'd to `remote:/tmp/` for atuin to load at startup
+- **WAL handling**: atuin uses SQLite WAL mode so recent writes are in `-wal` not the main file; all three files are fetched, then `PRAGMA wal_checkpoint(FULL)` merges WAL into main file before any reads
+- **Host DB**: per-host history is accumulated in `~/.xxh/history/<alias>.db` and grows across sessions
+- **Cleanup check**: after everything, SSHs back to verify `~/.xxh` is gone; shows a red warning box if not
 
 ### `xxh/xxh-config.fish`
 
-The fish session init that runs on the remote. It:
-1. Adds the uploaded `bin/` directory to `PATH`
-2. Configures and starts starship
-3. Defines the `fish_greeting` function (shows connection time + fastfetch)
-4. Configures and starts atuin with sync disabled, registers a `fish_exit` handler that copies the atuin DB to `/tmp/` before the session closes
+The fish session init that runs on the remote. In order:
 
-The atuin config written on the remote:
+1. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, and atuin are all in PATH
+2. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
+3. **Greeting** — defines `fish_greeting` to print connection time (from `XXH_CONNECT_START`) then run fastfetch
+4. **Atuin** — if a preseed file exists at `/tmp/.xxh_atuin_pre_<alias>.db`, copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config and initialises atuin.
+5. **`fish_exit` handler** — on exit, copies the atuin DB and its WAL/SHM files to `/tmp/` so `xxhc` can retrieve them after the session ends. Also removes `fish/generated_completions` to prevent NFS stub files from blocking xxh's `+hhr` cleanup.
+
+The atuin config written on each connect:
 ```toml
 auto_sync = false
 search_mode = "fuzzy"
 ```
-`auto_sync = false` prevents atuin from trying to reach any external sync server — important on a shared host where you control nothing about the network.
+`auto_sync = false` prevents atuin from contacting any external server — important on shared hosts where network behaviour is unpredictable.
+
+**NFS cleanup note:** On NFS-mounted home directories (common in university/enterprise environments), fish generates shell completions asynchronously. When those files are open, deleting them creates invisible `.nfsXXXX` stub files that leave the directory non-empty. xxh's `+hhr` cleanup then fails with "Directory not empty". The `fish_exit` handler pre-emptively removes `$XDG_DATA_HOME/fish/` so xxh can cleanly `chmod -R u+w && rm -rf` the rest of `~/.xxh/`.
 
 ---
 
