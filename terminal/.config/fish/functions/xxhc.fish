@@ -33,4 +33,21 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         ssh -q -o ControlMaster=no -o ControlPath=none $target "rm -f $remote_db $remote_preseed" 2>/dev/null
         rm -f $tmp_db
     end
+
+    # Verify xxh cleaned up ~/.xxh on the remote — if it's still there, other users can see it
+    if ssh -q -o ControlMaster=no -o ControlPath=none -o ConnectTimeout=10 $target "test -d ~/.xxh" 2>/dev/null
+        set_color --bold red
+        echo ""
+        echo "  ╔══════════════════════════════════════════════════════════════╗"
+        echo "  ║                    CLEANUP FAILURE                          ║"
+        echo "  ║                                                              ║"
+        printf "  ║  ~/.xxh was NOT removed on %-34s║\n" "$target "
+        echo "  ║  Other users on this shared host can see your files.        ║"
+        echo "  ║                                                              ║"
+        printf "  ║  Fix now:  ssh %s \"rm -rf ~/.xxh\"\n" $target
+        echo "  ║                                                              ║"
+        echo "  ╚══════════════════════════════════════════════════════════════╝"
+        echo ""
+        set_color normal
+    end
 end
