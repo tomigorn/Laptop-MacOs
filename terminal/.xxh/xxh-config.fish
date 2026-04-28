@@ -16,7 +16,7 @@ for pluginrc_file in (find $dirs -type f -name '*pluginrc.fish' -printf '%f\t%p\
   end
 end
 
-if test -f $CURRENT_DIR/bin/starship; or test -f $CURRENT_DIR/bin/fastfetch
+if test -f $CURRENT_DIR/bin/starship; or test -f $CURRENT_DIR/bin/fastfetch; or test -f $CURRENT_DIR/bin/atuin
     set -x PATH $CURRENT_DIR/bin $PATH
 end
 
@@ -33,6 +33,12 @@ if test -f $CURRENT_DIR/bin/fastfetch
         end
         fastfetch
     end
+end
+
+if test -f $CURRENT_DIR/bin/atuin
+    mkdir -p $XDG_CONFIG_HOME/atuin
+    printf 'auto_sync = false\nsearch_mode = "fuzzy"\n' > $XDG_CONFIG_HOME/atuin/config.toml
+    atuin init fish | source
 end
 
 cd ~

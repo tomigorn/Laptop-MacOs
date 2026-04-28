@@ -107,9 +107,11 @@ step "Stage binaries for xxh uploads"
 mkdir -p ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin
 cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
 cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
+cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
 chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
 chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
-ok "starship and fastfetch staged"
+chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
+ok "starship, fastfetch, and atuin staged"
 
 # ── Done ─────────────────────────────────────────────────────────────────────
 echo

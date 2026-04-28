@@ -1,6 +1,6 @@
 # Terminal setup
 
-Local Mac shell (fish + starship + fastfetch + atuin) plus a portable environment that carries fish, starship, and fastfetch to remote hosts over SSH without installing anything on them.
+Local Mac shell (fish + starship + fastfetch + atuin) plus a portable environment that carries fish, starship, fastfetch, and atuin to remote hosts over SSH without installing anything on them.
 
 ---
 
@@ -43,10 +43,10 @@ On remote sessions the greeting also prints the total time taken to connect and 
 
 [xxh](https://github.com/xxh/xxh) carries a self-contained shell to any SSH host without installing anything permanently. On connect it uploads a bundle via SCP, starts a fish session inside it, and on disconnect removes everything.
 
-### What happens on connect (~61 MB uploaded every time)
+### What happens on connect (~90 MB uploaded every time)
 
 - `~/.xxh/` is created on the remote
-- Portable fish binary, static Linux starship and fastfetch binaries, starship config, and fish session config are uploaded
+- Portable fish binary, static Linux starship, fastfetch, and atuin binaries, starship config, and fish session config are uploaded
 - `HOME` is your real remote home (e.g. `/home/tomigorn`) — nothing lands in it
 - All XDG dirs (`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`) are redirected into `~/.xxh/` so fish configs and history never touch the real home
 - The SSH alias you typed (e.g. `myserver`) is forwarded as `$XXH_SSH_ALIAS` so the prompt can show it
@@ -114,10 +114,11 @@ The last two mean that editing `starship.toml` or `xxh-config.fish` here also im
 ```
 ~/.xxh/bin/starship     static Linux x86-64 starship binary (source)
 ~/.xxh/bin/fastfetch    static Linux x86-64 fastfetch binary (source)
-~/.xxh/bin/atuin        staged for future use
+~/.xxh/bin/atuin        static Linux x86-64 atuin binary (source)
 
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship    copied from source, uploaded to remote
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch   copied from source, uploaded to remote
+~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin       copied from source, uploaded to remote
 ```
 
 The build dir binaries are plain copies — the one thing that needs a manual update when either binary changes (see [Updating](#updating)).
@@ -182,7 +183,7 @@ Benchmarked on local network with `time xxhc myserver +hc "echo ok"`:
 Executed in   15.36 secs
 ```
 
-Nearly all of that is the SCP upload (~61 MB: fish-portable 39 MB + starship 12 MB + fastfetch 10 MB). The session starts in under a second once files are in place. This cost is unavoidable with `+hhr` — every connect is a cold upload.
+Nearly all of that is the SCP upload (~90 MB: fish-portable 39 MB + atuin 29 MB + starship 12 MB + fastfetch 10 MB). The session starts in under a second once files are in place. This cost is unavoidable with `+hhr` — every connect is a cold upload.
 
 ---
 
@@ -235,8 +236,10 @@ chmod +x ~/.xxh/bin/starship ~/.xxh/bin/fastfetch ~/.xxh/bin/atuin
 mkdir -p ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin
 cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
 cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
+cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
 chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
 chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
+chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
 ```
 
 </details>
@@ -247,10 +250,11 @@ chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
 
 **Config files** (`starship.toml`, `xxh-config.fish`, `config.xxhc`, etc.): just edit the file in this directory. Symlinks make the change live immediately. The remote picks it up on the next connect.
 
-**Binaries** (plain copies, not symlinks — update both when either changes):
+**Binaries** (plain copies, not symlinks — re-copy when any changes):
 ```sh
 cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
 cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
+cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
 ```
 
 ---
