@@ -6,9 +6,13 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     set -l local_db ~/.local/share/atuin/history.db
     set -l tmp_db /tmp/.xxh_atuin_$target\_local.db
 
-    # Pre-seed remote with this host's accumulated history from previous sessions
+    # Pre-seed remote with this host's accumulated history from previous sessions.
+    # Only send if the DB has a history table — an empty/corrupt DB is useless.
     if test -f $host_db
-        scp -q -o ControlMaster=no -o ControlPath=none $host_db "$target:$remote_preseed" 2>/dev/null
+        set -l has_table (sqlite3 $host_db "SELECT name FROM sqlite_master WHERE type='table' AND name='history';" 2>/dev/null)
+        if test "$has_table" = history
+            scp -q -o ControlMaster=no -o ControlPath=none $host_db "$target:$remote_preseed" 2>/dev/null
+        end
     end
 
     set -l start (date +%s)
@@ -26,9 +30,17 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         " 2>/dev/null
         and echo "  History from $target merged into local atuin"
 
-        # Save a per-host copy so the next connect can pre-seed the remote
+        # Accumulate per-host history so future connects get all previous sessions.
         mkdir -p ~/.xxh/history
-        cp $tmp_db $host_db
+        if test -f $host_db
+            sqlite3 $host_db "
+                ATTACH '$tmp_db' AS new_session;
+                INSERT OR IGNORE INTO main.history SELECT * FROM new_session.history;
+                DETACH new_session;
+            " 2>/dev/null
+        else
+            cp $tmp_db $host_db
+        end
 
         ssh -q -o ControlMaster=no -o ControlPath=none $target "rm -f $remote_db $remote_preseed" 2>/dev/null
         rm -f $tmp_db
