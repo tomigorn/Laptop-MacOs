@@ -107,7 +107,15 @@ tomigorn @ remote-host (myserver) ~
 
 ### Remote atuin history sync
 
-Before the remote fish session exits, it copies its atuin history database to `/tmp/` (outside `~/.xxh/`, so `+hhr` cleanup doesn't reach it). After `xxhc` returns, it SCPs that database back to the Mac and merges it into your local atuin database using `sqlite3`. Records are merged with `INSERT OR IGNORE` so reconnecting to the same host never creates duplicates.
+History flows in both directions so each host accumulates its own history across sessions:
+
+**On connect:**
+`xxhc` checks for a per-host history file at `~/.xxh/history/<alias>.db` on the Mac. If it exists (from a previous session), it SCPs it to `remote:/tmp/` before calling xxh. The remote fish startup (`xxh-config.fish`) picks this up and uses it to seed the atuin database — so you immediately have history from all previous sessions on that host.
+
+**On disconnect:**
+Before the remote fish session exits, it copies its atuin database to `/tmp/` (outside `~/.xxh/`, so `+hhr` doesn't wipe it). After `xxhc` returns, it SCPs that database back to the Mac, merges it into your local atuin database using `sqlite3`, and saves a fresh copy as `~/.xxh/history/<alias>.db` for the next connect. Records are merged with `INSERT OR IGNORE` so no duplicates accumulate.
+
+The per-host files at `~/.xxh/history/` are not in git (personal history data). They grow over time and are the only persistent state on the Mac side of this system.
 
 Each merged command is tagged with the remote hostname (e.g. `tomigorn@remote-host`), so locally you can distinguish them:
 
@@ -162,12 +170,14 @@ Set up once by `setup.sh` (or manually), then completely transparent:
 
 The last two symlinks point into the xxh build directory — the directory xxh uploads on every connect. This means editing `starship.toml` or `xxh-config.fish` in the repo is enough; the next `xxhc` connect picks up the change automatically.
 
-### Not in git (Linux binaries — too large)
+### Not in git
 
 ```
-~/.xxh/bin/starship     source: Linux x86-64 static binary
-~/.xxh/bin/fastfetch    source: Linux x86-64 static binary
-~/.xxh/bin/atuin        source: Linux x86-64 static binary
+~/.xxh/bin/starship          Linux x86-64 static binary (source)
+~/.xxh/bin/fastfetch         Linux x86-64 static binary (source)
+~/.xxh/bin/atuin             Linux x86-64 static binary (source)
+
+~/.xxh/history/<alias>.db    per-host atuin history, grows across sessions
 
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship    plain copy, uploaded to remote
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch   plain copy, uploaded to remote
