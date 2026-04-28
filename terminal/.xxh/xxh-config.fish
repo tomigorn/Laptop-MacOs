@@ -39,6 +39,13 @@ if test -f $CURRENT_DIR/bin/atuin
     mkdir -p $XDG_CONFIG_HOME/atuin
     printf 'auto_sync = false\nsearch_mode = "fuzzy"\n' > $XDG_CONFIG_HOME/atuin/config.toml
     atuin init fish | source
+
+    function _xxhc_export_history --on-event fish_exit
+        set -l db $XDG_DATA_HOME/atuin/history.db
+        if test -f $db; and test -n "$XXH_SSH_ALIAS"
+            cp $db /tmp/.xxh_atuin_$XXH_SSH_ALIAS.db 2>/dev/null
+        end
+    end
 end
 
 cd ~
