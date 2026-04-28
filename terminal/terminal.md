@@ -1,24 +1,22 @@
 # Terminal setup
 
-Local Mac shell (fish + starship + fzf + atuin) plus a portable environment that carries fish and starship to remote hosts over SSH without installing anything on them.
+Local Mac shell (fish + starship + atuin) plus a portable environment that carries fish and starship to remote hosts over SSH without installing anything on them.
 
 ---
 
 ## Local setup (Mac)
 
-Fish shell with starship prompt, fzf for fuzzy search, and atuin for shell history.
+Fish shell with starship prompt and atuin for shell history.
 
 **Tools** (all via Homebrew):
 - `fish` — shell
 - `starship` — prompt (macOS binary, used locally only)
-- `fzf` — fuzzy file/history search
-- `atuin` — shell history with search
+- `atuin` — shell history with search (up arrow and Ctrl-R)
 
 **Local fish config** (`.config/fish/config.fish`):
 ```fish
 starship init fish | source
-fzf --fish | source
-atuin init fish --disable-up-arrow | source
+atuin init fish | source
 ```
 
 ---
@@ -94,7 +92,6 @@ The last two mean that editing `starship.toml` or `xxh-config.fish` here also im
 **Not in git** (Linux binaries, too large):
 ```
 ~/.xxh/bin/starship     static Linux x86-64 starship binary (source)
-~/.xxh/bin/fzf          staged for future use
 ~/.xxh/bin/atuin        staged for future use
 
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship    copy uploaded to remote
@@ -169,7 +166,7 @@ cd ~/development/private/Laptop-MacOs/terminal
 ./setup.sh
 ```
 
-The script installs Homebrew if missing, then fish/starship/fzf/atuin/pipx via brew, xxh and the fish plugin, creates all symlinks, downloads the Linux static binaries into `~/.xxh/bin/`, and stages the starship binary in the xxh build dir. Safe to re-run.
+The script installs Homebrew if missing, then fish/starship/atuin/pipx via brew, xxh and the fish plugin, creates all symlinks, downloads the Linux static binaries into `~/.xxh/bin/`, and stages the starship binary in the xxh build dir. Safe to re-run.
 
 <details>
 <summary>Manual steps (if you prefer not to run the script)</summary>
@@ -179,7 +176,7 @@ The script installs Homebrew if missing, then fish/starship/fzf/atuin/pipx via b
 git clone <repo> ~/development/private/Laptop-MacOs
 
 # 2. install local tools
-brew install fish starship fzf atuin
+brew install fish starship atuin
 pipx install xxh-xxh
 xxh +I xxh-shell-fish
 
@@ -200,10 +197,9 @@ ln -sf $BASE/.config/starship.toml ~/.xxh/.xxh/shells/xxh-shell-fish/build/stars
 
 # 5. download static Linux x86-64 binaries into ~/.xxh/bin/
 #    starship → github.com/starship/starship/releases  (starship-x86_64-unknown-linux-musl.tar.gz)
-#    fzf      → github.com/junegunn/fzf/releases
 #    atuin    → github.com/atuinsh/atuin/releases
 mkdir -p ~/.xxh/bin
-chmod +x ~/.xxh/bin/starship ~/.xxh/bin/fzf ~/.xxh/bin/atuin
+chmod +x ~/.xxh/bin/starship ~/.xxh/bin/atuin
 
 # 6. copy starship binary into the xxh build dir (uploaded to remote on connect)
 mkdir -p ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin

@@ -4,7 +4,5 @@
 starship init fish | source
 
 # fzf key bindings (Ctrl-R history, Ctrl-T file picker, Alt-C directory)
-fzf --fish | source
-
 # atuin history (local only, no sync)
-atuin init fish --disable-up-arrow | source
+atuin init fish | source

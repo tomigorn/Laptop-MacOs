@@ -39,7 +39,7 @@ fi
 
 # ── 2. Local tools ────────────────────────────────────────────────────────────
 step "Local tools (fish, starship, fzf, atuin, pipx)"
-brew install fish starship fzf atuin pipx
+brew install fish starship atuin pipx
 ok "brew packages installed"
 
 # ── 3. xxh ───────────────────────────────────────────────────────────────────
@@ -98,7 +98,6 @@ download_binary() {
 }
 
 download_binary starship "starship-rs/starship"  "x86_64-unknown-linux-musl.tar.gz" "starship"
-download_binary fzf      "junegunn/fzf"          "linux_amd64.tar.gz"               "fzf"
 download_binary atuin    "atuinsh/atuin"          "x86_64-unknown-linux-musl.tar.gz" "atuin/atuin"
 
 # ── 7. Stage starship binary in xxh build dir ────────────────────────────────
