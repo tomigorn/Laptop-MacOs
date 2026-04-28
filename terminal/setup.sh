@@ -38,8 +38,8 @@ else
 fi
 
 # ── 2. Local tools ────────────────────────────────────────────────────────────
-step "Local tools (fish, starship, fzf, atuin, pipx)"
-brew install fish starship atuin pipx
+step "Local tools (fish, starship, fastfetch, atuin, pipx)"
+brew install fish starship fastfetch atuin pipx
 ok "brew packages installed"
 
 # ── 3. xxh ───────────────────────────────────────────────────────────────────
@@ -63,7 +63,8 @@ step "Symlinks — local config"
 symlink "$SCRIPT_DIR/.config/xxh/config.xxhc"          ~/.config/xxh/config.xxhc
 symlink "$SCRIPT_DIR/.config/starship.toml"             ~/.config/starship.toml
 symlink "$SCRIPT_DIR/.config/fish/config.fish"          ~/.config/fish/config.fish
-symlink "$SCRIPT_DIR/.config/fish/functions/xxhc.fish"  ~/.config/fish/functions/xxhc.fish
+symlink "$SCRIPT_DIR/.config/fish/functions/xxhc.fish"          ~/.config/fish/functions/xxhc.fish
+symlink "$SCRIPT_DIR/.config/fish/functions/fish_greeting.fish"  ~/.config/fish/functions/fish_greeting.fish
 symlink "$SCRIPT_DIR/.xxh/ssh-wrapper.sh"               ~/.xxh/ssh-wrapper.sh
 chmod +x ~/.xxh/ssh-wrapper.sh
 
@@ -97,15 +98,18 @@ download_binary() {
     ok "$name → ~/.xxh/bin/$name"
 }
 
-download_binary starship "starship-rs/starship"  "x86_64-unknown-linux-musl.tar.gz" "starship"
-download_binary atuin    "atuinsh/atuin"          "x86_64-unknown-linux-musl.tar.gz" "atuin/atuin"
+download_binary starship  "starship-rs/starship"     "x86_64-unknown-linux-musl.tar.gz" "starship"
+download_binary atuin     "atuinsh/atuin"            "x86_64-unknown-linux-musl.tar.gz" "atuin/atuin"
+download_binary fastfetch "fastfetch-cli/fastfetch"  "linux-amd64.tar.gz"               "fastfetch-linux-amd64/usr/bin/fastfetch"
 
-# ── 7. Stage starship binary in xxh build dir ────────────────────────────────
-step "Stage starship binary for xxh uploads"
+# ── 7. Stage binaries in xxh build dir ───────────────────────────────────────
+step "Stage binaries for xxh uploads"
 mkdir -p ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin
-cp ~/.xxh/bin/starship ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
+cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
+cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
 chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
-ok "starship binary staged"
+chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
+ok "starship and fastfetch staged"
 
 # ── Done ─────────────────────────────────────────────────────────────────────
 echo

@@ -16,10 +16,19 @@ for pluginrc_file in (find $dirs -type f -name '*pluginrc.fish' -printf '%f\t%p\
   end
 end
 
-if test -f $CURRENT_DIR/bin/starship
+if test -f $CURRENT_DIR/bin/starship; or test -f $CURRENT_DIR/bin/fastfetch
     set -x PATH $CURRENT_DIR/bin $PATH
+end
+
+if test -f $CURRENT_DIR/bin/starship
     set -x STARSHIP_CONFIG $CURRENT_DIR/starship.toml
     starship init fish | source
+end
+
+if test -f $CURRENT_DIR/bin/fastfetch
+    function fish_greeting
+        fastfetch
+    end
 end
 
 cd ~
