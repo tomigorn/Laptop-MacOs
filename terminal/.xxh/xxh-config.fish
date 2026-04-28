@@ -49,9 +49,14 @@ if test -f $CURRENT_DIR/bin/atuin
     atuin init fish | source
 
     function _xxhc_export_history --on-event fish_exit
-        set -l db $XDG_DATA_HOME/atuin/history.db
-        if test -f $db; and test -n "$XXH_SSH_ALIAS"
-            cp $db /tmp/.xxh_atuin_$XXH_SSH_ALIAS.db 2>/dev/null
+        if set -q XXH_SSH_ALIAS; and test -n "$XXH_SSH_ALIAS"
+            set -l db $XDG_DATA_HOME/atuin/history.db
+            set -l dst /tmp/.xxh_atuin_$XXH_SSH_ALIAS
+            if test -f $db
+                cp $db $dst.db 2>/dev/null
+                test -f $db-shm && cp $db-shm $dst.db-shm 2>/dev/null
+                test -f $db-wal && cp $db-wal $dst.db-wal 2>/dev/null
+            end
         end
     end
 end

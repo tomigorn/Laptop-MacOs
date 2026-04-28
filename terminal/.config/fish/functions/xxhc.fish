@@ -6,12 +6,15 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     set -l local_db ~/.local/share/atuin/history.db
     set -l tmp_db /tmp/.xxh_atuin_$target\_local.db
 
-    # Pre-seed remote with this host's accumulated history from previous sessions.
-    # Only send if the DB has a history table — an empty/corrupt DB is useless.
+    # Pre-seed remote with this host's accumulated history.
+    # Validate it has a history table, then send a clean WAL-free single-file copy.
     if test -f $host_db
         set -l has_table (sqlite3 $host_db "SELECT name FROM sqlite_master WHERE type='table' AND name='history';" 2>/dev/null)
         if test "$has_table" = history
-            scp -q -o ControlMaster=no -o ControlPath=none $host_db "$target:$remote_preseed" 2>/dev/null
+            set -l clean_preseed /tmp/.xxh_atuin_pre_clean_$target.db
+            sqlite3 $host_db "VACUUM INTO '$clean_preseed';" 2>/dev/null
+            and scp -q -o ControlMaster=no -o ControlPath=none $clean_preseed "$target:$remote_preseed" 2>/dev/null
+            rm -f $clean_preseed
         end
     end
 
@@ -21,8 +24,13 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         +e "XXH_CONNECT_START=$start" \
         $argv[2..-1]
 
-    # Retrieve remote atuin history, merge into local DB, and save per-host copy
+    # Retrieve remote atuin DB — fetch main file plus WAL files (SQLite WAL mode
+    # keeps recent writes in the -wal file; without it the DB appears empty).
     if scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db" $tmp_db 2>/dev/null
+        scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
+        scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
+
+        # sqlite3 automatically reads the WAL alongside the main file
         sqlite3 $local_db "
             ATTACH '$tmp_db' AS remote;
             INSERT OR IGNORE INTO main.history SELECT * FROM remote.history;
@@ -30,7 +38,8 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         " 2>/dev/null
         and echo "  History from $target merged into local atuin"
 
-        # Accumulate per-host history so future connects get all previous sessions.
+        # Accumulate per-host history for future connects.
+        # Use VACUUM INTO to produce a clean single-file DB (no WAL artifacts).
         mkdir -p ~/.xxh/history
         if test -f $host_db
             sqlite3 $host_db "
@@ -39,11 +48,12 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
                 DETACH new_session;
             " 2>/dev/null
         else
-            cp $tmp_db $host_db
+            sqlite3 $tmp_db "VACUUM INTO '$host_db';" 2>/dev/null
         end
 
-        ssh -q -o ControlMaster=no -o ControlPath=none $target "rm -f $remote_db $remote_preseed" 2>/dev/null
-        rm -f $tmp_db
+        ssh -q -o ControlMaster=no -o ControlPath=none $target \
+            "rm -f $remote_db $remote_db-wal $remote_db-shm $remote_preseed" 2>/dev/null
+        rm -f $tmp_db $tmp_db-wal $tmp_db-shm
     end
 
     # Verify xxh cleaned up ~/.xxh on the remote — if it's still there, other users can see it
