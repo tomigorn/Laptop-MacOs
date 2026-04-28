@@ -1,0 +1,11 @@
+hosts:
+  ".*":
+    +s: xxh-shell-fish
+    ++pexpect-timeout: "30"
+    ++copy-method: scp
+    +if:
+    +hhh: "~"
+    +hhr:
+    -o:
+      - ControlMaster=no
+      - ControlPath=none

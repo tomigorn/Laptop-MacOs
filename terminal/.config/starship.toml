@@ -1,0 +1,29 @@
+format = """
+$username$hostname${env_var.XXH_SSH_ALIAS}$directory$git_branch$git_status
+$character"""
+
+[username]
+show_always = false
+style_user = "green bold"
+format = "[$user]($style)"
+
+[hostname]
+ssh_only = true
+format = "[ @ $hostname]($style) "
+style = "yellow bold"
+
+[directory]
+truncation_length = 3
+
+[git_branch]
+format = "[$symbol$branch]($style) "
+style = "cyan"
+
+[env_var.XXH_SSH_ALIAS]
+variable = "XXH_SSH_ALIAS"
+format = "\\([$env_value]($style)\\) "
+style = "blue bold"
+
+[character]
+success_symbol = "[›](green)"
+error_symbol = "[›](red)"
