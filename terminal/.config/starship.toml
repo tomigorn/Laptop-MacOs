@@ -24,6 +24,18 @@ variable = "XXH_SSH_ALIAS"
 format = "\\([$env_value]($style)\\) "
 style = "blue bold"
 
+[git_status]
+conflicted = "=conflict "
+ahead = "⇡ahead(${count}) "
+behind = "⇣behind(${count}) "
+diverged = "⇕diverged "
+untracked = "?untracked "
+stashed = "$stashed "
+modified = "!modified "
+staged = "+staged "
+renamed = "»renamed "
+deleted = "✘deleted "
+
 [character]
 success_symbol = "[›](green)"
 error_symbol = "[›](red)"
