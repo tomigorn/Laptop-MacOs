@@ -44,7 +44,9 @@ ok "brew packages installed"
 
 # ── 3. xxh ───────────────────────────────────────────────────────────────────
 step "xxh"
-if pipx list | grep -q xxh-xxh; then
+pipx ensurepath --quiet
+export PATH="$HOME/.local/bin:$PATH"
+if pipx list 2>/dev/null | grep -q xxh-xxh; then
     skip "xxh-xxh"
 else
     pipx install xxh-xxh
@@ -99,7 +101,7 @@ download_binary() {
 }
 
 download_binary starship  "starship-rs/starship"     "x86_64-unknown-linux-musl.tar.gz" "starship"
-download_binary atuin     "atuinsh/atuin"            "x86_64-unknown-linux-musl.tar.gz" "atuin/atuin"
+download_binary atuin     "atuinsh/atuin"            "x86_64-unknown-linux-musl.tar.gz" "atuin-x86_64-unknown-linux-musl/atuin"
 download_binary fastfetch "fastfetch-cli/fastfetch"  "linux-amd64.tar.gz"               "fastfetch-linux-amd64/usr/bin/fastfetch"
 
 # ── 7. Stage binaries in xxh build dir ───────────────────────────────────────
