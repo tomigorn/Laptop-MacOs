@@ -27,6 +27,11 @@ end
 
 if test -f $CURRENT_DIR/bin/fastfetch
     function fish_greeting
+        if set -q XXH_CONNECT_START
+            set -l now_ms (date +%s%3N)
+            set -l elapsed_s (math --scale=1 "($now_ms - ($XXH_CONNECT_START * 1000)) / 1000")
+            printf "  Connected in %ss\n\n" $elapsed_s
+        end
         fastfetch
     end
 end
