@@ -4,7 +4,7 @@
 
 ## Finder Settings
 - General
-  - New Finer windows show: user folder
+  - New Finder windows show: user folder
   - [x] Open folders in tabs instead of new windows 
 - Sidebar
   - Show these items in the sidebar
@@ -35,7 +35,7 @@
 - Advanced
   - [x] Show all filename extensions
   - [x] Show warning before changing an extension
-  - [x] Show warning before removing from iCloud Dirve
+  - [x] Show warning before removing from iCloud Drive
   - [x] Show warning before emptying the Trash
   - [ ] Remove items from the Trash after 30 days
   - Keep folders on top:
@@ -53,11 +53,11 @@
     - Charge Limit 80%
     - [ ] Optimized Battery Charging
   - Options
-    - - [x] Slightly dim the display on battery
+    -  [x] Slightly dim the display on battery
 - Spotlight
   - [ ] Show Related Content
   - [ ] Help Apple Improve Search
-  - Resuls from Apps (only turn on these)
+  - Results from Apps (only turn on these)
     - [x] App Store
     - [x] System Settings
     - Results from System
@@ -84,8 +84,36 @@ see above in system settings. configure natural scroll
 - [EasySnaps Window Manager](https://easysnaps.org/window-manager/) costs $7.99
 - [Rectangle](https://rectangleapp.com/) as alternative. costs 7.98CHF
 
+## System Monitoring
+[iStat Menus](https://bjango.com/mac/istatmenus/) for showing an overview of system resource usage in the menu bar.
+
 ## Developer Setup
 [Homebrew](https://brew.sh/)
 
+## Git / GitHub / GitLab
 
+setup for multiple git accounts to automatically use a certain user when cloning a repo into a specific directory:
+
+
+
+```
+~/
+├── .gitconfig
+├── .gitconfig-private
+├── .gitconfig-work
+├── .ssh/
+│   ├── allowed_signers-private
+│   ├── allowed_signers-work
+│   ├── gitHub-Tomigorn
+│   ├── gitHub-Tomigorn.pub
+│   ├── gitLab-ETH
+│   ├── gitLab-ETH.pub
+└── development/
+  ├── private/
+  │   └── sample-1-private-repo/
+  │   └── second-2-repo-from-private-github/
+  └── work/
+      └── 2-lots-of-work-repo/
+      └── work-example-1-repo/
+```
 
