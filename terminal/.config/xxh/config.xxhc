@@ -7,5 +7,5 @@ hosts:
     +hhh: "~"
     +hhr:
     -o:
-      - ControlMaster=no
-      - ControlPath=none
+      - ControlMaster=auto
+      - ControlPath=~/.ssh/cm/xxh-%n

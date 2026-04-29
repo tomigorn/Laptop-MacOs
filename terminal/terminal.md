@@ -204,8 +204,8 @@ hosts:
     +hhh: "~"
     +hhr:
     -o:
-      - ControlMaster=no
-      - ControlPath=none
+      - ControlMaster=auto
+      - ControlPath=~/.ssh/cm/xxh-%n
 ```
 
 | Option | Effect | Why |
@@ -216,7 +216,8 @@ hosts:
 | `+if:` | Always upload without prompting | `+hhr` wipes remote on disconnect, so xxh would ask "Install? [Y/n]" every time without this |
 | `+hhh: "~"` | Set `HOME` to real remote home | Without this, `HOME` is set to `~/.xxh` and `cd ~` lands in the wrong place |
 | `+hhr:` | Delete `~/.xxh` on disconnect | Zero footprint on shared hosts |
-| `-o ControlMaster=no` | Disable SSH connection reuse | Prevents conflicts with SCP upload |
+| `-o ControlMaster=auto` | Reuse existing ControlMaster socket | `xxhc` pre-creates the socket before xxh runs, so xxh's internal SCP reuses the already-established tunnel — critical for hosts behind ProxyJump |
+| `-o ControlPath=~/.ssh/cm/xxh-%n` | Dedicated socket path for xxh connections | Uses a separate path from regular SSH sockets (which use `%r@%h:%p`) to avoid conflicts |
 
 ### `fish/functions/xxhc.fish`
 
@@ -228,6 +229,15 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     set -l remote_db /tmp/.xxh_atuin_$target.db
     set -l local_db ~/.local/share/atuin/history.db
     set -l tmp_db /tmp/.xxh_atuin_$target\_local.db
+    set -l cm_path ~/.ssh/cm/xxh-$target
+
+    # Establish a ControlMaster tunnel before anything else.
+    # This handles ProxyJump (and any other SSH config) once upfront so all
+    # subsequent SSH/SCP calls — including xxh's own bundle upload — reuse the
+    # same connection. Without this, every operation creates a fresh tunnel
+    # through the jump host, which is slow and can fail for hosts behind ProxyJump.
+    mkdir -p ~/.ssh/cm
+    ssh -o ControlMaster=auto -o ControlPath=$cm_path -fN -o ConnectTimeout=30 $target 2>/dev/null
 
     # Pre-seed remote with this host's accumulated history.
     # Validate it has a history table, then send a clean WAL-free single-file copy.
@@ -236,7 +246,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         if test "$has_table" = history
             set -l clean_preseed /tmp/.xxh_atuin_pre_clean_$target.db
             sqlite3 $host_db "VACUUM INTO '$clean_preseed';" 2>/dev/null
-            and scp -q -o ControlMaster=no -o ControlPath=none $clean_preseed "$target:$remote_preseed" 2>/dev/null
+            and scp -q -o ControlMaster=auto -o ControlPath=$cm_path $clean_preseed "$target:$remote_preseed" 2>/dev/null
             rm -f $clean_preseed
         end
     end
@@ -250,9 +260,9 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # Retrieve remote atuin DB — fetch main file plus WAL files.
     # atuin uses SQLite WAL mode: recent writes live in the -wal file, not the
     # main .db file. Without the WAL files, the DB appears empty.
-    if scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db" $tmp_db 2>/dev/null
-        scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
-        scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
+    if scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db" $tmp_db 2>/dev/null
+        scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
+        scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
 
         # Checkpoint WAL into the main file so all data is in one place before
         # any further sqlite3 operations read the DB.
@@ -278,27 +288,34 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
             sqlite3 $tmp_db "VACUUM INTO '$host_db';" 2>/dev/null
         end
 
-        ssh -q -o ControlMaster=no -o ControlPath=none $target \
+        ssh -q -o ControlMaster=auto -o ControlPath=$cm_path $target \
             "rm -f $remote_db $remote_db-wal $remote_db-shm $remote_preseed" 2>/dev/null
         rm -f $tmp_db $tmp_db-wal $tmp_db-shm
     end
 
     # Verify xxh cleaned up ~/.xxh — warn loudly if anything is left behind
-    if ssh -q -o ControlMaster=no -o ControlPath=none -o ConnectTimeout=10 $target "test -d ~/.xxh" 2>/dev/null
+    if ssh -q -o ControlMaster=auto -o ControlPath=$cm_path -o ConnectTimeout=10 $target "test -d ~/.xxh" 2>/dev/null
         set_color --bold red
         echo ""
         echo "  ╔══════════════════════════════════════════════════════════════╗"
-        echo "  ║                    CLEANUP FAILURE                          ║"
-        echo "  ║  ~/.xxh was NOT removed on $target"
-        echo "  ║  Other users on this shared host can see your files.        ║"
-        echo "  ║  Fix now:  ssh $target \"rm -rf ~/.xxh\""
+        echo "  ║                    CLEANUP FAILURE                           ║"
+        echo "  ║                                                              ║"
+        printf "  ║  ~/.xxh was NOT removed on %-34s║\n" "$target "
+        echo "  ║  Other users on this shared host can see your files.         ║"
+        echo "  ║                                                              ║"
+        printf "  ║  Fix now:  ssh %s \"rm -rf ~/.xxh\"\n" $target
+        echo "  ║                                                              ║"
         echo "  ╚══════════════════════════════════════════════════════════════╝"
         echo ""
         set_color normal
     end
+
+    # Tear down the ControlMaster now that all operations are done
+    ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
 end
 ```
 
+- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's ~90 MB bundle upload — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump.
 - `RSYNC_RSH` — ensures rsync bypasses ControlMaster if ever called internally by xxh
 - `XXH_SSH_ALIAS` — the alias you typed; forwarded to the remote so the prompt shows `(myserver)`
 - `XXH_CONNECT_START` — Unix timestamp before connecting; remote greeting subtracts it to show total connection time
@@ -306,16 +323,18 @@ end
 - **WAL handling**: atuin uses SQLite WAL mode so recent writes are in `-wal` not the main file; all three files are fetched, then `PRAGMA wal_checkpoint(FULL)` merges WAL into main file before any reads
 - **Host DB**: per-host history is accumulated in `~/.xxh/history/<alias>.db` and grows across sessions
 - **Cleanup check**: after everything, SSHs back to verify `~/.xxh` is gone; shows a red warning box if not
+- **ControlMaster teardown**: at the very end, `ssh -O stop` closes the ControlMaster socket cleanly
 
 ### `xxh/xxh-config.fish`
 
 The fish session init that runs on the remote. In order:
 
-1. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, and atuin are all in PATH
-2. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
-3. **Greeting** — defines `fish_greeting` to print connection time (from `XXH_CONNECT_START`) then run fastfetch
-4. **Atuin** — if a preseed file exists at `/tmp/.xxh_atuin_pre_<alias>.db`, copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config and initialises atuin.
-5. **`fish_exit` handler** — on exit, copies the atuin DB and its WAL/SHM files to `/tmp/` so `xxhc` can retrieve them after the session ends. Also removes `fish/generated_completions` to prevent NFS stub files from blocking xxh's `+hhr` cleanup.
+1. **TERM override** — sets `TERM=xterm-256color`. Ghostty (and other terminals) set `$TERM` to a value the remote has no terminfo for (e.g. `xterm-ghostty`). Without the override, fish can't compute cursor positions and tab completion corrupts the display.
+2. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, and atuin are all in PATH
+3. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
+4. **Greeting** — defines `fish_greeting` to print connection time (from `XXH_CONNECT_START`) then run fastfetch
+5. **Atuin** — if a preseed file exists at `/tmp/.xxh_atuin_pre_<alias>.db`, copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config and initialises atuin.
+6. **`fish_exit` handler** — on exit, copies the atuin DB and its WAL/SHM files to `/tmp/` so `xxhc` can retrieve them after the session ends. Also removes `fish/generated_completions` to prevent NFS stub files from blocking xxh's `+hhr` cleanup.
 
 The atuin config written on each connect:
 ```toml

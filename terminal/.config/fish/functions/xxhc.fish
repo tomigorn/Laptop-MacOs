@@ -5,6 +5,15 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     set -l remote_db /tmp/.xxh_atuin_$target.db
     set -l local_db ~/.local/share/atuin/history.db
     set -l tmp_db /tmp/.xxh_atuin_$target\_local.db
+    set -l cm_path ~/.ssh/cm/xxh-$target
+
+    # Establish a ControlMaster tunnel before anything else.
+    # This handles ProxyJump (and any other SSH config) once upfront so all
+    # subsequent SSH/SCP calls — including xxh's own bundle upload — reuse the
+    # same connection. Without this, every operation creates a fresh tunnel
+    # through the jump host, which is slow and can fail for hosts behind ProxyJump.
+    mkdir -p ~/.ssh/cm
+    ssh -o ControlMaster=auto -o ControlPath=$cm_path -fN -o ConnectTimeout=30 $target 2>/dev/null
 
     # Pre-seed remote with this host's accumulated history.
     # Validate it has a history table, then send a clean WAL-free single-file copy.
@@ -13,7 +22,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         if test "$has_table" = history
             set -l clean_preseed /tmp/.xxh_atuin_pre_clean_$target.db
             sqlite3 $host_db "VACUUM INTO '$clean_preseed';" 2>/dev/null
-            and scp -q -o ControlMaster=no -o ControlPath=none $clean_preseed "$target:$remote_preseed" 2>/dev/null
+            and scp -q -o ControlMaster=auto -o ControlPath=$cm_path $clean_preseed "$target:$remote_preseed" 2>/dev/null
             rm -f $clean_preseed
         end
     end
@@ -26,9 +35,9 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
 
     # Retrieve remote atuin DB — fetch main file plus WAL files (SQLite WAL mode
     # keeps recent writes in the -wal file; without it the DB appears empty).
-    if scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db" $tmp_db 2>/dev/null
-        scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
-        scp -q -o ControlMaster=no -o ControlPath=none "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
+    if scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db" $tmp_db 2>/dev/null
+        scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
+        scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
 
         # Checkpoint WAL into the main DB file so all data is in one place.
         # Without this, the main file may have no schema (it's all in the WAL)
@@ -56,13 +65,13 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
             sqlite3 $tmp_db "VACUUM INTO '$host_db';" 2>/dev/null
         end
 
-        ssh -q -o ControlMaster=no -o ControlPath=none $target \
+        ssh -q -o ControlMaster=auto -o ControlPath=$cm_path $target \
             "rm -f $remote_db $remote_db-wal $remote_db-shm $remote_preseed" 2>/dev/null
         rm -f $tmp_db $tmp_db-wal $tmp_db-shm
     end
 
     # Verify xxh cleaned up ~/.xxh on the remote — if it's still there, other users can see it
-    if ssh -q -o ControlMaster=no -o ControlPath=none -o ConnectTimeout=10 $target "test -d ~/.xxh" 2>/dev/null
+    if ssh -q -o ControlMaster=auto -o ControlPath=$cm_path -o ConnectTimeout=10 $target "test -d ~/.xxh" 2>/dev/null
         set_color --bold red
         echo ""
         echo "  ╔══════════════════════════════════════════════════════════════╗"
@@ -77,4 +86,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         echo ""
         set_color normal
     end
+
+    # Tear down the ControlMaster now that all operations are done
+    ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
 end
