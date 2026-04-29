@@ -60,6 +60,7 @@ fastfetch shows OS, CPU, memory, uptime. It auto-detects the system and shows th
 
 **`~/.config/starship.toml`:**
 Configures the prompt. Key design decisions:
+- `custom.local` shows a bold yellow label (currently `!! local MacOS !!`) only when `$SSH_CONNECTION` is unset — appears on the Mac, invisible on every remote host, making it immediately clear where you are
 - `hostname` is `ssh_only = true` — the `@ hostname` part only appears on SSH sessions, not locally
 - `env_var.XXH_SSH_ALIAS` only renders when `$XXH_SSH_ALIAS` is set, which only happens via `xxhc` — so `(myserver)` never clutters the local prompt
 - `git_status` uses full-word labels (`!modified`, `?untracked`, etc.) instead of symbols alone for clarity
@@ -94,6 +95,7 @@ tomigorn @ remote-host (myserver) ~
 
 | Prompt part | Meaning | Colour | When shown |
 |---|---|---|---|
+| `!! local MacOS !!` | local machine indicator | bold yellow | local only (hidden on SSH) |
 | `tomigorn` | username | green | always |
 | `@ remote-host` | real hostname of the remote | yellow | SSH sessions only |
 | `(myserver)` | SSH alias you typed | blue | via `xxhc` only |
