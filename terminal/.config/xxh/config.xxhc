@@ -9,3 +9,5 @@ hosts:
     -o:
       - ControlMaster=auto
       - ControlPath=~/.ssh/cm/xxh-%n
+      - ServerAliveInterval=15
+      - ServerAliveCountMax=3

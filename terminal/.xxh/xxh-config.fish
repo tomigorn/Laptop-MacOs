@@ -74,4 +74,11 @@ if test -f $CURRENT_DIR/bin/atuin
     end
 end
 
+# Runs on both clean exit and SIGHUP (VPN drop, terminal crash, lost connection).
+# Deletes ~/.xxh immediately so other users can't see it even if local xxhc never runs.
+# Safe to delete while running: open file descriptors hold the inodes alive until exit.
+function _xxhc_cleanup_home --on-event fish_exit
+    rm -rf ~/.xxh 2>/dev/null
+end
+
 cd ~

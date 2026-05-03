@@ -103,11 +103,13 @@ tomigorn @ remote-host (myserver) ~
 
 ### What gets cleaned up on disconnect
 
-- `fish/generated_completions/` — removed by the fish_exit handler to avoid NFS stub file issues
-- `~/.xxh/` — deleted by xxh's `+hhr` cleanup (runs `chmod -R u+w` then `rm -rf`)
+- `fish/generated_completions/` — removed by the `fish_exit` handler to avoid NFS stub file issues
+- `~/.xxh/` — deleted by the `_xxhc_cleanup_home` `fish_exit` handler on the remote (see below); xxh's `+hhr` also runs this as a second pass on clean exit
 - `/tmp/.xxh_atuin_*` — removed by `xxhc` after the history merge completes
 - `.bashrc`, `.bash_profile`, `.profile` — never touched
 - No binaries left in `PATH`, no background processes
+
+**Why two cleanup paths for `~/.xxh/`?** xxh's `+hhr` is triggered from the local machine when the local xxh process exits. If the local side never runs — VPN drops, terminal crashes, Ghostty is force-quit — `+hhr` never fires. The `_xxhc_cleanup_home` handler runs on the remote fish process when it receives SIGHUP, which the remote sshd sends as soon as it detects the connection is dead. This means `~/.xxh` is removed even when the local side is completely gone.
 
 If `~/.xxh/` cannot be removed (permissions, filesystem issue), `xxhc` detects this by SSH-ing back after the session and shows a red warning box with the manual fix command.
 
@@ -208,6 +210,8 @@ hosts:
     -o:
       - ControlMaster=auto
       - ControlPath=~/.ssh/cm/xxh-%n
+      - ServerAliveInterval=15
+      - ServerAliveCountMax=3
 ```
 
 | Option | Effect | Why |
@@ -220,6 +224,8 @@ hosts:
 | `+hhr:` | Delete `~/.xxh` on disconnect | Zero footprint on shared hosts |
 | `-o ControlMaster=auto` | Reuse existing ControlMaster socket | `xxhc` pre-creates the socket before xxh runs, so xxh's internal SCP reuses the already-established tunnel — critical for hosts behind ProxyJump |
 | `-o ControlPath=~/.ssh/cm/xxh-%n` | Dedicated socket path for xxh connections | Uses a separate path from regular SSH sockets (which use `%r@%h:%p`) to avoid conflicts |
+| `-o ServerAliveInterval=15` | Local SSH client probes server every 15 s | Detects dead connections on flaky networks; causes the local client to exit within 45 s rather than hanging indefinitely |
+| `-o ServerAliveCountMax=3` | Give up after 3 unanswered probes (45 s) | Works with `ServerAliveInterval` to bound how long a broken session idles before the local side gives up |
 
 ### `fish/functions/xxhc.fish`
 
@@ -336,7 +342,9 @@ The fish session init that runs on the remote. In order:
 3. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
 4. **Greeting** — defines `fish_greeting` to print connection time (from `XXH_CONNECT_START`) then run fastfetch
 5. **Atuin** — if a preseed file exists at `/tmp/.xxh_atuin_pre_<alias>.db`, copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config and initialises atuin.
-6. **`fish_exit` handler** — on exit, copies the atuin DB and its WAL/SHM files to `/tmp/` so `xxhc` can retrieve them after the session ends. Also removes `fish/generated_completions` to prevent NFS stub files from blocking xxh's `+hhr` cleanup.
+6. **`fish_exit` handlers** — two handlers registered in definition order:
+   - `_xxhc_export_history`: copies the atuin DB and its WAL/SHM files to `/tmp/` so `xxhc` can retrieve them after the session ends; also removes `fish/generated_completions` to prevent NFS stub files from blocking xxh's `+hhr` cleanup
+   - `_xxhc_cleanup_home`: removes `~/.xxh/` immediately, so other users on the shared host cannot see it even if the local machine never gets a chance to run `+hhr` (VPN drop, terminal crash, etc.). Safe to delete while running: open file descriptors hold the inodes alive until fish actually exits, so no binary is interrupted mid-execution.
 
 The atuin config written on each connect:
 ```toml
