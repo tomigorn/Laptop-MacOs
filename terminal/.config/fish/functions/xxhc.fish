@@ -34,6 +34,9 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         +e "XXH_CONNECT_START=$start" \
         $argv[2..-1]
 
+    # Belt-and-suspenders: remove ~/.xxh if the fish_exit handler didn't (e.g. fish was SIGKILL'd).
+    ssh -q -o ControlMaster=auto -o ControlPath=$cm_path $target "rm -rf ~/.xxh 2>/dev/null" 2>/dev/null
+
     # Retrieve remote atuin DB — fetch main file plus WAL files (SQLite WAL mode
     # keeps recent writes in the -wal file; without it the DB appears empty).
     if scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db" $tmp_db 2>/dev/null
@@ -71,7 +74,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         rm -f $tmp_db $tmp_db-wal $tmp_db-shm
     end
 
-    # Verify xxh cleaned up ~/.xxh on the remote — if it's still there, other users can see it
+    # Verify ~/.xxh was removed — if it's still there, other users can see it
     if ssh -q -o ControlMaster=auto -o ControlPath=$cm_path -o ConnectTimeout=10 $target "test -d ~/.xxh" 2>/dev/null
         set_color --bold red
         echo ""

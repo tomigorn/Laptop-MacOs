@@ -25,7 +25,7 @@ Fish has excellent interactive features (completions, syntax highlighting, histo
 **Why SCP instead of rsync?**
 SSH ControlMaster multiplexing (used for fast repeated connections) conflicts with how xxh calls rsync internally. Using SCP avoids this entirely.
 
-**Why wipe on disconnect (`+hhr`)?**
+**Why wipe on disconnect?**
 The remotes are shared admin accounts used by multiple people. Nothing should be left behind — no history, no binaries, no config. The cost is re-uploading ~97 MB on every connect.
 
 **Why symlinks for config files?**
@@ -81,7 +81,7 @@ Configures the prompt. Key design decisions:
 | `bat` | ~7 MB | Syntax-highlighting file viewer |
 | `xxh-config.fish`, `starship.toml`, entrypoint | <1 MB | Config and session bootstrap |
 
-The upload happens on every connect because `+hhr` wipes the remote on every disconnect — there's nothing to reuse.
+The upload happens on every connect because the remote is always wiped on disconnect — there's nothing to reuse.
 
 ### What the remote session looks like
 
@@ -106,12 +106,12 @@ tomigorn @ remote-host (myserver) ~
 ### What gets cleaned up on disconnect
 
 - `fish/generated_completions/` — removed by the `fish_exit` handler to avoid NFS stub file issues
-- `~/.xxh/` — deleted by the `_xxhc_cleanup_home` `fish_exit` handler on the remote (see below); xxh's `+hhr` also runs this as a second pass on clean exit
+- `~/.xxh/` — deleted by the `_xxhc_cleanup_home` `fish_exit` handler on the remote (see below); `xxhc` also runs an explicit `rm -rf ~/.xxh` via SSH after the session as a backup
 - `/tmp/.xxh_atuin_*` — removed by `xxhc` after the history merge completes
 - `.bashrc`, `.bash_profile`, `.profile` — never touched
 - No binaries left in `PATH`, no background processes
 
-**Why two cleanup paths for `~/.xxh/`?** xxh's `+hhr` is triggered from the local machine when the local xxh process exits. If the local side never runs — VPN drops, terminal crashes, Ghostty is force-quit — `+hhr` never fires. The `_xxhc_cleanup_home` handler runs on the remote fish process when it receives SIGHUP, which the remote sshd sends as soon as it detects the connection is dead. This means `~/.xxh` is removed even when the local side is completely gone.
+**Why two cleanup paths for `~/.xxh/`?** The `_xxhc_cleanup_home` fish handler is the primary cleanup: it runs on both clean exit and SIGHUP (VPN drop, terminal crash, lost connection), because the remote sshd sends SIGHUP to the fish process as soon as it detects the connection is dead. `xxhc` also runs an explicit `ssh … "rm -rf ~/.xxh"` after the session returns as a fallback for the rare case where fish is SIGKILL'd without firing `fish_exit`. Note: previously xxh's `+hhr` flag was used for a second pass, but it ran its own `chmod -R u+w ~/.xxh && rm -rf` *after* the fish handler had already deleted the directory, producing a spurious `chmod: cannot access … No such file or directory` error on every exit.
 
 If `~/.xxh/` cannot be removed (permissions, filesystem issue), `xxhc` detects this by SSH-ing back after the session and shows a red warning box with the manual fix command.
 
@@ -210,7 +210,6 @@ hosts:
     ++copy-method: scp
     +if:
     +hhh: "~"
-    +hhr:
     -o:
       - ControlMaster=auto
       - ControlPath=~/.ssh/cm/xxh-%n
@@ -223,9 +222,8 @@ hosts:
 | `+s: xxh-shell-fish` | Use the portable fish plugin | Carries fish to any Linux host |
 | `++pexpect-timeout: "30"` | Wait up to 30 s during handshake | Some hosts are slow to respond |
 | `++copy-method: scp` | Use SCP for uploads | rsync conflicts with ControlMaster |
-| `+if:` | Always upload without prompting | `+hhr` wipes remote on disconnect, so xxh would ask "Install? [Y/n]" every time without this |
+| `+if:` | Always upload without prompting | `xxhc` wipes `~/.xxh` on disconnect, so xxh would ask "Install? [Y/n]" every time without this |
 | `+hhh: "~"` | Set `HOME` to real remote home | Without this, `HOME` is set to `~/.xxh` and `cd ~` lands in the wrong place |
-| `+hhr:` | Delete `~/.xxh` on disconnect | Zero footprint on shared hosts |
 | `-o ControlMaster=auto` | Reuse existing ControlMaster socket | `xxhc` pre-creates the socket before xxh runs, so xxh's internal SCP reuses the already-established tunnel — critical for hosts behind ProxyJump |
 | `-o ControlPath=~/.ssh/cm/xxh-%n` | Dedicated socket path for xxh connections | Uses a separate path from regular SSH sockets (which use `%r@%h:%p`) to avoid conflicts |
 | `-o ServerAliveInterval=15` | Local SSH client probes server every 15 s | Detects dead connections on flaky networks; causes the local client to exit within 45 s rather than hanging indefinitely |
@@ -270,6 +268,9 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         +e "XXH_CONNECT_START=$start" \
         $argv[2..-1]
 
+    # Belt-and-suspenders: remove ~/.xxh if the fish_exit handler didn't (e.g. fish was SIGKILL'd).
+    ssh -q -o ControlMaster=auto -o ControlPath=$cm_path $target "rm -rf ~/.xxh 2>/dev/null" 2>/dev/null
+
     # Retrieve remote atuin DB — fetch main file plus WAL files.
     # atuin uses SQLite WAL mode: recent writes live in the -wal file, not the
     # main .db file. Without the WAL files, the DB appears empty.
@@ -306,7 +307,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         rm -f $tmp_db $tmp_db-wal $tmp_db-shm
     end
 
-    # Verify xxh cleaned up ~/.xxh — warn loudly if anything is left behind
+    # Verify ~/.xxh was removed — warn loudly if anything is left behind
     if ssh -q -o ControlMaster=auto -o ControlPath=$cm_path -o ConnectTimeout=10 $target "test -d ~/.xxh" 2>/dev/null
         set_color --bold red
         echo ""
@@ -349,8 +350,8 @@ The fish session init that runs on the remote. In order:
 4. **Greeting** — defines `fish_greeting` to print connection time (from `XXH_CONNECT_START`) then run fastfetch
 5. **Atuin** — if a preseed file exists at `/tmp/.xxh_atuin_pre_<alias>.db`, copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config and initialises atuin.
 6. **`fish_exit` handlers** — two handlers registered in definition order:
-   - `_xxhc_export_history`: copies the atuin DB and its WAL/SHM files to `/tmp/` so `xxhc` can retrieve them after the session ends; also removes `fish/generated_completions` to prevent NFS stub files from blocking xxh's `+hhr` cleanup
-   - `_xxhc_cleanup_home`: removes `~/.xxh/` immediately, so other users on the shared host cannot see it even if the local machine never gets a chance to run `+hhr` (VPN drop, terminal crash, etc.). Safe to delete while running: open file descriptors hold the inodes alive until fish actually exits, so no binary is interrupted mid-execution.
+   - `_xxhc_export_history`: copies the atuin DB and its WAL/SHM files to `/tmp/` so `xxhc` can retrieve them after the session ends; also removes `fish/generated_completions` to prevent NFS stub files from interfering with `_xxhc_cleanup_home`
+   - `_xxhc_cleanup_home`: removes `~/.xxh/` immediately so other users on the shared host cannot see it even if the local machine is completely gone (VPN drop, terminal crash, etc.). Safe to delete while running: open file descriptors hold the inodes alive until fish actually exits, so no binary is interrupted mid-execution.
 
 The atuin config written on each connect:
 ```toml
@@ -359,7 +360,7 @@ search_mode = "fuzzy"
 ```
 `auto_sync = false` prevents atuin from contacting any external server — important on shared hosts where network behaviour is unpredictable.
 
-**NFS cleanup note:** On NFS-mounted home directories (common in university/enterprise environments), fish generates shell completions asynchronously. When those files are open, deleting them creates invisible `.nfsXXXX` stub files that leave the directory non-empty. xxh's `+hhr` cleanup then fails with "Directory not empty". The `fish_exit` handler pre-emptively removes `$XDG_DATA_HOME/fish/` so xxh can cleanly `chmod -R u+w && rm -rf` the rest of `~/.xxh/`.
+**NFS cleanup note:** On NFS-mounted home directories (common in university/enterprise environments), fish generates shell completions asynchronously. When those files are open, deleting them creates invisible `.nfsXXXX` stub files that leave the directory non-empty, which would cause `rm -rf ~/.xxh` to fail. The `_xxhc_export_history` handler pre-emptively removes `$XDG_DATA_HOME/fish/` while fish is still running (so the stubs are created and immediately owned by the same process) before `_xxhc_cleanup_home` removes `~/.xxh/`.
 
 ---
 
@@ -515,8 +516,7 @@ xxhc myserver +vv    # verbose upload
 
 ## Uninstall
 
-**Remote** — just disconnect. `+hhr` deletes `~/.xxh` automatically.
-If you connected without `+hhr`: `ssh <host> "rm -rf ~/.xxh"`
+**Remote** — just disconnect. `xxhc` deletes `~/.xxh` automatically (via the remote fish handler and an explicit SSH cleanup). If cleanup fails for any reason: `ssh <host> "rm -rf ~/.xxh"`
 
 **Local:**
 ```sh

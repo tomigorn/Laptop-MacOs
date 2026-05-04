@@ -5,7 +5,6 @@ hosts:
     ++copy-method: scp
     +if:
     +hhh: "~"
-    +hhr:
     -o:
       - ControlMaster=auto
       - ControlPath=~/.ssh/cm/xxh-%n
