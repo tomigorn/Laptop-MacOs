@@ -38,8 +38,8 @@ else
 fi
 
 # ── 2. Local tools ────────────────────────────────────────────────────────────
-step "Local tools (fish, starship, fastfetch, atuin, pipx)"
-brew install fish starship fastfetch atuin pipx
+step "Local tools (fish, starship, fastfetch, atuin, bat, pipx)"
+brew install fish starship fastfetch atuin bat pipx
 ok "brew packages installed"
 
 # ── 3. xxh ───────────────────────────────────────────────────────────────────
@@ -94,7 +94,17 @@ download_binary() {
     local tmp
     tmp=$(mktemp -d)
     curl -fsSL "$url" | tar -xz -C "$tmp"
-    mv "$tmp/$binary_in_archive" "$dest"
+    if [[ "$binary_in_archive" == "find:"* ]]; then
+        # Some archives (e.g. bat) embed the version in the directory name.
+        # Use find to locate the binary instead of a fixed path.
+        local find_name=${binary_in_archive#find:}
+        local found
+        found=$(find "$tmp" -name "$find_name" -type f | head -1)
+        [[ -z "$found" ]] && die "Could not find $find_name in archive"
+        mv "$found" "$dest"
+    else
+        mv "$tmp/$binary_in_archive" "$dest"
+    fi
     chmod +x "$dest"
     rm -rf "$tmp"
     ok "$name → ~/.xxh/bin/$name"
@@ -103,6 +113,7 @@ download_binary() {
 download_binary starship  "starship-rs/starship"     "x86_64-unknown-linux-musl.tar.gz" "starship"
 download_binary atuin     "atuinsh/atuin"            "x86_64-unknown-linux-musl.tar.gz" "atuin-x86_64-unknown-linux-musl/atuin"
 download_binary fastfetch "fastfetch-cli/fastfetch"  "linux-amd64.tar.gz"               "fastfetch-linux-amd64/usr/bin/fastfetch"
+download_binary bat       "sharkdp/bat"              "x86_64-unknown-linux-musl.tar.gz" "find:bat"
 
 # ── 7. Stage binaries in xxh build dir ───────────────────────────────────────
 step "Stage binaries for xxh uploads"
@@ -110,10 +121,12 @@ mkdir -p ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin
 cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
 cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
 cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
+cp ~/.xxh/bin/bat       ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat
 chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
 chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
 chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
-ok "starship, fastfetch, and atuin staged"
+chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat
+ok "starship, fastfetch, atuin, and bat staged"
 
 # ── Done ─────────────────────────────────────────────────────────────────────
 echo

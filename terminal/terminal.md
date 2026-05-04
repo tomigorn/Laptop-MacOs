@@ -10,7 +10,7 @@ The setup has two parts:
 
 **Local (Mac):** fish shell with starship prompt, fastfetch system info greeting, and atuin for searchable shell history.
 
-**Remote (via xxh):** when you run `xxhc hostname`, the tool [xxh](https://github.com/xxh/xxh) uploads a self-contained bundle to the remote over SCP — portable fish binary, starship, fastfetch, atuin, and all config — starts a fish session inside it, and on disconnect removes everything. The remote host never gets a modified `.bashrc`, no binaries persist in `PATH`, and `~/.xxh/` is deleted the moment you exit. Remote shell history is merged back into your local atuin database before cleanup, tagged with the remote hostname so you can tell where each command ran.
+**Remote (via xxh):** when you run `xxhc hostname`, the tool [xxh](https://github.com/xxh/xxh) uploads a self-contained bundle to the remote over SCP — portable fish binary, starship, fastfetch, atuin, bat, and all config — starts a fish session inside it, and on disconnect removes everything. The remote host never gets a modified `.bashrc`, no binaries persist in `PATH`, and `~/.xxh/` is deleted the moment you exit. Remote shell history is merged back into your local atuin database before cleanup, tagged with the remote hostname so you can tell where each command ran.
 
 ---
 
@@ -26,7 +26,7 @@ Fish has excellent interactive features (completions, syntax highlighting, histo
 SSH ControlMaster multiplexing (used for fast repeated connections) conflicts with how xxh calls rsync internally. Using SCP avoids this entirely.
 
 **Why wipe on disconnect (`+hhr`)?**
-The remotes are shared admin accounts used by multiple people. Nothing should be left behind — no history, no binaries, no config. The cost is re-uploading ~90 MB on every connect.
+The remotes are shared admin accounts used by multiple people. Nothing should be left behind — no history, no binaries, no config. The cost is re-uploading ~97 MB on every connect.
 
 **Why symlinks for config files?**
 All config lives in this git directory (`terminal/`). The real paths (`~/.config/starship.toml`, etc.) are symlinks pointing here. This means editing a file in the repo takes effect immediately with no copy step, and git is always the source of truth. Without symlinks you'd have two copies that drift apart.
@@ -43,6 +43,7 @@ The Linux binaries in `~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/` are uploade
 - `starship` — prompt (macOS binary, local only)
 - `fastfetch` — system info on every new shell (macOS binary locally, Linux binary on remote)
 - `atuin` — shell history with fuzzy search; up arrow and Ctrl-R open the TUI
+- `bat` — syntax-highlighting file viewer (`cat` replacement); macOS binary locally, Linux binary on remote
 
 **`~/.config/fish/config.fish`:**
 ```fish
@@ -69,7 +70,7 @@ Configures the prompt. Key design decisions:
 
 ## Remote setup via xxh
 
-### What gets uploaded on connect (~90 MB every time)
+### What gets uploaded on connect (~97 MB every time)
 
 | File | Size | Purpose |
 |---|---|---|
@@ -77,6 +78,7 @@ Configures the prompt. Key design decisions:
 | `atuin` | ~29 MB | Shell history with search |
 | `starship` | ~12 MB | Prompt binary |
 | `fastfetch` | ~10 MB | System info greeting |
+| `bat` | ~7 MB | Syntax-highlighting file viewer |
 | `xxh-config.fish`, `starship.toml`, entrypoint | <1 MB | Config and session bootstrap |
 
 The upload happens on every connect because `+hhr` wipes the remote on every disconnect — there's nothing to reuse.
@@ -184,12 +186,14 @@ The last two symlinks point into the xxh build directory — the directory xxh u
 ~/.xxh/bin/starship          Linux x86-64 static binary (source)
 ~/.xxh/bin/fastfetch         Linux x86-64 static binary (source)
 ~/.xxh/bin/atuin             Linux x86-64 static binary (source)
+~/.xxh/bin/bat               Linux x86-64 static binary (source)
 
 ~/.xxh/history/<alias>.db    per-host atuin history, grows across sessions
 
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship    plain copy, uploaded to remote
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch   plain copy, uploaded to remote
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin       plain copy, uploaded to remote
+~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat         plain copy, uploaded to remote
 ```
 
 ---
@@ -261,6 +265,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
 
     set -l start (date +%s)
     env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
+        +e "TERM=xterm-256color" \
         +e "XXH_SSH_ALIAS=$target" \
         +e "XXH_CONNECT_START=$start" \
         $argv[2..-1]
@@ -323,7 +328,8 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
 end
 ```
 
-- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's ~90 MB bundle upload — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump.
+- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's ~97 MB bundle upload — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump.
+- `TERM=xterm-256color` — set via `+e` so the remote fish process sees the correct terminal type *before it starts*, preventing the "unknown terminal type" warning. Ghostty (and other modern terminals) export a `$TERM` value the remote has no terminfo for; fish checks this at startup, before any config file runs, so setting it inside `xxh-config.fish` is too late.
 - `RSYNC_RSH` — ensures rsync bypasses ControlMaster if ever called internally by xxh
 - `XXH_SSH_ALIAS` — the alias you typed; forwarded to the remote so the prompt shows `(myserver)`
 - `XXH_CONNECT_START` — Unix timestamp before connecting; remote greeting subtracts it to show total connection time
@@ -337,8 +343,8 @@ end
 
 The fish session init that runs on the remote. In order:
 
-1. **TERM override** — sets `TERM=xterm-256color`. Ghostty (and other terminals) set `$TERM` to a value the remote has no terminfo for (e.g. `xterm-ghostty`). Without the override, fish can't compute cursor positions and tab completion corrupts the display.
-2. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, and atuin are all in PATH
+1. **TERM override** — sets `TERM=xterm-256color` as a fallback for direct `xxh` use. When connecting via `xxhc`, `TERM` is already set correctly via `+e` before fish starts (see `xxhc.fish`), so this line is a no-op in normal usage.
+2. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, atuin, and bat are all in PATH
 3. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
 4. **Greeting** — defines `fish_greeting` to print connection time (from `XXH_CONNECT_START`) then run fastfetch
 5. **Atuin** — if a preseed file exists at `/tmp/.xxh_atuin_pre_<alias>.db`, copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config and initialises atuin.
@@ -366,7 +372,7 @@ time xxhc myserver +hc "echo ok"
 → ~15 seconds wall time
 ```
 
-Breakdown: fish-portable 39 MB + atuin 29 MB + starship 12 MB + fastfetch 10 MB = ~90 MB uploaded over SCP on every connect. The session itself starts in under a second once files are in place. This cost is fundamental to `+hhr` — every connect is a cold upload.
+Breakdown: fish-portable 39 MB + atuin 29 MB + starship 12 MB + fastfetch 10 MB + bat 7 MB = ~97 MB uploaded over SCP on every connect. The session itself starts in under a second once files are in place. This cost is fundamental to `+hhr` — every connect is a cold upload.
 
 ---
 
@@ -454,7 +460,12 @@ curl -fsSL $(curl -fsSL https://api.github.com/repos/atuinsh/atuin/releases/late
   | grep "browser_download_url.*x86_64-unknown-linux-musl.tar.gz" | head -1 | cut -d'"' -f4) \
   | tar -xz -C /tmp && mv /tmp/atuin-x86_64-unknown-linux-musl/atuin ~/.xxh/bin/atuin
 
-chmod +x ~/.xxh/bin/starship ~/.xxh/bin/fastfetch ~/.xxh/bin/atuin
+# bat (archive directory includes the version number, so use find to locate the binary)
+curl -fsSL $(curl -fsSL https://api.github.com/repos/sharkdp/bat/releases/latest \
+  | grep "browser_download_url.*x86_64-unknown-linux-musl.tar.gz" | head -1 | cut -d'"' -f4) \
+  | tar -xz -C /tmp && find /tmp -name "bat" -type f | head -1 | xargs -I{} mv {} ~/.xxh/bin/bat
+
+chmod +x ~/.xxh/bin/starship ~/.xxh/bin/fastfetch ~/.xxh/bin/atuin ~/.xxh/bin/bat
 ```
 
 ### 7. Stage binaries in the xxh build dir
@@ -466,6 +477,7 @@ mkdir -p ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin
 cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
 cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
 cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
+cp ~/.xxh/bin/bat       ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat
 chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/*
 ```
 
@@ -475,12 +487,13 @@ chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/*
 
 **Config files** (`starship.toml`, `xxh-config.fish`, `config.xxhc`, `xxhc.fish`, etc.) — edit the file in this repo. Symlinks make the change live immediately. The remote picks it up on the next connect.
 
-**Binaries** — when you download a newer version of starship, fastfetch, or atuin, re-copy it to the build dir:
+**Binaries** — when you download a newer version of starship, fastfetch, atuin, or bat, re-copy it to the build dir:
 
 ```sh
 cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
 cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
 cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
+cp ~/.xxh/bin/bat       ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat
 ```
 
 ---
@@ -491,7 +504,7 @@ cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
 xxhc myserver
 ```
 
-Uploads ~90 MB, drops into fish. On exit, merges remote history into local atuin.
+Uploads ~97 MB, drops into fish. On exit, merges remote history into local atuin.
 
 Pass extra xxh flags after the host name as normal:
 ```sh

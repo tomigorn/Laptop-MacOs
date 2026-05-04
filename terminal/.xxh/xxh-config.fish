@@ -16,13 +16,12 @@ for pluginrc_file in (find $dirs -type f -name '*pluginrc.fish' -printf '%f\t%p\
   end
 end
 
-# Ghostty (and other terminals) set TERM to a value the remote may not have
-# terminfo for. Override to xterm-256color which is universally available and
-# fully compatible — without this, fish can't position the cursor correctly and
-# tab completion corrupts the display.
+# xxhc passes TERM=xterm-256color via +e so fish sees the right value before it
+# starts (preventing the "unknown terminal" warning). This line is a fallback for
+# anyone running xxh directly without xxhc.
 set -x TERM xterm-256color
 
-if test -f $CURRENT_DIR/bin/starship; or test -f $CURRENT_DIR/bin/fastfetch; or test -f $CURRENT_DIR/bin/atuin
+if test -f $CURRENT_DIR/bin/starship; or test -f $CURRENT_DIR/bin/fastfetch; or test -f $CURRENT_DIR/bin/atuin; or test -f $CURRENT_DIR/bin/bat
     set -x PATH $CURRENT_DIR/bin $PATH
 end
 

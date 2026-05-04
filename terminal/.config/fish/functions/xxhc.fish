@@ -29,6 +29,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
 
     set -l start (date +%s)
     env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
+        +e "TERM=xterm-256color" \
         +e "XXH_SSH_ALIAS=$target" \
         +e "XXH_CONNECT_START=$start" \
         $argv[2..-1]
