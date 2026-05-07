@@ -15,6 +15,7 @@ A comprehensive comparison of docking stations for running **2 external monitors
 - [The complete comparison table](#the-complete-comparison-table)
 - [Top 5 recommendations](#top-5-recommendations)
 - [Final recommendation](#final-recommendation)
+- [What I actually bought (confirmed working)](#what-i-actually-bought-confirmed-working)
 
 ---
 
@@ -296,4 +297,65 @@ For a MacBook Air M5 running 2 monitors + USB peripherals + Ethernet, **TB3 vs T
 
 ---
 
-*Last updated: 30 April 2026*
+## What I Actually Bought (Confirmed Working)
+
+This is the exact setup purchased and confirmed working for dual extended monitors on a MacBook Air M5. Very cost-effective.
+
+| # | Product | Purpose | Price (CHF) | Link |
+|---|---|---|---:|---|
+| 1 | **OWC Thunderbolt 3 Dock** — Thunderbolt, 14 Ports | The dock | 148.00 | [Digitec](https://www.digitec.ch/de/s1/product/owc-thunderbolt-3-dock-thunderbolt-14-ports-dockingstation-usb-hub-10259168) · [OWC](https://www.owc.com/solutions/thunderbolt-3-dock-14-port) |
+| 2 | **InLine Mini DisplayPort – DisplayPort** — 2 m | Monitor 1 (Mini DP out → DP monitor) | 9.40 | [Digitec](https://www.digitec.ch/de/s1/product/inline-mini-displayport-displayport-2-m-videokabel-13109819) |
+| 3 | **Sonero USB C – HDMI** — 2 m | Monitor 2 (TB3 downstream port → HDMI monitor) | 20.70 | [Digitec](https://www.digitec.ch/de/s1/product/sonero-usb-c-hdmi-2-m-videokabel-38926798) |
+| 4 | **Tech-Protect USB C — USB C** — 2 m, USB 4.0, 240 W | MacBook to dock connection | 15.90 | [Digitec](https://www.digitec.ch/de/s1/product/tech-protect-usb-c-usb-c-2-m-usb-40-240-w-usb-kabel-46448271) |
+| | | **Total** | **194.00** | |
+
+### Monitors
+
+| Position | Monitor | Resolution | Connection |
+|---|---|---:|---|
+| Left | [Dell G2724D](https://www.digitec.ch/de/s1/product/dell-g2724d-2560-x-1440-pixel-27-monitor-36881128) — 27" | 2560 × 1440 (1440p) | InLine Mini DP → DP cable (dock Mini DP out) |
+| Right | [Dell P2219H](https://www.digitec.ch/de/s1/product/dell-p2219h-1920-x-1080-pixel-22-monitor-9107180) — 22" | 1920 × 1080 (1080p) | Sonero USB-C → HDMI cable (dock TB3 downstream) |
+
+### How it's wired
+
+```
+MacBook Air M5, 13 inch, 32GB RAM, 1TB SSD (Model A3449, Model Identifier Mac17,3)
+    │
+    │  Tech-Protect USB-C → USB-C (USB 4.0, 240W, 2m)
+    │
+    ▼
+OWC TB3 Dock (14 ports)
+    │
+    ├── Mini DisplayPort
+    │       │  InLine Mini DP → DP (2m)
+    │       ▼
+    │       Dell G2724D — 27" 1440p  [LEFT]
+    │
+    └── TB3 downstream
+            │  Sonero USB-C → HDMI (2m)
+            ▼
+            Dell P2219H — 22" 1080p  [RIGHT]
+```
+
+### Product details
+
+**1. OWC Thunderbolt 3 Dock — 14 Ports**
+- 5× USB-A 3.0, 1× USB-C (10 Gbps), 1× Mini DisplayPort 1.2, 1× TB3 downstream, 1× RJ-45 (1 GbE), 1× SD + 1× microSD, 3.5mm audio, optical S/PDIF
+- 85 W charging to MacBook, dual 4K @ 60 Hz capable, 5-year warranty
+- macOS + Windows compatible
+
+**2. InLine Mini DisplayPort – DisplayPort — 2 m**
+- Mini DP (male) → DisplayPort (male), DP 1.2, max 4K @ 60 Hz (3840 × 2160)
+- Fully shielded, gold-plated contacts
+
+**3. Sonero USB C – HDMI — 2 m**
+- USB-C (male) → HDMI (male), HDMI 2.0, max 4K @ 60 Hz (3840 × 2160)
+- Braided aluminium cable, made in Germany
+
+**4. Tech-Protect USB C — USB C — 2 m, USB 4.0, 240 W**
+- USB-C (male) → USB-C (male), USB 4.0, 40 Gbps data, 240 W Power Delivery
+- This is what carries the Thunderbolt signal from the MacBook to the dock; the high wattage also fully charges the MacBook through the dock
+
+---
+
+*Last updated: 7 May 2026*
