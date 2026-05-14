@@ -306,8 +306,7 @@ This is the exact setup purchased and confirmed working for dual extended monito
 | 1 | **OWC Thunderbolt 3 Dock** — Thunderbolt, 14 Ports | The dock | 148.00 | [Digitec](https://www.digitec.ch/de/s1/product/owc-thunderbolt-3-dock-thunderbolt-14-ports-dockingstation-usb-hub-10259168) · [OWC](https://www.owc.com/solutions/thunderbolt-3-dock-14-port) |
 | 2 | **InLine Mini DisplayPort – DisplayPort** — 2 m | Monitor 1 (Mini DP out → DP monitor) | 9.40 | [Digitec](https://www.digitec.ch/de/s1/product/inline-mini-displayport-displayport-2-m-videokabel-13109819) |
 | 3 | **Sonero USB C – HDMI** — 2 m | Monitor 2 (TB3 downstream port → HDMI monitor) | 20.70 | [Digitec](https://www.digitec.ch/de/s1/product/sonero-usb-c-hdmi-2-m-videokabel-38926798) |
-| 4 | **Tech-Protect USB C — USB C** — 2 m, USB 4.0, 240 W | MacBook to dock connection | 15.90 | [Digitec](https://www.digitec.ch/de/s1/product/tech-protect-usb-c-usb-c-2-m-usb-40-240-w-usb-kabel-46448271) |
-| | | **Total** | **194.00** | |
+| | | **Total** | **178.10** | |
 
 ### Monitors
 
@@ -321,7 +320,7 @@ This is the exact setup purchased and confirmed working for dual extended monito
 ```
 MacBook Air M5, 13 inch, 32GB RAM, 1TB SSD (Model A3449, Model Identifier Mac17,3)
     │
-    │  Tech-Protect USB-C → USB-C (USB 4.0, 240W, 2m)
+    │  OWC Thunderbolt cable (came with the dock)
     │
     ▼
 OWC TB3 Dock (14 ports)
@@ -351,10 +350,6 @@ OWC TB3 Dock (14 ports)
 **3. Sonero USB C – HDMI — 2 m**
 - USB-C (male) → HDMI (male), HDMI 2.0, max 4K @ 60 Hz (3840 × 2160)
 - Braided aluminium cable, made in Germany
-
-**4. Tech-Protect USB C — USB C — 2 m, USB 4.0, 240 W**
-- USB-C (male) → USB-C (male), USB 4.0, 40 Gbps data, 240 W Power Delivery
-- This is what carries the Thunderbolt signal from the MacBook to the dock; the high wattage also fully charges the MacBook through the dock
 
 ---
 
