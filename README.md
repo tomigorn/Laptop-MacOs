@@ -90,6 +90,12 @@ see above in system settings. configure natural scroll
 ## Developer Setup
 [Homebrew](https://brew.sh/)
 
+## Terminal
+fish + starship + atuin + xxh for portable remote shells. See [terminal/terminal.md](terminal/terminal.md). Setup: `terminal/setup.sh`.
+
+## Virtualization (virt-manager / libvirt / QEMU)
+GTK virt-manager running natively on macOS, launchable from Spotlight. See [virt-manager/virt-manager.md](virt-manager/virt-manager.md). Setup: `virt-manager/install.sh`.
+
 ## Git / GitHub / GitLab
 
 setup for multiple git accounts to automatically use a certain user when cloning a repo into a specific directory:
