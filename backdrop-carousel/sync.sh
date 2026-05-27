@@ -7,7 +7,7 @@ BRAVE_PREFS="$HOME/Library/Application Support/BraveSoftware/Brave-Browser/Defau
 
 mkdir -p "$LOCAL_DIR"
 
-remote_photos=$(curl -sf "$REMOTE_URL/" | python3 -c "import sys,json; [print(p['name']) for p in json.load(sys.stdin)]") || exit 1
+remote_photos=$(curl -sf "$REMOTE_URL/" | python3 -c "import sys,json; [print(p['name']) for p in json.load(sys.stdin)]") || { echo "ERROR: Failed to fetch photo list from server"; exit 1; }
 
 for name in $remote_photos; do
     if [ ! -f "$LOCAL_DIR/$name" ]; then
@@ -23,11 +23,15 @@ for file in "$LOCAL_DIR"/*; do
     fi
 done
 
+count=$(echo "$remote_photos" | wc -l | tr -d ' ')
+
 if pgrep -q "Brave Browser"; then
+    echo "Synced $count photos to wallpaper. Brave skipped (running)."
     exit 0
 fi
 
 if [ ! -d "$BRAVE_IMAGES_DIR" ] || [ ! -f "$BRAVE_PREFS" ]; then
+    echo "Synced $count photos to wallpaper. Brave not installed."
     exit 0
 fi
 
@@ -65,3 +69,5 @@ if ntp['background'].get('selected_value', '') not in photos and photos:
 with open(prefs_path, 'w') as f:
     json.dump(prefs, f, separators=(',', ':'))
 " "$BRAVE_PREFS" $remote_photos
+
+echo "Synced $count photos to wallpaper + Brave."
