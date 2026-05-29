@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tmilata.homelab-dns-timer</string>
+
+    <!-- Safety net for the watcher's blind spot: the watcher reacts only to route
+         changes, so a homelab that was down at the last change (Pi rebooting) would
+         leave us on DHCP until the next one. This re-runs the actor every 5 min so
+         we recover within 5 min regardless. The actor is idempotent and silent on a
+         no-op (REASON=timer + action=none), so a stable network stays quiet. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/sbin/homelab-dns.sh</string>
+        <string>timer</string>
+    </array>
+
+    <!-- Fire every 300s. Not RunAtLoad: the watcher already does the boot eval, so
+         skipping load-time here avoids a redundant double-probe at startup. -->
+    <key>StartInterval</key>
+    <integer>300</integer>
+</dict>
+</plist>
