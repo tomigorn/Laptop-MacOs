@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/bin/zsh
+# zsh does not word-split unquoted variables like bash; enable it so the
+# newline-separated $remote_photos list iterates per-name.
+setopt shwordsplit
 
 REMOTE_URL="https://backdrop-carousel.holy-grail.ch"
 LOCAL_DIR="$HOME/Pictures/BackdropCarousel"
