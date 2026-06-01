@@ -16,6 +16,7 @@ A comprehensive comparison of docking stations for running **2 external monitors
 - [Top 5 recommendations](#top-5-recommendations)
 - [Final recommendation](#final-recommendation)
 - [What I actually bought (confirmed working)](#what-i-actually-bought-confirmed-working)
+- [KVM switches for MacBooks: driving two displays while switching between computers](#kvm-switches-for-macbooks-driving-two-displays-while-switching-between-computers)
 
 ---
 
@@ -353,4 +354,97 @@ OWC TB3 Dock (14 ports)
 
 ---
 
-*Last updated: 7 May 2026*
+## KVM Switches for MacBooks: Driving Two Displays While Switching Between Computers
+
+Everything above assumes one computer. The moment you want **one keyboard, one mouse, and the same two monitors shared between two machines** — say a MacBook and a desktop PC, or a work Mac and a personal Mac — you're no longer shopping for a dock. You're shopping for a **KVM** (Keyboard, Video, Mouse switch), and the same Apple Silicon video limitations from the start of this guide come back, only worse. A KVM has to route *two* independent display streams to *two* different computers and hand peripherals back and forth, all without macOS quietly collapsing your dual setup into a mirror. Most KVMs that advertise "dual 4K for MacBook" fail exactly there.
+
+This section explains why, and what to buy if you actually need it.
+
+### The same macOS limitation, now in a KVM
+
+The core problem is identical to the one that sinks cheap USB-C docks: **macOS does not support DisplayPort MST (Multi-Stream Transport) for extended desktops.** If a KVM takes a single video stream from the Mac and splits it into two displays via MST — which is how almost every inexpensive "dual-monitor USB-C KVM" works internally — macOS will either mirror the two displays or detect only one of them. It never extends.
+
+This is an Apple-side decision, not a defect in any particular KVM. Windows handles MST fine, which is precisely why so many of these products genuinely deliver dual extended displays on a PC and then silently degrade to mirroring on the Mac side of the same switch. The telltale symptoms are the ones to watch for in reviews: **only one external display is detected, or both displays show identical content.**
+
+### How dual extended displays actually work on a Mac
+
+To get two *independent* extended displays, the Mac has to send two *independent* display streams. In practice there are only three ways to make that happen:
+
+1. **Two physical connections from the Mac** — e.g. two USB-C-to-DisplayPort cables, one per monitor, each using its own Thunderbolt port. The Mac drives each stream natively. This is the most reliable approach and the one most serious KVMs rely on.
+2. **A Thunderbolt dock that natively demuxes the two DisplayPort streams** that a single Thunderbolt cable already carries — *not* via MST. This is exactly what the Thunderbolt docks earlier in this guide (OWC, CalDigit, Sonnet) do. But those are plain docks, **not two-computer KVMs**.
+3. **A DisplayLink-based device**, which uses a software compression driver to create virtual displays macOS treats as separate. This works for extended desktops on any chip, but at the cost of HDCP (some DRM/streaming video won't play), capped refresh rate and resolution, extra CPU load, and a mandatory driver install. See [Why DisplayLink sucks](#why-displaylink-sucks) above.
+
+A KVM that does dual extended displays on a Mac **without** DisplayLink must therefore feed the Mac two real streams — which is why the cleanest ones either take two cables from the Mac or use a bonded dual-USB-C cable that occupies both ports at once (more on that below).
+
+### The chip-tier caveat (you're fine, but most listings bury it)
+
+Even with a correct KVM, the number of external displays your Mac can drive depends on its chip:
+
+- **Base M1 / M2** (Air and non-Pro Pro): **one** external display, full stop.
+- **Base M3:** two external displays, **but only with the laptop lid closed** (clamshell). Lid open, it mirrors.
+- **Base M4 and newer, plus all Pro/Max variants:** two external displays with the **lid open**.
+
+Your **M5 MacBook Air sits in the fully-supported tier** — two external displays, lid open, no tricks. That's the good news. The bad news is that most KVM/dock listings advertise "dual 4K for MacBook" in the headline and bury this chip-tier caveat in fine print, so anyone on an M1/M2/M3 reading the same listing is being quietly misled.
+
+### The "single cable" reality — read this before you buy
+
+Buyers almost always want a *single-cable* solution: one cable to the Mac, leaving the second Thunderbolt port free for charging-elsewhere, a drive, whatever. For a two-computer KVM driving two extended displays on a Mac, that is **very hard to find**, and it's worth understanding why a device can be "one plug action" without being "one cable."
+
+The cleanest device on the market — the **AV Access iDock M10** (covered below) — achieves native, driver-free dual extended displays on a Mac, but it does so with a **bonded dual-USB-C "Y" cable that plugs into both of the Mac's USB-C ports at once.** So it's *one plug action*, but it *occupies both ports*. That is not the same as "one cable leaving a port free," and the two get conflated constantly. If both your Mac's USB-C ports are on the same side (as on the Air), also check they're physically adjacent enough for a bonded connector.
+
+You generally **cannot have all three** of the following at once, and choosing a KVM means deciding which one to give up:
+
+1. One cable, leaving a Thunderbolt port free
+2. Two full-native-quality extended displays
+3. Two-computer KVM switching
+
+### The products, and the verdicts
+
+| Product | Type | Dual extended on Mac? | EDID emulation | Single cable to Mac? | Gaming latency / refresh | Verdict |
+|---|---|---|---|---|---|---|
+| **AV Access iDock M10** | USB-C KVM dock, 1 Mac + 1 PC | ✅ Native, no DisplayLink | ✅ Yes | ⚠️ "One plug," but bonded cable uses **both** ports | Near-zero signal latency (passthrough), but **capped 4K@60Hz, no VRR**; ~3–8s switch/wake delay; may throttle very-high-Hz mouse polling | **Best single-box option** if your chip supports it and you accept the caveats |
+| **Level1Techs DisplayPort KVM** | Native DP KVM (~$600) | ✅ (needs two USB-C-to-DP cables from Mac) | ❌ None — windows reshuffle on switch | ❌ Two cables required | Near-zero passthrough; **up to 144Hz@1440p / 120Hz@4K with full VRR** — best for gaming | **Best for quality/reliability** if you'll run two cables |
+| **Cable Matters 14-in-1 USB-C KVM** | USB-C KVM dock | ❌ Single display only at 4K@60Hz on macOS | — | — | — (single display on Mac) | **Disqualified** for dual-display Mac use |
+| **Plain USB-C dual-HDMI KVMs** (e.g. Sabrent) | USB-C MST KVM | ❌ Mirrors (MST) | varies | — | Sleep/wake switching bugs reported on Mac | **Avoid** — mirroring + sleep/wake switching bugs on Mac |
+| **Generic "Thunderbolt 4" docks** (MOKiN, WAVLINK, etc.) | USB-C/TB hybrid | ❌ M1/M2 mirror, M3 lid-closed; triple often mirror-only | varies | — | varies; mirror-only on Mac makes it moot | **Avoid** for Mac dual-display KVM use |
+| **OWC / CalDigit / Sonnet TB docks** | Thunderbolt dock (single computer) | ✅ Native | n/a | ✅ One TB cable | Native passthrough; no switch delay (single computer) | **Not a KVM** — use only if you have one Mac and no second computer |
+
+A few of these deserve a sentence more:
+
+**AV Access iDock M10** (≈ CHF 230–320) is the standout. It does native dual extended displays on the Mac with no DisplayLink, its EDID emulation keeps your monitors "present" to both machines so your window layout doesn't reshuffle when you switch, and it offers a hardware switch button plus a wired remote, 100W power delivery, and shared Ethernet. The caveats are real, though: the bonded dual-USB-C cable occupies both Mac ports and is **very short (~0.8m) and non-standard/hard to replace**; output is capped at **4K@60Hz with no VRR** (limiting for gaming); reliability is mixed (≈3.9★, reports of second-monitor flicker or black-screen needing a switch-cycle to recover); and it supports **one MacBook + one PC only — not two MacBooks.** Note also that connecting the Mac side typically needs **one HDMI and one DisplayPort** input on the device, so a Mac mini or a monitor without the right ports may need an adapter.
+
+**Level1Techs DisplayPort KVMs** (~$600) are the opposite trade-off: excellent build, true native DisplayPort switching, no software — but **no monitor/EDID emulation**, so windows reshuffle when you switch (on a Mac you mitigate this by turning off *"Automatically rearrange Spaces based on most recent use"* in System Settings → Desktop & Dock). They need **two USB-C-to-DP cables** from the Mac for dual displays, so this is explicitly not a single-cable solution.
+
+### A note on gaming latency
+
+The latency column above needs unpacking, because "KVM latency" splits into pieces that behave very differently:
+
+- **Video signal latency is essentially zero.** A real KVM passes DisplayPort/HDMI through electrically — no re-encoding, no frame buffering (that's what DisplayLink does, and the iDock M10 explicitly avoids it). The added latency is on the order of microseconds, far below a single frame; your monitor's own processing adds vastly more. You will not *feel* added display lag from the switch itself.
+- **The real limiter for gaming is the refresh/VRR ceiling, not added lag.** The iDock M10 caps at **4K@60Hz with no VRR**, so you lose FreeSync/G-Sync smoothing and sit at a 16.7ms frame cadence versus the ~7ms of 144Hz. For competitive play that ceiling matters far more than any switch latency — which is why the native-DP Level1Techs path (up to 144Hz@1440p / 120Hz@4K with full VRR passthrough) is the better gaming choice.
+- **Mouse/keyboard latency is negligible**, but a KVM *can* cap a very-high-Hz gaming mouse's polling rate (e.g. throttling an 8000Hz mouse). AV Access doesn't publish the M10's internal USB polling behavior, so if you run an 8000Hz mouse, test it in the return window. A normal 1000Hz mouse is fine.
+- **Network ping adds zero meaningful latency.** The shared wired Gigabit Ethernet behaves like any USB-to-Ethernet path — microseconds of controller processing against milliseconds of round-trip — and is far better than Wi-Fi. (It's Gigabit, not 2.5G; irrelevant for ping, only for raw throughput.)
+- **The latency people actually report is switch/wake recovery, not in-game lag** — the ~3–8s delay after pressing the switch button, plus occasional second-monitor flicker or black-screen needing a switch-cycle to recover. That's a device-level annoyance when moving between machines, not frame-to-frame lag while playing.
+
+Bottom line: the iDock M10 is the better **"work on Mac, occasionally game on PC at 60Hz"** device; a native-DP KVM is the better **competitive-gaming** device.
+
+### Practical buying guidance
+
+- **Verify your Mac's chip tier first.** (Yours, the M5 Air, is fine — two displays, lid open.) For anyone on M1/M2/M3, re-read the chip-tier section before spending anything.
+- **Prefer EDID-emulation devices** so your windows and desktop layout survive a switch. The lack of it is the single most common day-to-day annoyance with native-DP KVMs.
+- **Avoid DisplayLink** if HDCP (streaming/DRM) or high refresh rates matter to you.
+- **If using a bonded dual-USB-C device, check that the Mac's two USB-C ports are adjacent** and that the (short) cable will physically reach.
+- **Buy from a retailer with easy returns and test within the return window.** Mac KVM behavior is finicky enough that you want an exit.
+
+### Decision summary
+
+- **Want single-box convenience and your Mac supports it** → **AV Access iDock M10**, accepting that both USB-C ports are occupied and that reliability is a bit of a gamble.
+- **Want maximum quality and reliability and don't mind running two cables** → a native-DP KVM like the **Level1Techs**, and disable Spaces auto-rearrange to tame the window reshuffle.
+- **Only have one MacBook, no second computer** → **skip the KVM entirely** and use a single native Thunderbolt dock like the **OWC** from the recommendations above.
+
+**Reference / where to buy:**
+- [AV Access iDock M10 — product page (avaccess.com)](https://www.avaccess.com/products/idock-m10/)
+- [AV Access iDock M10 — Amazon.de](https://www.amazon.de/-/en/AV-Access-Monitors-Computers-Emulation/dp/B0F6MPW2JX/) — *AV Access KVM Switch Docking Station, USB-C, 2 monitors / 2 computers, dual 4K HDMI, Ethernet, 100W PD, EDID emulation* (≈ €289.99)
+
+---
+
+*Last updated: 1 June 2026*
