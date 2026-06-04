@@ -87,6 +87,29 @@ see above in system settings. configure natural scroll
 ## System Monitoring
 [iStat Menus](https://bjango.com/mac/istatmenus/) for showing an overview of system resource usage in the menu bar.
 
+## Network Drives (Auto-Mounting Shares)
+[ConnectMeNow v4](https://www.tweaking4all.com/macos/connectmenow-v4/) (Tweaking4All) for auto-mounting network drives so I don't have to manually reconnect to network shares every single time. Free, signed & notarized, Apple Silicon native. It's a **menu-bar helper** that mounts shares for you on demand and automatically, and unlike NFS Manager it's **multi-protocol: SMB, AFP, NFS, FTP, WebDAV, SSHFS, and SSH** — so it works with SMB shares (what most NAS boxes serve by default).
+
+Why this over NFS Manager: ConnectMeNow handles SMB (NFS Manager is NFS-only), it's free, and it has first-class **roaming-laptop** features — auto-mount on network change (optionally gated to a specific gateway), remount on wake, ping/Wake-on-LAN, and fallback servers. The trade-off: mounting is driven by the running menu-bar app rather than the kernel-level `autofs` daemon NFS Manager configures, so the app needs to be running (it auto-starts at login). For pure-NFS, set-and-forget OS-level automounts, NFS Manager is still the better choice — see below.
+
+### How to mount a drive
+1. **Install** — download the Apple Silicon (ARM64) build from [tweaking4all.com](https://www.tweaking4all.com/macos/connectmenow-v4/), open the DMG, drag ConnectMeNow to `/Applications`. Launch it; it lives in the menu bar.
+2. **Add a share** — menu → **Settings → Share Definitions** → **Create new share** (＋ bottom-left).
+3. **Basic settings:**
+   - **Share Type:** the protocol — **SMB** for a typical NAS, or NFS/AFP/WebDAV/etc.
+   - **Server Address:** IP (recommended) or hostname, e.g. `192.168.1.10`. No protocol prefix or path here.
+   - **Path:** the share name (SMB) or exported path (NFS), e.g. `media`. Leave blank and SMB/AFP will prompt for a share at mount time.
+   - **Login:** username + password (stored encrypted). Leave the password blank to be prompted each mount.
+   - Use the **Test Mount** button to confirm it works before saving.
+4. **Auto-mount (Advanced tab)** — tick **Auto Mount when ConnectMeNow starts**, and for a roaming laptop also **Mount on Network Change** gated to your home router's **gateway MAC** (use *Detect Default Gateway*). Enable **Remount on wake from sleep** so shares come back after the lid reopens.
+5. **Mount location** — on macOS 26 Tahoe, either mount into **`/Volumes`** using the **System Call (API)** style, **or** use a custom dir (e.g. `~/MountPoints`) with the **Command-line** mount style. Don't combine a custom path with the System API — Tahoe 26.4 broke that (triple permission/share dialogs), so the dev disabled it.
+6. **Daily use** — click the share in the menu-bar menu to mount; click an active share for **Reveal in Finder** / **Unmount Share**.
+
+> Roaming tip: this pairs naturally with the [homelab DNS auto-switcher](homelab-dns/homelab-dns.md) — both react to network changes, so arriving on the home LAN re-points DNS *and* remounts the NAS automatically.
+
+### NFS-only alternative: NFS Manager
+[NFS Manager](https://www.bresink.com/osx/NFSManager.html) by Bresink (commercial) is worth it only if you need **NFS** specifically and want true OS-level automounts that work even when no helper app is running. It's a front-end for macOS `autofs`: it edits `/etc/auto_master` + an autofs map (hence the admin password), then `automount -vc` reloads it and the share mounts on first access to the path. Useful NAS options: `resvport` (many NAS require a privileged source port or the mount silently fails), `rw`, `nobrowse`, and `soft,intr` so an off-LAN server fails fast instead of beachballing Finder.
+
 ## Developer Setup
 [Homebrew](https://brew.sh/)
 
