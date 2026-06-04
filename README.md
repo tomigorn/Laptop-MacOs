@@ -110,6 +110,15 @@ Why this over NFS Manager: ConnectMeNow handles SMB (NFS Manager is NFS-only), i
 ### NFS-only alternative: NFS Manager
 [NFS Manager](https://www.bresink.com/osx/NFSManager.html) by Bresink (commercial) is worth it only if you need **NFS** specifically and want true OS-level automounts that work even when no helper app is running. It's a front-end for macOS `autofs`: it edits `/etc/auto_master` + an autofs map (hence the admin password), then `automount -vc` reloads it and the share mounts on first access to the path. Useful NAS options: `resvport` (many NAS require a privileged source port or the mount silently fails), `rw`, `nobrowse`, and `soft,intr` so an off-LAN server fails fast instead of beachballing Finder.
 
+## File Manager
+[ForkLift](https://binarynights.com/) (Binary Nights) as a Finder replacement — a **dual-pane** file manager with the things macOS Finder still lacks: true two-pane copy/move, a proper path bar, batch rename, archive browsing, folder sync, and an app-deletion tool that also clears leftover support files. Paid (one-time license, also on [Setapp](https://setapp.com/)).
+
+It overlaps with the Network Drives tools above: ForkLift has a **built-in remote browser** for SFTP, FTP, SMB, AFP, WebDAV, NFS, and cloud storage (S3, Backblaze B2, Google Drive, …), so for ad-hoc "connect, grab a file, disconnect" it often replaces mounting a share at all. Its **Disklet** feature can also surface a remote connection as a mounted volume in `/Volumes` for other apps to use.
+
+How they divide up:
+- **ConnectMeNow** — system-wide, persistent auto-mounts that survive across apps (the NAS is always *there*).
+- **ForkLift** — interactive browsing/transfer inside the app; reach for it when you just need to poke at a server, not keep it mounted.
+
 ## Developer Setup
 [Homebrew](https://brew.sh/)
 
