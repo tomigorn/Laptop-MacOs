@@ -38,6 +38,13 @@ if test -f $CURRENT_DIR/bin/fastfetch
         end
         fastfetch
     end
+
+    # On a manual clear, show fastfetch but not the stale "Connected in Xs"
+    # line — that timer is only meaningful at connect time.
+    function clear --description "clear the screen, then show the greeting"
+        command clear
+        fastfetch
+    end
 end
 
 if test -f $CURRENT_DIR/bin/atuin
