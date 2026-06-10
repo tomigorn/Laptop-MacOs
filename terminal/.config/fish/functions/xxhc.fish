@@ -131,6 +131,11 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         echo "  ╚══════════════════════════════════════════════════════════════╝"
         echo ""
         set_color normal
+    else
+        # Confirmed over SSH that nothing remains on the host.
+        set_color green
+        echo "  ✓ Remote cleanup verified — ~/.xxh removed from $target, no trace left behind."
+        set_color normal
     end
 
     # Tear down the ControlMaster now that all operations are done
