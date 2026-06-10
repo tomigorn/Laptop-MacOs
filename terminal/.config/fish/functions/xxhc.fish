@@ -15,6 +15,48 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     mkdir -p ~/.ssh/cm
     ssh -o ControlMaster=auto -o ControlPath=$cm_path -fN -o ConnectTimeout=30 $target 2>/dev/null
 
+    # ── Detect remote architecture and stage matching binaries ──────────────────
+    # The bundle ships native binaries; uploading the wrong arch fails at exec
+    # time ("Exec format error"). Detect over the ControlMaster tunnel, then copy
+    # the matching store into the xxh build dir before xxh uploads it.
+    set -l remote_uname (ssh -o ControlMaster=auto -o ControlPath=$cm_path -o ConnectTimeout=10 $target uname -m 2>/dev/null)
+    set -l arch
+    switch $remote_uname
+        case x86_64 amd64
+            set arch x86_64
+        case aarch64 arm64
+            set arch aarch64
+        case '*'
+            set_color --bold red
+            if test -z "$remote_uname"
+                echo "  xxhc: could not detect remote architecture on $target (connection failed?)."
+            else
+                echo "  xxhc: unsupported remote architecture '$remote_uname' on $target."
+                echo "  Supported: x86_64, aarch64."
+            end
+            echo "  Aborting — no binaries uploaded."
+            set_color normal
+            ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
+            return 1
+    end
+
+    set -l store ~/.xxh/arch/$arch
+    set -l build ~/.xxh/.xxh/shells/xxh-shell-fish/build
+    if not test -d $store/bin; or not test -f $store/fish-portable/bin/fish
+        set_color --bold red
+        echo "  xxhc: binary store for $arch is missing or incomplete at $store"
+        echo "  Run terminal/setup.sh to populate it."
+        set_color normal
+        ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
+        return 1
+    end
+
+    # Replace the build dir's binary payload; config symlinks (xxh-config.fish,
+    # starship.toml) and entrypoint.sh are left untouched.
+    rm -rf $build/fish-portable $build/bin
+    cp -R $store/fish-portable $build/fish-portable
+    cp -R $store/bin $build/bin
+
     # Pre-seed remote with this host's accumulated history.
     # Validate it has a history table, then send a clean WAL-free single-file copy.
     if test -f $host_db
