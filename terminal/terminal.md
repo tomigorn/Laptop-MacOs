@@ -20,19 +20,22 @@ The setup has two parts:
 Plain SSH gives you whatever shell the remote has, with none of your config. xxh carries the entire shell as a self-contained bundle, so you get the same experience everywhere regardless of what the host has installed.
 
 **Why fish?**
-Fish has excellent interactive features (completions, syntax highlighting, history) and a clean config model. The xxh-shell-fish plugin bundles a portable static fish binary, so it runs on any Linux host without being installed.
+Fish has excellent interactive features (completions, syntax highlighting, history) and a clean config model. We upload a portable static fish binary (official fish 4.x `linux-<arch>` build — a single self-contained executable with functions/completions embedded), so it runs on any Linux host without being installed.
 
 **Why SCP instead of rsync?**
 SSH ControlMaster multiplexing (used for fast repeated connections) conflicts with how xxh calls rsync internally. Using SCP avoids this entirely.
 
 **Why wipe on disconnect?**
-The remotes are shared admin accounts used by multiple people. Nothing should be left behind — no history, no binaries, no config. The cost is re-uploading ~97 MB on every connect.
+The remotes are shared admin accounts used by multiple people. Nothing should be left behind — no history, no binaries, no config. The cost is re-uploading ~73 MB on every connect.
 
 **Why symlinks for config files?**
 All config lives in this git directory (`terminal/`). The real paths (`~/.config/starship.toml`, etc.) are symlinks pointing here. This means editing a file in the repo takes effect immediately with no copy step, and git is always the source of truth. Without symlinks you'd have two copies that drift apart.
 
+**Why per-architecture binary stores?**
+The bundled binaries are native Linux ELF executables. An x86_64 binary cannot run on an ARM host (Raspberry Pi) and vice versa — it fails at exec time with `Exec format error`, even though the scp upload itself succeeds. So we keep one store per architecture under `~/.xxh/arch/<arch>/` (`x86_64`, `aarch64`), each holding fish plus starship/atuin/bat/fastfetch built for that arch. On connect, `xxhc` runs `uname -m` on the remote (over the ControlMaster tunnel) and copies the matching store into the upload directory before xxh sends it. See "Multi-architecture support" below.
+
 **Why are binaries plain copies instead of symlinks?**
-The Linux binaries in `~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/` are uploaded to remote Linux hosts. The sources in `~/.xxh/bin/` are also Linux ELF binaries (not macOS). There's no meaningful reason to symlink one Linux binary to another — they're the same file and a plain copy is clearer.
+The binaries in `~/.xxh/.xxh/shells/xxh-shell-fish/build/` are staged copies of the arch-specific sources in `~/.xxh/arch/<arch>/`. They're the same Linux ELF files; `xxhc` overwrites them on every connect with the arch matching the remote, so a plain copy (not a symlink) is the natural fit.
 
 ---
 
@@ -70,12 +73,29 @@ Configures the prompt. Key design decisions:
 
 ## Remote setup via xxh
 
-### What gets uploaded on connect (~97 MB every time)
+### Multi-architecture support
+
+The uploaded binaries are native Linux executables, so they must match the remote CPU. `xxhc` handles this automatically:
+
+1. After establishing the ControlMaster tunnel, it runs `uname -m` on the remote (reuses the tunnel, effectively instant).
+2. It maps the result to a supported architecture — `x86_64`/`amd64` → `x86_64`, `aarch64`/`arm64` → `aarch64`.
+3. It copies the matching store from `~/.xxh/arch/<arch>/` into the xxh upload directory, replacing the previous arch's binaries. The config symlinks (`xxh-config.fish`, `starship.toml`) are left untouched.
+4. xxh then uploads and runs as usual.
+
+An unknown or undetectable architecture aborts with a clear message and **no upload** — better than shipping binaries that die with `Exec format error` on the remote.
+
+**Binary vs config:** every *binary* (`fish`, `starship`, `atuin`, `bat`, `fastfetch`) is architecture-specific and lives in the per-arch store. Every *config file* (`starship.toml`, `xxh-config.fish`, atuin config) is shared across all hosts and architectures.
+
+**fish source:** fish is the official `fish-shell` 4.x `linux-<arch>` release — a single self-contained binary (functions/completions embedded, no `share/` tree), available for both `x86_64` and `aarch64`. This replaced `xxh/fish-portable`, which only ever published x86_64.
+
+**Known limitation:** the upload directory is shared, so running `xxhc` to two different-architecture hosts *simultaneously* can race on staging. Single-user interactive use makes this unlikely; no locking is in place.
+
+### What gets uploaded on connect (~73 MB every time)
 
 | File | Size | Purpose |
 |---|---|---|
-| `fish-portable/` | ~39 MB | Self-contained fish shell binary, runs on any Linux |
-| `atuin` | ~29 MB | Shell history with search |
+| `fish-portable/bin/fish` | ~14 MB | Single self-contained fish 4.x binary, runs on any Linux |
+| `atuin` | ~30 MB | Shell history with search |
 | `starship` | ~12 MB | Prompt binary |
 | `fastfetch` | ~10 MB | System info greeting |
 | `bat` | ~7 MB | Syntax-highlighting file viewer |
@@ -183,17 +203,18 @@ The last two symlinks point into the xxh build directory — the directory xxh u
 ### Not in git
 
 ```
-~/.xxh/bin/starship          Linux x86-64 static binary (source)
-~/.xxh/bin/fastfetch         Linux x86-64 static binary (source)
-~/.xxh/bin/atuin             Linux x86-64 static binary (source)
-~/.xxh/bin/bat               Linux x86-64 static binary (source)
+# per-architecture binary stores (sources) — one set per remote arch
+~/.xxh/arch/x86_64/fish-portable/bin/{fish,fish.sh}      official fish 4.x, x86_64
+~/.xxh/arch/x86_64/bin/{starship,atuin,bat,fastfetch}    x86_64 static binaries
+~/.xxh/arch/aarch64/fish-portable/bin/{fish,fish.sh}     official fish 4.x, aarch64
+~/.xxh/arch/aarch64/bin/{starship,atuin,bat,fastfetch}   aarch64 static binaries
 
 ~/.xxh/history/<alias>.db    per-host atuin history, grows across sessions
 
-~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship    plain copy, uploaded to remote
-~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch   plain copy, uploaded to remote
-~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin       plain copy, uploaded to remote
-~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat         plain copy, uploaded to remote
+# xxh upload directory — xxhc overwrites these on every connect with the
+# arch matching the remote (uname -m). Plain copies of the store above.
+~/.xxh/.xxh/shells/xxh-shell-fish/build/fish-portable/bin/{fish,fish.sh}
+~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/{starship,atuin,bat,fastfetch}
 ```
 
 ---
@@ -329,7 +350,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
 end
 ```
 
-- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's ~97 MB bundle upload — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump.
+- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's ~73 MB bundle upload — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump.
 - `TERM=xterm-256color` — set via `+e` so the remote fish process sees the correct terminal type *before it starts*, preventing the "unknown terminal type" warning. Ghostty (and other modern terminals) export a `$TERM` value the remote has no terminfo for; fish checks this at startup, before any config file runs, so setting it inside `xxh-config.fish` is too late.
 - `RSYNC_RSH` — ensures rsync bypasses ControlMaster if ever called internally by xxh
 - `XXH_SSH_ALIAS` — the alias you typed; forwarded to the remote so the prompt shows `(myserver)`
@@ -373,7 +394,7 @@ time xxhc myserver +hc "echo ok"
 → ~15 seconds wall time
 ```
 
-Breakdown: fish-portable 39 MB + atuin 29 MB + starship 12 MB + fastfetch 10 MB + bat 7 MB = ~97 MB uploaded over SCP on every connect. The session itself starts in under a second once files are in place. This cost is fundamental to `+hhr` — every connect is a cold upload.
+Breakdown: fish 14 MB + atuin 30 MB + starship 12 MB + fastfetch 10 MB + bat 7 MB = ~73 MB uploaded over SCP on every connect. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
 
 ---
 
@@ -439,47 +460,39 @@ ln -sf $BASE/.xxh/xxh-config.fish  ~/.xxh/.xxh/shells/xxh-shell-fish/build/xxh-c
 ln -sf $BASE/.config/starship.toml ~/.xxh/.xxh/shells/xxh-shell-fish/build/starship.toml
 ```
 
-### 6. Download Linux static binaries
+### 6. Download Linux static binaries (per architecture)
 
-These are the Linux x86-64 binaries that get uploaded to remote hosts. They are not in git (too large).
+`setup.sh` does this automatically for both `x86_64` and `aarch64`, downloading fish (official `fish-shell` 4.x `linux-<arch>` single-binary build) plus starship/atuin/bat/fastfetch into `~/.xxh/arch/<arch>/`. The binaries are not in git (too large).
 
-```sh
-mkdir -p ~/.xxh/bin
+To do it by hand, run the `build_arch_store` helper from `setup.sh` for each arch, or replicate its layout:
 
-# starship
-curl -fsSL $(curl -fsSL https://api.github.com/repos/starship-rs/starship/releases/latest \
-  | grep "browser_download_url.*x86_64-unknown-linux-musl.tar.gz" | head -1 | cut -d'"' -f4) \
-  | tar -xz -C /tmp && mv /tmp/starship ~/.xxh/bin/starship
-
-# fastfetch (binary is at usr/bin/fastfetch inside the archive)
-curl -fsSL $(curl -fsSL https://api.github.com/repos/fastfetch-cli/fastfetch/releases/latest \
-  | grep "browser_download_url.*linux-amd64.tar.gz" | head -1 | cut -d'"' -f4) \
-  | tar -xz -C /tmp && mv /tmp/fastfetch-linux-amd64/usr/bin/fastfetch ~/.xxh/bin/fastfetch
-
-# atuin (binary is at atuin/atuin inside the archive)
-curl -fsSL $(curl -fsSL https://api.github.com/repos/atuinsh/atuin/releases/latest \
-  | grep "browser_download_url.*x86_64-unknown-linux-musl.tar.gz" | head -1 | cut -d'"' -f4) \
-  | tar -xz -C /tmp && mv /tmp/atuin-x86_64-unknown-linux-musl/atuin ~/.xxh/bin/atuin
-
-# bat (archive directory includes the version number, so use find to locate the binary)
-curl -fsSL $(curl -fsSL https://api.github.com/repos/sharkdp/bat/releases/latest \
-  | grep "browser_download_url.*x86_64-unknown-linux-musl.tar.gz" | head -1 | cut -d'"' -f4) \
-  | tar -xz -C /tmp && find /tmp -name "bat" -type f | head -1 | xargs -I{} mv {} ~/.xxh/bin/bat
-
-chmod +x ~/.xxh/bin/starship ~/.xxh/bin/fastfetch ~/.xxh/bin/atuin ~/.xxh/bin/bat
+```
+~/.xxh/arch/<arch>/fish-portable/bin/fish        # from fish-shell release linux-<arch>.tar.xz (single binary)
+~/.xxh/arch/<arch>/fish-portable/bin/fish.sh     # the 3-line TERMINFO wrapper the entrypoint launches
+~/.xxh/arch/<arch>/bin/starship                  # starship/starship, <triple>.tar.gz
+~/.xxh/arch/<arch>/bin/atuin                     # atuinsh/atuin, atuin-<triple>.tar.gz
+~/.xxh/arch/<arch>/bin/bat                        # sharkdp/bat, <triple>.tar.gz (version in dir name)
+~/.xxh/arch/<arch>/bin/fastfetch                  # fastfetch-cli/fastfetch, linux-<label>.tar.gz
 ```
 
-### 7. Stage binaries in the xxh build dir
-
-The build dir is what xxh uploads on every connect. Binaries are plain copies (not symlinks) because the source files are also Linux ELF binaries — there's nothing meaningful to gain from symlinking one to the other.
+where `<arch>`/`<triple>`/`<label>` are `x86_64`/`x86_64-unknown-linux-musl`/`amd64` and `aarch64`/`aarch64-unknown-linux-musl`/`aarch64`. The `fish.sh` wrapper is:
 
 ```sh
-mkdir -p ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin
-cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
-cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
-cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
-cp ~/.xxh/bin/bat       ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat
-chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/*
+#!/bin/sh
+export TERMINFO_DIRS=/lib/terminfo:/etc/terminfo:/usr/share/terminfo:$TERMINFO_DIRS
+CURRENT_DIR="$(cd "$(dirname "$0")" && pwd)"
+$CURRENT_DIR/fish "$@"
+```
+
+### 7. Stage a default arch in the xxh build dir
+
+`xxhc` overwrites the build dir with the correct arch on every connect (see "Multi-architecture support"), but staging one arch as a default keeps a bare `xxh <host>` (without `xxhc`) working:
+
+```sh
+build=~/.xxh/.xxh/shells/xxh-shell-fish/build
+rm -rf "$build/fish-portable" "$build/bin"
+cp -R ~/.xxh/arch/x86_64/fish-portable "$build/fish-portable"
+cp -R ~/.xxh/arch/x86_64/bin "$build/bin"
 ```
 
 ---
@@ -488,14 +501,7 @@ chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/*
 
 **Config files** (`starship.toml`, `xxh-config.fish`, `config.xxhc`, `xxhc.fish`, etc.) — edit the file in this repo. Symlinks make the change live immediately. The remote picks it up on the next connect.
 
-**Binaries** — when you download a newer version of starship, fastfetch, atuin, or bat, re-copy it to the build dir:
-
-```sh
-cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
-cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
-cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
-cp ~/.xxh/bin/bat       ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat
-```
+**Binaries** — re-run `setup.sh`. It skips binaries that already exist, so to pick up a newer version first delete the ones you want refreshed (e.g. `rm ~/.xxh/arch/*/bin/starship`), then run `setup.sh` again. It repopulates both architecture stores; `xxhc` stages the right one on the next connect.
 
 ---
 
@@ -505,7 +511,7 @@ cp ~/.xxh/bin/bat       ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat
 xxhc myserver
 ```
 
-Uploads ~97 MB, drops into fish. On exit, merges remote history into local atuin.
+Uploads ~73 MB, drops into fish. On exit, merges remote history into local atuin.
 
 Pass extra xxh flags after the host name as normal:
 ```sh
