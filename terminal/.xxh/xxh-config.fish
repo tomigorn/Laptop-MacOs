@@ -77,11 +77,6 @@ end
 # Deletes ~/.xxh immediately so other users can't see it even if local xxhc never runs.
 # Safe to delete while running: open file descriptors hold the inodes alive until exit.
 function _xxhc_cleanup_home --on-event fish_exit
-    # Confirm the wipe in the session output. On SIGHUP the terminal is already gone
-    # so these writes are simply discarded; on a clean `exit` they show before disconnect.
-    echo ""
-    echo "  Removing ~/.xxh from $hostname — no trace left behind."
-    echo "  (A 'N|N|N' line as you disconnect is just teardown exit codes — harmless.)"
     rm -rf ~/.xxh 2>/dev/null
 end
 
