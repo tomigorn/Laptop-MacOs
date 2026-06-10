@@ -387,14 +387,11 @@ search_mode = "fuzzy"
 
 ## Performance
 
-Benchmarked on a local network:
-
-```
-time xxhc myserver +hc "echo ok"
-→ ~15 seconds wall time
-```
+A cold connect is dominated by the SCP upload. On a fast campus link this is ~6 s; on slower links closer to ~15 s.
 
 Breakdown: fish 14 MB + atuin 30 MB + starship 12 MB + fastfetch 10 MB + bat 7 MB = ~73 MB uploaded over SCP on every connect. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
+
+**Why fish 4.x sped this up beyond the size drop:** the old `xxh/fish-portable` was a *directory tree of hundreds of small files* (`share/fish/completions/*`, `functions/*`, …). SCP transfers those one at a time, and the per-file round-trips dominated the upload. The official fish 4.x build is a **single self-contained binary**, so fish now uploads as one ~14 MB transfer instead of hundreds of tiny ones — fewer bytes *and* far fewer round-trips.
 
 ---
 
