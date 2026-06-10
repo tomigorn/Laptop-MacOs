@@ -68,7 +68,7 @@ symlink "$SCRIPT_DIR/.config/starship.toml"             ~/.config/starship.toml
 symlink "$SCRIPT_DIR/.config/fish/config.fish"          ~/.config/fish/config.fish
 symlink "$SCRIPT_DIR/.config/fish/functions/xxhc.fish"          ~/.config/fish/functions/xxhc.fish
 symlink "$SCRIPT_DIR/.config/fish/functions/fish_greeting.fish"  ~/.config/fish/functions/fish_greeting.fish
-symlink "$SCRIPT_DIR/.config/fish/functions/clear.fish"          ~/.config/fish/functions/clear.fish
+symlink "$SCRIPT_DIR/.config/fish/functions/clearc.fish"         ~/.config/fish/functions/clearc.fish
 symlink "$SCRIPT_DIR/.xxh/ssh-wrapper.sh"               ~/.xxh/ssh-wrapper.sh
 chmod +x ~/.xxh/ssh-wrapper.sh
 

@@ -39,9 +39,10 @@ if test -f $CURRENT_DIR/bin/fastfetch
         fastfetch
     end
 
-    # On a manual clear, show fastfetch but not the stale "Connected in Xs"
-    # line — that timer is only meaningful at connect time.
-    function clear --description "clear the screen, then show the greeting"
+    # clearc = clear + greeting. Shows fastfetch but not the stale
+    # "Connected in Xs" line — that timer is only meaningful at connect time.
+    # Plain `clear` is left alone for a fully blank screen.
+    function clearc --description "clear the screen, then show the greeting"
         command clear
         fastfetch
     end
