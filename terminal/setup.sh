@@ -23,6 +23,7 @@ gh_latest_url() {
     curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
         | grep "browser_download_url" \
         | grep "$pattern" \
+        | grep -vE 'sha256|\.sig|\.asc|-update' \
         | head -1 \
         | cut -d'"' -f4
 }
@@ -76,21 +77,21 @@ step "Symlinks — xxh build dir"
 symlink "$SCRIPT_DIR/.xxh/xxh-config.fish"   ~/.xxh/.xxh/shells/xxh-shell-fish/build/xxh-config.fish
 symlink "$SCRIPT_DIR/.config/starship.toml"  ~/.xxh/.xxh/shells/xxh-shell-fish/build/starship.toml
 
-# ── 6. Linux static binaries ─────────────────────────────────────────────────
-step "Linux static binaries (uploaded to remote on connect)"
-mkdir -p ~/.xxh/bin
+# ── 6. Per-architecture binary stores ────────────────────────────────────────
+# One store per remote architecture; xxhc uploads the matching one on connect.
+step "Per-architecture binary stores (uploaded to remote on connect)"
 
 download_binary() {
-    local name=$1 repo=$2 pattern=$3 binary_in_archive=$4
-    local dest=~/.xxh/bin/$name
+    local dest=$1 repo=$2 pattern=$3 binary_in_archive=$4
     if [[ -f "$dest" ]]; then
-        skip "$name"
+        skip "$(basename "$dest") [$(basename "$(dirname "$(dirname "$dest")")")]"
         return
     fi
-    info "Fetching latest $name from $repo..."
+    mkdir -p "$(dirname "$dest")"
+    info "Fetching $repo ($pattern)..."
     local url
     url=$(gh_latest_url "$repo" "$pattern")
-    [[ -z "$url" ]] && die "Could not find download URL for $name"
+    [[ -z "$url" ]] && die "Could not find download URL for $repo $pattern"
     local tmp
     tmp=$(mktemp -d)
     curl -fsSL "$url" | tar -xz -C "$tmp"
@@ -107,26 +108,62 @@ download_binary() {
     fi
     chmod +x "$dest"
     rm -rf "$tmp"
-    ok "$name → ~/.xxh/bin/$name"
+    ok "$dest"
 }
 
-download_binary starship  "starship-rs/starship"     "x86_64-unknown-linux-musl.tar.gz" "starship"
-download_binary atuin     "atuinsh/atuin"            "x86_64-unknown-linux-musl.tar.gz" "atuin-x86_64-unknown-linux-musl/atuin"
-download_binary fastfetch "fastfetch-cli/fastfetch"  "linux-amd64.tar.gz"               "fastfetch-linux-amd64/usr/bin/fastfetch"
-download_binary bat       "sharkdp/bat"              "x86_64-unknown-linux-musl.tar.gz" "find:bat"
+# fish 4.x ships a single self-contained binary per arch (functions/completions
+# embedded — no share/ tree). dest_dir is <store>/fish-portable/bin.
+download_fish() {
+    local dest_dir=$1 fish_arch=$2
+    if [[ -f "$dest_dir/fish" ]]; then
+        skip "fish [$fish_arch]"
+    else
+        mkdir -p "$dest_dir"
+        info "Fetching fish-shell ($fish_arch)..."
+        local url
+        url=$(gh_latest_url "fish-shell/fish-shell" "linux-$fish_arch.tar.xz")
+        [[ -z "$url" ]] && die "Could not find fish download URL for $fish_arch"
+        local tmp
+        tmp=$(mktemp -d)
+        curl -fsSL "$url" | tar -xJf - -C "$tmp"
+        mv "$tmp/fish" "$dest_dir/fish"
+        chmod +x "$dest_dir/fish"
+        rm -rf "$tmp"
+        ok "fish [$fish_arch]"
+    fi
+    # TERMINFO wrapper that the xxh entrypoint launches (fish-portable/bin/fish.sh)
+    cat > "$dest_dir/fish.sh" <<'WRAP'
+#!/bin/sh
+export TERMINFO_DIRS=/lib/terminfo:/etc/terminfo:/usr/share/terminfo:$TERMINFO_DIRS
+CURRENT_DIR="$(cd "$(dirname "$0")" && pwd)"
+$CURRENT_DIR/fish "$@"
+WRAP
+    chmod +x "$dest_dir/fish.sh"
+}
 
-# ── 7. Stage binaries in xxh build dir ───────────────────────────────────────
-step "Stage binaries for xxh uploads"
-mkdir -p ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin
-cp ~/.xxh/bin/starship  ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
-cp ~/.xxh/bin/fastfetch ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
-cp ~/.xxh/bin/atuin     ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
-cp ~/.xxh/bin/bat       ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat
-chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/starship
-chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/fastfetch
-chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/atuin
-chmod +x ~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/bat
-ok "starship, fastfetch, atuin, and bat staged"
+build_arch_store() {
+    local arch=$1 triple=$2 ff_label=$3
+    local store=~/.xxh/arch/$arch
+    info "── $arch ──"
+    download_fish   "$store/fish-portable/bin" "$arch"
+    download_binary "$store/bin/starship"  "starship/starship"        "$triple.tar.gz"         "starship"
+    download_binary "$store/bin/atuin"     "atuinsh/atuin"            "atuin-$triple.tar.gz"   "atuin-$triple/atuin"
+    download_binary "$store/bin/bat"       "sharkdp/bat"              "$triple.tar.gz"         "find:bat"
+    download_binary "$store/bin/fastfetch" "fastfetch-cli/fastfetch"  "linux-$ff_label.tar.gz" "fastfetch-linux-$ff_label/usr/bin/fastfetch"
+}
+
+build_arch_store x86_64  "x86_64-unknown-linux-musl"  "amd64"
+build_arch_store aarch64 "aarch64-unknown-linux-musl" "aarch64"
+
+# ── 7. Stage default (x86_64) binaries in xxh build dir ──────────────────────
+# xxhc swaps in the correct arch per connect (see xxhc.fish). This default keeps
+# a bare `xxh <host>` (without xxhc) working on x86_64 remotes.
+step "Stage default x86_64 binaries for xxh uploads"
+build=~/.xxh/.xxh/shells/xxh-shell-fish/build
+rm -rf "$build/fish-portable" "$build/bin"
+cp -R ~/.xxh/arch/x86_64/fish-portable "$build/fish-portable"
+cp -R ~/.xxh/arch/x86_64/bin "$build/bin"
+ok "x86_64 store staged into build dir"
 
 # ── Done ─────────────────────────────────────────────────────────────────────
 echo
