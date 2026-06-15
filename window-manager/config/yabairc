@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# yabai configuration — FLOAT layout.
+# Windows open and behave like normal macOS windows (small, floating, draggable).
+# All snapping is manual and display-aware, driven by skhd -> yabai-snap.sh.
+#
+# NOTE: this setup deliberately does NOT use the scripting addition, so SIP can
+# stay enabled. Everything here works on Apple Silicon with SIP on.
+
+# launchd gives services a minimal PATH; make sure Homebrew bins are findable.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+yabai -m config layout              float
+yabai -m config mouse_follows_focus off
+yabai -m config focus_follows_mouse off
+yabai -m config window_origin_display default
+
+echo "yabai configuration loaded"

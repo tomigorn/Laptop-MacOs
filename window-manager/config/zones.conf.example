@@ -1,0 +1,43 @@
+# ============================================================================
+#  WINDOW SNAP CONFIG  —  edit this file to manage your monitors and layouts.
+# ============================================================================
+#
+# This is the EXAMPLE/template. install.sh copies it to
+#   ~/.config/yabai/zones.conf
+# the first time (and never overwrites it after), because the live file is
+# machine-specific and the script appends to it automatically.
+#
+# There are two kinds of lines (everything else is a comment):
+#
+#   monitor <uuid> <name> <location>
+#       One physical monitor. These are ADDED AUTOMATICALLY the first time the
+#       script sees a screen, so this list grows into "every monitor I've ever
+#       connected". You edit the <name> and <location> (single words, no spaces).
+#       Leave <uuid> alone — it identifies the exact physical screen, even
+#       between two identical models or the same model at different offices.
+#
+#   layout <name> <size> <size> ...
+#       The snap zones for the monitor with that <name>: percentages, LEFT->RIGHT,
+#       that add up to 100.   e.g.  50 50  |  40 60  |  20 60 20  |  100
+#       "layout default ..." is used for any monitor without its own layout line
+#       (including freshly auto-added ones, until you give them a name + layout).
+#
+# To change a size: edit the numbers on a layout line and save. No restart needed.
+# Workflow for a new place: plug in monitors, press any shortcut once (this
+# registers them at the bottom), then rename them here and add layout lines.
+#
+# An auto-registered line looks like this (rename it + add a layout):
+#   monitor 3FF8CA73-B3D7-439D-A95A-D08584E9B2BA  mon-3FF8CA73  unknown   # 1920pt, first seen 2026-06-15
+# ----------------------------------------------------------------------------
+
+# --- Monitors (auto-filled; edit name + location) ---------------------------
+#       uuid                                    name      location
+monitor 37D8832A-2D66-02CA-B9F7-8F30A301B230  MacBook   laptop     # 1470pt
+monitor D587F297-16AB-4B78-A1F2-B04FA6A7A41C  Dell      home       # 2560pt
+monitor 269F4E09-0D04-41E9-A7A4-CE591643DAE0  HP        home       # 3440pt
+
+# --- Layouts (sizes per monitor name) ---------------------------------------
+layout MacBook  50 50
+layout Dell     50 50
+layout HP       40 60
+layout default  50 50

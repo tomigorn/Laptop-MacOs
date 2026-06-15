@@ -1,0 +1,16 @@
+# skhd keybindings for yabai display-aware snapping.
+# Modifier: ctrl + alt  (same family EasySnaps/Rectangle use; avoids clobbering
+# option+arrow word-navigation in text fields).
+
+# Walk the focused window left / right through snap zones, crossing displays.
+ctrl + alt - left   : $HOME/.config/yabai/yabai-snap.sh left
+ctrl + alt - right  : $HOME/.config/yabai/yabai-snap.sh right
+
+# Fill the whole display (the "big screen filling thing", NOT native fullscreen).
+ctrl + alt - up     : $HOME/.config/yabai/yabai-snap.sh fill
+
+# --- optional extras (uncomment to use) ------------------------------------
+# Move keyboard focus to a specific display:
+# ctrl + alt - 1    : yabai -m display --focus 1
+# ctrl + alt - 2    : yabai -m display --focus 2
+# ctrl + alt - 3    : yabai -m display --focus 3
