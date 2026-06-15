@@ -18,7 +18,7 @@ set -euo pipefail
 cmd="${1:-}"
 
 # launchd (skhd) gives a minimal PATH; ensure Homebrew bins are findable.
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 YABAI="$(command -v yabai)"
 JQ="$(command -v jq)"
@@ -123,34 +123,49 @@ current_zone_index() {
 
 snap() { "$YABAI" -m window "$wid" --grid "$1"; }
 
+# Index of the display directly east/west of display $1 (by geometry, not focus),
+# or empty if there's none. $2 = east|west.
+neighbor() {
+  echo "$displays" | "$JQ" -r --argjson cur "$1" --arg dir "$2" '
+    . as $all | ($all[] | select(.index==$cur)) as $c
+    | [ $all[] | select(.index != $cur)
+        | select(.frame.y < ($c.frame.y + $c.frame.h) and (.frame.y + .frame.h) > $c.frame.y)
+        | select( if $dir=="east" then .frame.x > $c.frame.x else .frame.x < $c.frame.x end) ]
+    | ( if $dir=="east" then min_by(.frame.x) else max_by(.frame.x) end ) | .index // empty
+  ' 2>/dev/null || true
+}
+
 case "$cmd" in
   fill)
     snap "$FILL_GRID"
     ;;
   right)
     read_zones "$di"; ci="$(current_zone_index)"; last=$(( ${#ZONES[@]} - 1 ))
+    east="$(neighbor "$di" east)"
     if [ "$ci" -eq -1 ]; then
       snap "${ZONES[$last]}"                       # not in a zone (e.g. filled) -> right side of THIS display
     elif [ "$ci" -lt "$last" ]; then
       snap "${ZONES[$((ci+1))]}"
-    elif "$YABAI" -m window "$wid" --display east >/dev/null 2>&1; then
-      "$YABAI" -m window --focus "$wid" >/dev/null 2>&1 || true
-      ndi="$("$YABAI" -m query --windows --window "$wid" | "$JQ" '.display')"
-      read_zones "$ndi"; snap "${ZONES[0]}"
+    elif [ -n "$east" ]; then
+      # cross to the next display, landing on its LEFT zone in ONE command
+      # (move + grid + focus) so there's no intermediate-position flash
+      read_zones "$east"
+      "$YABAI" -m window "$wid" --display "$east" --grid "${ZONES[0]}" --focus
     else
       snap "${ZONES[$ci]}"
     fi
     ;;
   left)
     read_zones "$di"; ci="$(current_zone_index)"
+    west="$(neighbor "$di" west)"
     if [ "$ci" -eq -1 ]; then
       snap "${ZONES[0]}"                           # not in a zone (e.g. filled) -> left side of THIS display
     elif [ "$ci" -gt 0 ]; then
       snap "${ZONES[$((ci-1))]}"
-    elif "$YABAI" -m window "$wid" --display west >/dev/null 2>&1; then
-      "$YABAI" -m window --focus "$wid" >/dev/null 2>&1 || true
-      ndi="$("$YABAI" -m query --windows --window "$wid" | "$JQ" '.display')"
-      read_zones "$ndi"; snap "${ZONES[$(( ${#ZONES[@]} - 1 ))]}"
+    elif [ -n "$west" ]; then
+      # cross to the previous display, landing on its RIGHT zone in ONE command
+      read_zones "$west"
+      "$YABAI" -m window "$wid" --display "$west" --grid "${ZONES[$(( ${#ZONES[@]} - 1 ))]}" --focus
     else
       snap "${ZONES[0]}"
     fi
