@@ -81,8 +81,9 @@ see above in system settings. configure natural scroll
 - Alternative is the app [UnnaturalScrollWheels](https://github.com/ther0n/UnnaturalScrollWheels)
 
 ## Window Management
-- [EasySnaps Window Manager](https://easysnaps.org/window-manager/) costs $7.99
-- [Rectangle](https://rectangleapp.com/) as alternative. costs 7.98CHF
+We use **yabai + skhd** for window management. See [window-manager/](window-manager/) for the setup.
+
+> Avoid EasySnaps Window Manager — it's riddled with bugs and not worth the $7.99.
 
 ## System Monitoring
 [iStat Menus](https://bjango.com/mac/istatmenus/) for showing an overview of system resource usage in the menu bar.
