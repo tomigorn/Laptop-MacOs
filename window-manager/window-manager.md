@@ -130,6 +130,8 @@ window-manager/
 ├── build-launcher.sh           # builds the Spotlight launcher app
 ├── launcher.sh                 # the app's executable (opens config in VS Code)
 ├── Info.plist                  # the app's bundle metadata
+├── make-icon.sh                # regenerates AppIcon.icns from an SF Symbol
+├── AppIcon.icns                # the launcher's icon (white tiling glyph on blue)
 ├── window-manager.md           # this file
 └── config/
     ├── yabairc                 # → ~/.config/yabai/yabairc
@@ -149,8 +151,9 @@ real files), copies `zones.conf.example` to the live, machine-local
 `~/Applications/yabai window manager.app`. Type **`yabai`** in Spotlight and hit
 Enter to open `~/.config/yabai` in VS Code. The app's executable and `Info.plist`
 are symlinked back into this repo, so it's the source of truth; re-run
-`build-launcher.sh` after editing them. Drop an `AppIcon.icns` next to
-`build-launcher.sh` to give it a custom icon (optional).
+`build-launcher.sh` after editing them. Its icon is `AppIcon.icns` — regenerate
+it with `./make-icon.sh` (optionally pass a different SF Symbol name, e.g.
+`./make-icon.sh rectangle.split.2x1`), then re-run `build-launcher.sh`.
 
 ## Troubleshooting
 
