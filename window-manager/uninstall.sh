@@ -33,7 +33,7 @@ skhd  --stop-service 2>/dev/null && ok "skhd stopped"  || info "skhd service not
 step "Remove config symlinks"
 for f in "$CONFIG_HOME/yabai/yabairc" \
          "$CONFIG_HOME/yabai/yabai-snap.sh" \
-         "$CONFIG_HOME/yabai/skhdrc" \
+         "$CONFIG_HOME/yabai/keys.conf" \
          "$CONFIG_HOME/yabai/README.md" \
          "$CONFIG_HOME/skhd/skhdrc"; do
     if [ -L "$f" ]; then rm -f "$f"; ok "removed $f"; fi

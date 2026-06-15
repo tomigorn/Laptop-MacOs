@@ -11,19 +11,22 @@ This folder holds the live config for the keyboard-driven window snapper
 | File | What it is | Edit it? |
 |------|------------|----------|
 | `zones.conf`   | **Your monitors + their split sizes** | ✅ yes — this is the main one |
-| `skhdrc`       | Keyboard shortcuts | ✅ to rebind keys |
+| `keys.conf`    | Keyboard shortcuts | ✅ to rebind keys |
 | `yabairc`      | yabai settings (float layout) | rarely |
 | `yabai-snap.sh`| The snapping logic | no |
 | `README.md`    | This file | — |
 
-(`skhdrc` is also symlinked at `~/.config/skhd/skhdrc`, where skhd looks for it.)
+(`keys.conf` is the skhd config; skhd reads it via the symlink
+`~/.config/skhd/skhdrc → keys.conf`, because that's the only path skhd looks in.)
 
 ## Shortcuts
 
 | Key | Action |
 |-----|--------|
-| `⌃⌥ ←` / `⌃⌥ →` | walk the focused window left / right through its zones; at the edge it crosses to the next display |
-| `⌃⌥ ↑` | fill the whole display (not macOS fullscreen) |
+| `⌥⌘ ←` / `⌥⌘ →` | walk the focused window left / right through its zones; at the edge it crosses to the next display |
+| `⌥⌘ ↑` | fill the whole display (not macOS fullscreen) |
+
+See `keys.conf` for the full list of options and conventions from other tools.
 
 ## Change window sizes — `zones.conf`
 
@@ -59,7 +62,7 @@ automatically:
    `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`.
 3. Rename it (e.g. `Dell27 office-a`) and add a `layout <name> …` line.
 
-## Change the keyboard shortcuts — `skhdrc`
+## Change the keyboard shortcuts — `keys.conf`
 
 Lines look like `ctrl + alt - left : … left`. Edit, then reload:
 
@@ -72,7 +75,7 @@ To change the modifier everywhere, swap `ctrl + alt` for e.g. `cmd + alt`.
 ## Applying changes / services
 
 - `zones.conf`  → no restart (re-read each keypress).
-- `skhdrc`      → `skhd --restart-service`
+- `keys.conf`   → `skhd --restart-service`
 - `yabairc`     → `yabai --restart-service`
 
 Check they're alive: `pgrep -x yabai; pgrep -x skhd`.

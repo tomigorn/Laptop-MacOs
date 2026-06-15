@@ -45,16 +45,19 @@ macOS) to grant Accessibility — do this once:
 
 | Shortcut | Action |
 |----------|--------|
-| `⌃⌥ ←`   | walk window **left** through zones (crosses to the display on the left at the edge) |
-| `⌃⌥ →`   | walk window **right** through zones (crosses to the next display) |
-| `⌃⌥ ↑`   | **fill** the whole display |
+| `⌥⌘ ←` | walk window **left** through zones (crosses to the display on the left at the edge) |
+| `⌥⌘ →` | walk window **right** through zones (crosses to the next display) |
+| `⌥⌘ ↑` | **fill** the whole display |
+
+`config/keys.conf` documents the full menu of options
+(Spectacle / Rectangle / Magnet / macOS Sequoia / Windows / Linux conventions).
 
 Behaviour: open a window (it floats), press `⌃⌥→` to snap it into a zone, press
 again to walk across. If a window isn't in a zone (e.g. just filled/fullscreen),
 `←`/`→` snap it to the left/right zone of the **current** display rather than
 jumping to a neighbour.
 
-Change the keys (or modifier) in [`config/skhdrc`](config/skhdrc), then
+Change the keys (or modifier) in [`config/keys.conf`](config/keys.conf), then
 `skhd --restart-service`.
 
 ## Changing sizes — `~/.config/yabai/zones.conf`
@@ -100,7 +103,8 @@ cross-location confusion.
 
 - `yabairc` sets yabai to `layout float` (no auto-tiling) and a couple of
   options. No scripting addition is loaded.
-- `skhdrc` binds the keys to `yabai-snap.sh left|right|fill`.
+- `keys.conf` binds the keys to `yabai-snap.sh left|right|fill` (skhd reads it
+  via the `~/.config/skhd/skhdrc` symlink).
 - `yabai-snap.sh`:
   - captures the focused window by **id** (focus doesn't reliably follow a
     window across displays, so it never re-queries "the focused window"),
@@ -123,7 +127,7 @@ window-manager/
 └── config/
     ├── yabairc                 # → ~/.config/yabai/yabairc
     ├── yabai-snap.sh           # → ~/.config/yabai/yabai-snap.sh
-    ├── skhdrc                  # → ~/.config/yabai/skhdrc  (and ~/.config/skhd/skhdrc)
+    ├── keys.conf               # → ~/.config/yabai/keys.conf (skhd reads it via ~/.config/skhd/skhdrc)
     ├── README.md               # → ~/.config/yabai/README.md  (how-to next to the live files)
     └── zones.conf.example      # copied to ~/.config/yabai/zones.conf if absent
 ```

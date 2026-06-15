@@ -2,7 +2,7 @@
 # yabai + skhd window-manager setup for a new Mac. Safe to re-run.
 #
 #   1. Installs yabai, skhd, jq from Homebrew (only what's missing)
-#   2. Symlinks the configs into ~/.config (yabairc, yabai-snap.sh, skhdrc)
+#   2. Symlinks the configs into ~/.config (yabairc, yabai-snap.sh, keys.conf)
 #   3. Seeds ~/.config/yabai/zones.conf from the example (only if absent — the
 #      live file is machine-specific and the script appends to it)
 #   4. Starts / restarts the yabai + skhd LaunchAgents
@@ -76,10 +76,10 @@ step "Config files (symlinked from this repo)"
 chmod +x "$CONFIG_SRC/yabai-snap.sh" "$CONFIG_SRC/yabairc"
 link "$CONFIG_SRC/yabairc"        "$CONFIG_HOME/yabai/yabairc"
 link "$CONFIG_SRC/yabai-snap.sh"  "$CONFIG_HOME/yabai/yabai-snap.sh"
-link "$CONFIG_SRC/skhdrc"         "$CONFIG_HOME/yabai/skhdrc"
+link "$CONFIG_SRC/keys.conf"      "$CONFIG_HOME/yabai/keys.conf"
 link "$CONFIG_SRC/README.md"      "$CONFIG_HOME/yabai/README.md"
-# skhd only looks in ~/.config/skhd/skhdrc (or ~/.skhdrc); point it at ours.
-link "$CONFIG_HOME/yabai/skhdrc"  "$CONFIG_HOME/skhd/skhdrc"
+# skhd only looks in ~/.config/skhd/skhdrc (or ~/.skhdrc); point it at keys.conf.
+link "$CONFIG_HOME/yabai/keys.conf"  "$CONFIG_HOME/skhd/skhdrc"
 
 # ── 3. zones.conf (machine-local, never overwritten) ─────────────────────────
 step "zones.conf (your monitors + layouts)"
