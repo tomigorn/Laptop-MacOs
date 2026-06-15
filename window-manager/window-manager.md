@@ -116,17 +116,30 @@ cross-location confusion.
 window-manager/
 ├── install.sh                  # install / re-run
 ├── uninstall.sh                # remove (keeps zones.conf unless --purge-zones)
+├── build-launcher.sh           # builds the Spotlight launcher app
+├── launcher.sh                 # the app's executable (opens config in VS Code)
+├── Info.plist                  # the app's bundle metadata
 ├── window-manager.md           # this file
 └── config/
     ├── yabairc                 # → ~/.config/yabai/yabairc
     ├── yabai-snap.sh           # → ~/.config/yabai/yabai-snap.sh
     ├── skhdrc                  # → ~/.config/yabai/skhdrc  (and ~/.config/skhd/skhdrc)
+    ├── README.md               # → ~/.config/yabai/README.md  (how-to next to the live files)
     └── zones.conf.example      # copied to ~/.config/yabai/zones.conf if absent
 ```
 
-`install.sh` symlinks the first three into `~/.config` (backing up any existing
-real files), and copies `zones.conf.example` to the live, machine-local
-`zones.conf` only if it doesn't exist yet.
+`install.sh` symlinks the config files into `~/.config` (backing up any existing
+real files), copies `zones.conf.example` to the live, machine-local
+`zones.conf` only if it doesn't exist yet, and builds the Spotlight launcher.
+
+## Spotlight launcher
+
+`install.sh` (via `build-launcher.sh`) creates
+`~/Applications/yabai window manager.app`. Type **`yabai`** in Spotlight and hit
+Enter to open `~/.config/yabai` in VS Code. The app's executable and `Info.plist`
+are symlinked back into this repo, so it's the source of truth; re-run
+`build-launcher.sh` after editing them. Drop an `AppIcon.icns` next to
+`build-launcher.sh` to give it a custom icon (optional).
 
 ## Troubleshooting
 

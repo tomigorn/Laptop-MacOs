@@ -77,6 +77,7 @@ chmod +x "$CONFIG_SRC/yabai-snap.sh" "$CONFIG_SRC/yabairc"
 link "$CONFIG_SRC/yabairc"        "$CONFIG_HOME/yabai/yabairc"
 link "$CONFIG_SRC/yabai-snap.sh"  "$CONFIG_HOME/yabai/yabai-snap.sh"
 link "$CONFIG_SRC/skhdrc"         "$CONFIG_HOME/yabai/skhdrc"
+link "$CONFIG_SRC/README.md"      "$CONFIG_HOME/yabai/README.md"
 # skhd only looks in ~/.config/skhd/skhdrc (or ~/.skhdrc); point it at ours.
 link "$CONFIG_HOME/yabai/skhdrc"  "$CONFIG_HOME/skhd/skhdrc"
 
@@ -107,7 +108,13 @@ else
     fi
 fi
 
+# ── 5. Spotlight launcher app ────────────────────────────────────────────────
+step "Spotlight launcher: \"yabai window manager.app\""
+"$SCRIPT_DIR/build-launcher.sh" | sed 's/^/   /'
+ok "type 'yabai' in Spotlight to open the config folder in VS Code"
+
 step "Done"
 info "Shortcuts:  ⌃⌥ ←/→  walk window left/right (crosses displays)"
 info "            ⌃⌥ ↑    fill the display"
 info "Edit sizes: $CONFIG_HOME/yabai/zones.conf   (no restart needed)"
+info "Spotlight:  type 'yabai' → opens this folder in VS Code"

@@ -34,9 +34,14 @@ step "Remove config symlinks"
 for f in "$CONFIG_HOME/yabai/yabairc" \
          "$CONFIG_HOME/yabai/yabai-snap.sh" \
          "$CONFIG_HOME/yabai/skhdrc" \
+         "$CONFIG_HOME/yabai/README.md" \
          "$CONFIG_HOME/skhd/skhdrc"; do
     if [ -L "$f" ]; then rm -f "$f"; ok "removed $f"; fi
 done
+
+step "Remove Spotlight launcher"
+APP="$HOME/Applications/yabai window manager.app"
+if [ -e "$APP" ]; then rm -rf "$APP"; ok "removed launcher app"; else info "no launcher app"; fi
 
 step "zones.conf"
 if [ "$PURGE_ZONES" -eq 1 ]; then

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Builds  ~/Applications/"yabai window manager.app"  so the config folder is
+# reachable from Spotlight / Launchpad: launching it opens ~/.config/yabai in
+# VS Code (type "yabai" in Spotlight → Enter).
+#
+# launcher.sh and Info.plist are symlinked back into this repo, so edits in the
+# repo are immediately live. Re-run after editing them to re-register the bundle.
+set -euo pipefail
+
+SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_DIR="${HOME}/Applications/yabai window manager.app"
+
+echo "==> Rebuilding ${APP_DIR}"
+rm -rf "${APP_DIR}"
+mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
+
+# Symlinks back into the repo — repo is the source of truth.
+chmod +x "${SRC_DIR}/launcher.sh"
+ln -sf "${SRC_DIR}/launcher.sh" "${APP_DIR}/Contents/MacOS/yabai-window-manager"
+ln -sf "${SRC_DIR}/Info.plist"  "${APP_DIR}/Contents/Info.plist"
+
+# 8-byte PkgInfo: "APPL" + "????" (unsigned local app)
+printf 'APPL????' > "${APP_DIR}/Contents/PkgInfo"
+
+# Optional icon: drop an AppIcon.icns next to this script to use it.
+if [[ -f "${SRC_DIR}/AppIcon.icns" ]]; then
+    ln -sf "${SRC_DIR}/AppIcon.icns" "${APP_DIR}/Contents/Resources/AppIcon.icns"
+    echo "==> Using AppIcon.icns"
+else
+    echo "==> No AppIcon.icns — generic icon (optional; add AppIcon.icns to customise)"
+fi
+
+echo "==> Refreshing Launch Services registration"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+    -f "${APP_DIR}" || true
+
+xattr -dr com.apple.quarantine "${APP_DIR}" 2>/dev/null || true
+
+echo "==> Done. Type 'yabai' in Spotlight, or: open '${APP_DIR}'"
