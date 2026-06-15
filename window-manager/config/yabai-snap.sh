@@ -5,6 +5,8 @@
 #   yabai-snap.sh left    walk the window one zone left  (crosses displays)
 #   yabai-snap.sh right   walk the window one zone right (crosses displays)
 #   yabai-snap.sh fill    fill the whole display (NOT native fullscreen)
+#   yabai-snap.sh extend-right  grow the window's right edge into the next zone
+#   yabai-snap.sh extend-left   grow the window's left edge into the previous zone
 #
 # Each monitor's zones are defined in ~/.config/yabai/zones.conf, matched by
 # stable display UUID so reconnecting a monitor never scrambles the ratios.
@@ -89,6 +91,35 @@ current_zone_index() {
   echo "$best"
 }
 
+# Window's current zone span as "lo hi": lo = zone whose start is nearest the
+# window's left edge, hi = zone whose end is nearest its right edge.
+current_span() {
+  local dj dx dw wx ww lp rp i=0 lo=0 hi=0 lod=1e18 hid=1e18 z s w end dl dr
+  dj="$(disp_json "$di")"
+  dx="$(echo "$dj"  | "$JQ" '.frame.x')"; dw="$(echo "$dj"  | "$JQ" '.frame.w')"
+  wx="$(echo "$win" | "$JQ" '.frame.x')"; ww="$(echo "$win" | "$JQ" '.frame.w')"
+  lp="$(awk -v wx="$wx" -v dx="$dx" -v dw="$dw" 'BEGIN{print (wx-dx)/dw*100}')"
+  rp="$(awk -v wx="$wx" -v ww="$ww" -v dx="$dx" -v dw="$dw" 'BEGIN{print (wx+ww-dx)/dw*100}')"
+  for z in "${ZONES[@]}"; do
+    IFS=: read -r _ _ s _ w _ <<<"$z"; end=$(( s + w ))
+    dl="$(awk -v a="$s"   -v b="$lp" 'BEGIN{d=a-b;print (d<0?-d:d)}')"
+    dr="$(awk -v a="$end" -v b="$rp" 'BEGIN{d=a-b;print (d<0?-d:d)}')"
+    if awk -v d="$dl" -v bd="$lod" 'BEGIN{exit !(d<bd)}'; then lod="$dl"; lo="$i"; fi
+    if awk -v d="$dr" -v bd="$hid" 'BEGIN{exit !(d<bd)}'; then hid="$dr"; hi="$i"; fi
+    i=$(( i + 1 ))
+  done
+  [ "$hi" -ge "$lo" ] || hi="$lo"
+  echo "$lo $hi"
+}
+
+# One grid spec covering zones $1..$2 (inclusive).
+span_grid() {
+  local sx ex ew
+  IFS=: read -r _ _ sx _ _  _ <<<"${ZONES[$1]}"
+  IFS=: read -r _ _ ex _ ew _ <<<"${ZONES[$2]}"
+  echo "1:100:$sx:0:$(( ex + ew - sx )):1"
+}
+
 register_displays
 
 case "$cmd" in
@@ -117,7 +148,17 @@ case "$cmd" in
     else snap "${ZONES[0]}"                                        # leftmost, no display west
     fi
     ;;
+  extend-right)
+    read_zones "$di"; read -r lo hi <<<"$(current_span)"; last=$(( ${#ZONES[@]} - 1 ))
+    if [ "$hi" -lt "$last" ]; then hi=$(( hi + 1 )); fi               # grow right edge one zone
+    snap "$(span_grid "$lo" "$hi")"
+    ;;
+  extend-left)
+    read_zones "$di"; read -r lo hi <<<"$(current_span)"
+    if [ "$lo" -gt 0 ]; then lo=$(( lo - 1 )); fi                     # grow left edge one zone
+    snap "$(span_grid "$lo" "$hi")"
+    ;;
   *)
-    echo "usage: $(basename "$0") left|right|fill" >&2; exit 1
+    echo "usage: $(basename "$0") left|right|fill|extend-left|extend-right" >&2; exit 1
     ;;
 esac

@@ -25,6 +25,7 @@ This folder holds the live config for the keyboard-driven window snapper
 |-----|--------|
 | `⌥⌘ ←` / `⌥⌘ →` | walk the focused window left / right through its zones; at the edge it crosses to the next display |
 | `⌥⌘ ↑` | fill the whole display (not macOS fullscreen) |
+| `⇧⌥⌘ ←` / `⇧⌥⌘ →` | extend the window across zones (grow left / right; reset with plain `⌥⌘ ←/→`) |
 
 See `keys.conf` for the full list of options and conventions from other tools.
 

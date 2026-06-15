@@ -48,14 +48,21 @@ macOS) to grant Accessibility — do this once:
 | `⌥⌘ ←` | walk window **left** through zones (crosses to the display on the left at the edge) |
 | `⌥⌘ →` | walk window **right** through zones (crosses to the next display) |
 | `⌥⌘ ↑` | **fill** the whole display |
+| `⇧⌥⌘ ←` / `⇧⌥⌘ →` | **extend** the window across zones (grow left / right; reset with plain `⌥⌘ ←/→`) |
 
 `config/keys.conf` documents the full menu of options
 (Spectacle / Rectangle / Magnet / macOS Sequoia / Windows / Linux conventions).
 
-Behaviour: open a window (it floats), press `⌃⌥→` to snap it into a zone, press
-again to walk across. If a window isn't in a zone (e.g. just filled/fullscreen),
-`←`/`→` snap it to the left/right zone of the **current** display rather than
-jumping to a neighbour.
+Behaviour: open a window (it floats), press `⌥⌘→` to snap it into a zone, press
+again to walk across — at a display edge it crosses to the next monitor. If a
+window isn't in a zone (e.g. just filled), `←`/`→` snap it to the left/right
+zone of the **current** display rather than jumping to a neighbour.
+
+**Spanning zones** (`⇧⌥⌘ ←/→`): grow the window across adjacent zones. E.g. on
+an HP set to `20 60 20`, from the centre zone `⇧⌥⌘→` makes it cover centre +
+right; repeat to keep growing. It stops at the display edge (it does **not**
+span across monitors). It only grows — to shrink back, press a plain `⌥⌘ ←/→`
+to snap to a single zone again.
 
 Change the keys (or modifier) in [`config/keys.conf`](config/keys.conf), then
 `skhd --restart-service`.
