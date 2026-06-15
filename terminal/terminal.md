@@ -347,6 +347,13 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
 
     # Tear down the ControlMaster now that all operations are done
     ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
+
+    # Print the local greeting so it's unmistakable you're back on the Mac
+    # (the remote session shows the remote's fastfetch; this shows the local one).
+    if functions -q fish_greeting
+        echo ""
+        fish_greeting
+    end
 end
 ```
 
@@ -360,6 +367,7 @@ end
 - **Host DB**: per-host history is accumulated in `~/.xxh/history/<alias>.db` and grows across sessions
 - **Cleanup check**: after everything, SSHs back to verify `~/.xxh` is gone; shows a red warning box if not
 - **ControlMaster teardown**: at the very end, `ssh -O stop` closes the ControlMaster socket cleanly
+- **Local greeting on return**: after teardown, `fish_greeting` (local fastfetch) is printed so it's unmistakable you're back on the Mac — the remote session shows the remote's banner, this shows the local one
 
 ### `xxh/xxh-config.fish`
 

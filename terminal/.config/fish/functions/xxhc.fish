@@ -140,4 +140,11 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
 
     # Tear down the ControlMaster now that all operations are done
     ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
+
+    # Print the local greeting so it's unmistakable you're back on the Mac
+    # (the remote session shows the remote's fastfetch; this shows the local one).
+    if functions -q fish_greeting
+        echo ""
+        fish_greeting
+    end
 end
