@@ -447,4 +447,12 @@ Bottom line: the iDock M10 is the better **"work on Mac, occasionally game on PC
 
 ---
 
+## See also
+
+- [`dock-ethernet-nac.md`](./dock-ethernet-nac.md) — wired network identity
+  through docks: dock MAC addresses, NAC/MAB registration, 802.1X EAP-TLS, and
+  why MAC spoofing is not the right fix on Apple Silicon.
+
+---
+
 *Last updated: 1 June 2026*
