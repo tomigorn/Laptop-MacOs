@@ -155,13 +155,37 @@ are symlinked back into this repo, so it's the source of truth; re-run
 it with `./make-icon.sh` (optionally pass a different SF Symbol name, e.g.
 `./make-icon.sh rectangle.split.2x1`), then re-run `build-launcher.sh`.
 
+## Known limitations
+
+**Steam (and other windows with no Accessibility window) can't be snapped.**
+
+This setup runs yabai **without the scripting addition** (so SIP stays enabled),
+which means yabai's *only* way to move or resize a window is the macOS
+Accessibility (AX) API. A few apps don't expose an AX window at all — most
+notably **Steam**, whose UI is the CEF-rendered "Steam Helper" window
+(`role`/`subrole` empty, `has-ax-reference: false`, `can-move`/`can-resize`
+false). For those windows:
+
+- `yabai -m window <id> --grid …` → `could not locate the window to act on!`
+- with the window focused, `yabai -m query --windows --window` → `could not
+  retrieve window details`
+
+So the snap shortcuts simply do nothing on a Steam window — that's expected, not
+a bug in this config. It can't be fixed without the scripting addition (which
+requires partially disabling SIP), and even then it isn't guaranteed to work
+because Steam exposes no AX handle to act on. **Workaround:** position Steam by
+hand — it remembers its window size/position across launches.
+
+`yabai-snap.sh` guards its focused-window query so these cases no-op cleanly
+instead of erroring out.
+
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
 | Nothing happens on a shortcut | Grant **skhd** Accessibility **and** Input Monitoring, then `skhd --restart-service`. |
 | Windows don't move | Grant **yabai** Accessibility; `yabai --restart-service`. Check `/tmp/yabai_$USER.err.log`. |
-| A specific window won't snap | Some windows (overlays, certain dialogs) can't be resized by any WM — expected. |
+| A specific window won't snap | Likely a window with no Accessibility handle (e.g. **Steam**, some overlays/dialogs) — yabai can't move it without the scripting addition. See [Known limitations](#known-limitations). Expected. |
 | Ratios look wrong on a monitor | Check its `monitor` line is named and has a matching `layout` line in `zones.conf`. |
 | Service won't start | `tail /tmp/{yabai,skhd}_$USER.err.log` |
 

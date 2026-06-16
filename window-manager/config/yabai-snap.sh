@@ -24,10 +24,14 @@ FILL_GRID="1:1:0:0:1:1"
 
 # Act on the focused window, addressed by id (focus doesn't reliably follow a
 # window across displays, so we never re-query "the focused window").
-win="$("$YABAI" -m query --windows --window)"
-[ -n "$win" ] || exit 0
-wid="$(echo "$win" | "$JQ" '.id')"
-di="$(echo "$win" | "$JQ" '.display')"
+#
+# Guard the query: some focused windows can't be queried (no managed/AX window —
+# see "Known limitations" in window-manager.md). A yabai error or non-JSON result
+# must make us no-op cleanly, not abort the whole script under `set -e`.
+win="$("$YABAI" -m query --windows --window 2>/dev/null || true)"
+wid="$(printf '%s' "$win" | "$JQ" -r '.id // empty' 2>/dev/null || true)"
+[ -n "$wid" ] || exit 0
+di="$(printf '%s' "$win" | "$JQ" -r '.display' 2>/dev/null || true)"
 displays="$("$YABAI" -m query --displays)"
 
 disp_json() { echo "$displays" | "$JQ" "map(select(.index==$1))[0]"; }
