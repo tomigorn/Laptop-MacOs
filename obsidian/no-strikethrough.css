@@ -1,0 +1,12 @@
+/* Reading mode */
+.markdown-preview-view ul > li.task-list-item.is-checked,
+.markdown-preview-view ol > li.task-list-item.is-checked {
+  text-decoration: none;
+  color: var(--text-normal);
+}
+
+/* Live Preview / edit mode */
+.markdown-source-view.mod-cm6 .HyperMD-task-line[data-task="x"] {
+  text-decoration: none;
+  color: var(--text-normal);
+}

@@ -120,6 +120,9 @@ How they divide up:
 - **ConnectMeNow** — system-wide, persistent auto-mounts that survive across apps (the NAS is always *there*).
 - **ForkLift** — interactive browsing/transfer inside the app; reach for it when you just need to poke at a server, not keep it mounted.
 
+## Obsidian
+Tweaks for [Obsidian](https://obsidian.md/), including a CSS snippet that removes the default strikethrough/dimming on completed tasks. See [obsidian/obsidian.md](obsidian/obsidian.md).
+
 ## Developer Setup
 [Homebrew](https://brew.sh/)
 
