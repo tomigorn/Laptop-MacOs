@@ -55,11 +55,21 @@ else
     reachable=0; reach_str="unreachable"
 fi
 
-# ── decide + act on every enabled network service ─────────────────────────────
+# ── decide + act on every network service ─────────────────────────────────────
 # One global probe, applied to all interfaces. We only write DNS when it actually
-# changes. When reachable we take over each service's DNS (that's the point of the
-# tool); when unreachable we revert ONLY services still set to our DNS_SERVER —
-# a resolver someone/something else configured is left untouched.
+# changes.
+#
+# SET (reachable): take over each ENABLED service's DNS — that's the point of the
+# tool. We deliberately skip DISABLED services: macOS persists per-service DNS
+# independent of enabled state, so writing 192.168.1.2 onto a parked adapter (an
+# unplugged dock) would lie in wait and blackhole DNS the moment that adapter is
+# re-enabled on a network that can't reach the homelab. Don't arm that landmine.
+#
+# REVERT (unreachable): clear our DNS from EVERY service, INCLUDING disabled ones.
+# This is the other half of the rule above — a stale 192.168.1.2 left on a parked
+# dock must be defused here, before that dock is re-enabled away from home. We
+# still only touch services set to *our* DNS; a resolver someone else configured
+# is left untouched.
 services=$(networksetup -listallnetworkservices 2>/dev/null)
 
 changed=""                    # services we actually modified, for the log line
@@ -69,18 +79,25 @@ IFS='
 for svc in ${services}; do
     case "${svc}" in
         'An asterisk'*) continue ;;   # the header line
-        '*'*)           continue ;;   # a disabled service (leading '*')
     esac
 
-    cur=$(networksetup -getdnsservers "${svc}" 2>/dev/null)
+    # Disabled services are listed with a leading '*'. Keep the flag, but operate
+    # on the real (unprefixed) name — networksetup needs the name without the '*'.
+    case "${svc}" in
+        '*'*) disabled=1; name=${svc#\*} ;;
+        *)    disabled=0; name=${svc}    ;;
+    esac
+
+    cur=$(networksetup -getdnsservers "${name}" 2>/dev/null)
     if [ "${reachable}" -eq 1 ]; then
+        [ "${disabled}" -eq 1 ] && continue                 # don't arm a landmine on a parked adapter
         [ "${cur}" = "${DNS_SERVER}" ] && continue          # already ours
-        networksetup -setdnsservers "${svc}" "${DNS_SERVER}" 2>/dev/null \
-            && changed="${changed} [${svc}]set->${DNS_SERVER}"
+        networksetup -setdnsservers "${name}" "${DNS_SERVER}" 2>/dev/null \
+            && changed="${changed} [${name}]set->${DNS_SERVER}"
     else
-        [ "${cur}" = "${DNS_SERVER}" ] || continue          # not ours → leave alone
-        networksetup -setdnsservers "${svc}" empty 2>/dev/null \
-            && changed="${changed} [${svc}]revert->dhcp"
+        [ "${cur}" = "${DNS_SERVER}" ] || continue          # not ours (or none) → leave alone
+        networksetup -setdnsservers "${name}" empty 2>/dev/null \
+            && changed="${changed} [${name}]revert->dhcp"
     fi
 done
 IFS=$OLDIFS

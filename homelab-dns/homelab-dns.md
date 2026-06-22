@@ -30,9 +30,12 @@ Three parts, run by two `LaunchDaemon`s:
   a few seconds for things to settle, then calls the actor.
 - **[`homelab-dns.sh`](homelab-dns.sh)** — the actor: probes the homelab DNS for
   a dedicated name (`probe.homelab`) and checks it returns an exact **sentinel**
-  answer (`198.51.100.53`), then sets/reverts the DNS on **all enabled network
-  services** (Wi-Fi, Ethernet, USB / Thunderbolt adapters — discovered at
-  runtime, so docking or swapping adapters needs no config change).
+  answer (`198.51.100.53`), then updates the DNS on the network services (Wi-Fi,
+  Ethernet, USB / Thunderbolt adapters — discovered at runtime, so docking or
+  swapping adapters needs no config change). It's deliberately asymmetric: when
+  reachable it takes over **enabled** services only; when away it reverts **every**
+  service it owns, **including disabled/parked ones** — see *Set enabled, revert
+  everything* below.
 - A **5-minute timer** ([`com.tmilata.homelab-dns-timer.plist`](com.tmilata.homelab-dns-timer.plist))
   re-runs the actor every 300s as a safety net (see *Why a timer too?* below). It's
   silent unless it actually changes the DNS, so a stable network stays quiet.
@@ -60,6 +63,27 @@ probe into "did the homelab answer?" rather than "did something answer?".
 > **Setup:** add a DNS rewrite in AdGuard Home: `probe.homelab → 198.51.100.53`.
 > The two `fastpi.homelab` rewrites stay as-is; the probe gets its own name so the
 > real records keep their real meaning and the secret can change independently.
+
+### Set enabled, revert everything (the parked-dock landmine)
+
+macOS stores DNS **per network service and keeps it even when the service is
+disabled or its adapter is unplugged**. That cuts two ways, so the actor is
+deliberately asymmetric:
+
+- **Setting** `192.168.1.2` only ever touches **enabled** services. Writing it
+  onto a *disabled* adapter (a dock you've unplugged) would lie dormant and then
+  blackhole all DNS the instant that adapter is re-enabled on a network that
+  can't reach the homelab — e.g. plugging the dock in at the office and making it
+  the primary service.
+- **Reverting** to DHCP touches **every** service still set to our DNS,
+  **including disabled ones**, precisely to defuse any such stale entry before
+  the adapter is reactivated away from home.
+
+> An earlier version skipped disabled services in *both* directions. A dock that
+> picked up `192.168.1.2` while docked at home then kept it after undocking, and
+> killed internet when later activated on a foreign network (DNS pointed at an
+> unreachable `192.168.1.2`). The revert path now sweeps disabled services too,
+> so the stale entry is cleared on the next away-from-home run.
 
 ### Why a timer too?
 
