@@ -97,11 +97,12 @@ profile `ee-tik-dock`):
 
 | MAC | Host ID | Beschreibung | Physical device (verified) |
 |---|---|---|---|
-| `a8:4a:63:62:90:e2` | `itet-its-HP-E34m-G4-001` | `ETZ G 64.2: HP E34m G4 dock` | **HP E34m G4 monitor dock** (`en5`) |
+| `a8:4a:63:62:90:e2` | `itet-its-HP-E34m-G4-001-dock-monitor` | `ETZ G 64.2: HP E34m G4 dock` | **HP E34m G4 monitor dock** (`en5`) |
 | `98:fc:84:e0:6a:7d` | `itet-its-301-dock-usbc` | `MacBook tmilata – USB-C dock` | **standalone USB-C dock** (`en7`) |
+| `48:2a:e3:b2:8c:4c` | `itet-its-lenovo-40as-001-dock-usbc` | `ETZ G 64.2: Lenovo ThinkPad Universal USB-C Dock (40AS)` | **Lenovo ThinkPad Universal USB-C Dock** — model `40AS`, s/n `1S40ASZKW216EN` (`en6`) |
 
-Both MAC↔device assignments are correct (an earlier version had the two rows'
-labels swapped — fixed).
+All three MAC↔device assignments are hardware-verified (see the dock→MAC mapping
+section above).
 
 ### Naming convention
 
