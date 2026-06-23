@@ -6,7 +6,6 @@ hosts:
     +if:
     +hhh: "~"
     -o:
-      - ForwardAgent=yes
       - ControlMaster=auto
       - ControlPath=~/.ssh/cm/xxh-%n
       - ServerAliveInterval=15

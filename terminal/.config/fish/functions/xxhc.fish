@@ -13,10 +13,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # same connection. Without this, every operation creates a fresh tunnel
     # through the jump host, which is slow and can fail for hosts behind ProxyJump.
     mkdir -p ~/.ssh/cm
-    # ForwardAgent=yes so the remote session (and onward hops like opennebula)
-    # can use the local ssh-agent. All multiplexed sessions ride this master, so
-    # forwarding must be enabled here or $SSH_AUTH_SOCK stays empty on the remote.
-    ssh -o ForwardAgent=yes -o ControlMaster=auto -o ControlPath=$cm_path -fN -o ConnectTimeout=30 $target 2>/dev/null
+    ssh -o ControlMaster=auto -o ControlPath=$cm_path -fN -o ConnectTimeout=30 $target 2>/dev/null
 
     # ── Detect remote architecture and stage matching binaries ──────────────────
     # The bundle ships native binaries; uploading the wrong arch fails at exec
