@@ -232,6 +232,7 @@ hosts:
     +if:
     +hhh: "~"
     -o:
+      - ForwardAgent=yes
       - ControlMaster=auto
       - ControlPath=~/.ssh/cm/xxh-%n
       - ServerAliveInterval=15
@@ -245,6 +246,7 @@ hosts:
 | `++copy-method: scp` | Use SCP for uploads | rsync conflicts with ControlMaster |
 | `+if:` | Always upload without prompting | `xxhc` wipes `~/.xxh` on disconnect, so xxh would ask "Install? [Y/n]" every time without this |
 | `+hhh: "~"` | Set `HOME` to real remote home | Without this, `HOME` is set to `~/.xxh` and `cd ~` lands in the wrong place |
+| `-o ForwardAgent=yes` | Forward the local ssh-agent to the remote session | Without it `$SSH_AUTH_SOCK` is empty on the remote, so onward hops (e.g. `ssh opennebula`) and key-dependent commands re-prompt for the key passphrase every time. Must also be set on the pre-created ControlMaster tunnel — all sessions multiplex over it |
 | `-o ControlMaster=auto` | Reuse existing ControlMaster socket | `xxhc` pre-creates the socket before xxh runs, so xxh's internal SCP reuses the already-established tunnel — critical for hosts behind ProxyJump |
 | `-o ControlPath=~/.ssh/cm/xxh-%n` | Dedicated socket path for xxh connections | Uses a separate path from regular SSH sockets (which use `%r@%h:%p`) to avoid conflicts |
 | `-o ServerAliveInterval=15` | Local SSH client probes server every 15 s | Detects dead connections on flaky networks; causes the local client to exit within 45 s rather than hanging indefinitely |
@@ -268,7 +270,10 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # same connection. Without this, every operation creates a fresh tunnel
     # through the jump host, which is slow and can fail for hosts behind ProxyJump.
     mkdir -p ~/.ssh/cm
-    ssh -o ControlMaster=auto -o ControlPath=$cm_path -fN -o ConnectTimeout=30 $target 2>/dev/null
+    # ForwardAgent=yes so the remote session (and onward hops) can use the local
+    # ssh-agent. All multiplexed sessions ride this master, so forwarding must be
+    # enabled here or $SSH_AUTH_SOCK stays empty on the remote.
+    ssh -o ForwardAgent=yes -o ControlMaster=auto -o ControlPath=$cm_path -fN -o ConnectTimeout=30 $target 2>/dev/null
 
     # Pre-seed remote with this host's accumulated history.
     # Validate it has a history table, then send a clean WAL-free single-file copy.
