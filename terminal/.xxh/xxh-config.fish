@@ -78,7 +78,7 @@ if test -f $CURRENT_DIR/bin/fastfetch
         # Terminal-setup version, passed in by xxhc (+e XXH_SETUP_VERSION) so the
         # remote greeting shows the same version as the local Mac greeting.
         if set -q XXH_SETUP_VERSION; and test -n "$XXH_SETUP_VERSION"
-            printf "\n  Tomigorn's macOS Terminal Setup — v%s\n" $XXH_SETUP_VERSION
+            printf "\n  Tomigorn's xxhc Terminal Setup — v%s\n" $XXH_SETUP_VERSION
         end
     end
 
