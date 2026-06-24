@@ -73,7 +73,12 @@ if test -f $CURRENT_DIR/bin/fastfetch
     # Passed in by xxhc (+e XXH_SETUP_VERSION) so the remote greeting matches the Mac.
     function _xxhc_version_line
         if set -q XXH_SETUP_VERSION; and test -n "$XXH_SETUP_VERSION"
-            printf "\n  Tomigorn's xxhc Terminal Setup — v%s\n" $XXH_SETUP_VERSION
+            echo ""
+            echo -n "  "                              # indent (outside the highlight)
+            set_color -b 1864ab ffffff                # highlighted badge: white on deep blue (hex, theme-proof)
+            echo -n "  Tomigorn's xxhc Terminal Setup — v$XXH_SETUP_VERSION  "
+            set_color normal
+            echo ""
         end
     end
 

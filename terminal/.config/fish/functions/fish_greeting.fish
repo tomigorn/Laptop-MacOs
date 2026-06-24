@@ -8,9 +8,11 @@ function fish_greeting
         set -l vfile (dirname $self)/../../../SETUP_VERSION
         if test -f $vfile
             echo ""
-            set_color brmagenta
-            echo "  Tomigorn's macOS Terminal Setup — v"(cat $vfile | string trim)
+            echo -n "  "                              # indent (outside the highlight)
+            set_color -b 1864ab ffffff                # highlighted badge: white on deep blue (hex, theme-proof)
+            echo -n "  Tomigorn's macOS Terminal Setup — v"(cat $vfile | string trim)"  "
             set_color normal
+            echo ""
         end
     end
 end
