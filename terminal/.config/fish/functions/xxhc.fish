@@ -7,12 +7,12 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # Unique per-session id so concurrent xxhc sessions to the SAME host don't
     # clobber each other's history-export file ($fish_pid differs per terminal).
     set -l sid $fish_pid
-    # Terminal-setup version (terminal/VERSION, three levels up from this file),
-    # forwarded to the remote greeting so it shows the same version as the Mac.
-    # NB: do NOT name this `version` — that's a reserved fish variable (the fish
-    # version), and `set -l version` fails, leaking fish's version to the remote.
+    # Terminal-setup version (terminal/SETUP_VERSION, three levels up from this
+    # file), forwarded to the remote greeting so it shows the same version as the
+    # Mac. NB: do NOT use a variable named `version` — that's reserved in fish (the
+    # fish version), and `set -l version` fails, leaking fish's version downstream.
     set -l self (realpath (status -f) 2>/dev/null)
-    set -l setup_version (cat (dirname $self)/../../../VERSION 2>/dev/null | string trim)
+    set -l setup_version (cat (dirname $self)/../../../SETUP_VERSION 2>/dev/null | string trim)
 
     # Establish a ControlMaster tunnel before anything else.
     # This handles ProxyJump (and any other SSH config) once upfront so all
@@ -99,7 +99,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         +e "XXH_CONNECT_START=$start" \
         +e "XXH_STAGE_DIR=$stage" \
         +e "XXH_STAGE_ID=$sid" \
-        +e "XXH_VERSION=$setup_version" \
+        +e "XXH_SETUP_VERSION=$setup_version" \
         $argv[2..-1]
 
     # Belt-and-suspenders: remove ~/.xxh if the fish_exit handler didn't (e.g. fish was SIGKILL'd).

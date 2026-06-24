@@ -426,7 +426,7 @@ cp -R ~/.xxh/arch/<arch>/bin           "$build/bin"
 
 ## Versioning
 
-`terminal/VERSION` holds the terminal-setup version (semver). It's shown in the fish greeting **both** locally on the Mac (under fastfetch) and on every `xxhc` connect (forwarded to the remote greeting via `XXH_VERSION`) — so you can tell at a glance which version is live. The local greeting reads `VERSION` live, so a bump shows up in any new shell without reloading anything.
+`terminal/SETUP_VERSION` holds the terminal-setup version (semver). It's shown in the fish greeting **both** locally on the Mac (under fastfetch) and on every `xxhc` connect (forwarded to the remote greeting via `XXH_SETUP_VERSION`) — so you can tell at a glance which version is live. The local greeting reads `SETUP_VERSION` live, so a bump shows up in any new shell without reloading anything. (The file/var are named `SETUP_VERSION`, not `VERSION` — a bare `version` variable is reserved in fish.)
 
 **Bump it on every change** to the terminal setup, in the same commit (patch = fix, minor = feature, major = breaking). This is enforced by the project `.claude/CLAUDE.md` so it isn't forgotten.
 
