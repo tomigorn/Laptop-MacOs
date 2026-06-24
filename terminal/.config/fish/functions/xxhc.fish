@@ -1,11 +1,12 @@
 function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     set -l target $argv[1]
     set -l host_db ~/.xxh/history/$target.db
-    set -l remote_preseed /tmp/.xxh_atuin_pre_$target.db
-    set -l remote_db /tmp/.xxh_atuin_$target.db
     set -l local_db ~/.local/share/atuin/history.db
     set -l tmp_db /tmp/.xxh_atuin_$target\_local.db
     set -l cm_path ~/.ssh/cm/xxh-$target
+    # Unique per-session id so concurrent xxhc sessions to the SAME host don't
+    # clobber each other's history-export file ($fish_pid differs per terminal).
+    set -l sid $fish_pid
 
     # Establish a ControlMaster tunnel before anything else.
     # This handles ProxyJump (and any other SSH config) once upfront so all
@@ -14,6 +15,13 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # through the jump host, which is slow and can fail for hosts behind ProxyJump.
     mkdir -p ~/.ssh/cm
     ssh -o ControlMaster=auto -o ControlPath=$cm_path -fN -o ConnectTimeout=30 $target 2>/dev/null
+    # Non-fatal: if the master didn't come up, later calls fall back to direct
+    # connections (slower). Warn rather than silently degrading the ProxyJump path.
+    if not ssh -q -o ControlPath=$cm_path -O check $target 2>/dev/null
+        set_color yellow
+        echo "  xxhc: ControlMaster tunnel not established — continuing without connection reuse (slower)."
+        set_color normal
+    end
 
     # ── Detect remote architecture and stage matching binaries ──────────────────
     # The bundle ships native binaries; uploading the wrong arch fails at exec
@@ -57,14 +65,25 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     cp -R $store/fish-portable $build/fish-portable
     cp -R $store/bin $build/bin
 
+    # Per-user private staging dir on the remote for history-transfer files.
+    # Prefer $XDG_RUNTIME_DIR (mode 0700, auto-removed by systemd on logout); fall
+    # back to a 0700 dir in /tmp. Keeps your command history out of world-readable
+    # shared /tmp and leaves nothing behind even if the connection later drops.
+    set -l stage (ssh -o ControlPath=$cm_path -o ConnectTimeout=10 $target \
+        'd="${XDG_RUNTIME_DIR:-/tmp/.xxh-$(id -u)}"; mkdir -p "$d" && chmod 700 "$d" && printf %s "$d"' 2>/dev/null)
+    test -z "$stage"; and set stage /tmp
+    set -l remote_preseed "$stage/xxh_atuin_pre_$target.db"
+    set -l remote_db "$stage/xxh_atuin_$target-$sid.db"
+
     # Pre-seed remote with this host's accumulated history.
     # Validate it has a history table, then send a clean WAL-free single-file copy.
     if test -f $host_db
         set -l has_table (sqlite3 $host_db "SELECT name FROM sqlite_master WHERE type='table' AND name='history';" 2>/dev/null)
         if test "$has_table" = history
             set -l clean_preseed /tmp/.xxh_atuin_pre_clean_$target.db
+            rm -f $clean_preseed                                  # VACUUM INTO errors if the dest exists
             sqlite3 $host_db "VACUUM INTO '$clean_preseed';" 2>/dev/null
-            and scp -q -o ControlMaster=auto -o ControlPath=$cm_path $clean_preseed "$target:$remote_preseed" 2>/dev/null
+            and scp -q -o ControlPath=$cm_path $clean_preseed "$target:$remote_preseed" 2>/dev/null
             rm -f $clean_preseed
         end
     end
@@ -74,67 +93,75 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         +e "TERM=xterm-256color" \
         +e "XXH_SSH_ALIAS=$target" \
         +e "XXH_CONNECT_START=$start" \
+        +e "XXH_STAGE_DIR=$stage" \
+        +e "XXH_STAGE_ID=$sid" \
         $argv[2..-1]
 
     # Belt-and-suspenders: remove ~/.xxh if the fish_exit handler didn't (e.g. fish was SIGKILL'd).
     ssh -q -o ControlMaster=auto -o ControlPath=$cm_path $target "rm -rf ~/.xxh 2>/dev/null" 2>/dev/null
 
-    # Retrieve remote atuin DB — fetch main file plus WAL files (SQLite WAL mode
-    # keeps recent writes in the -wal file; without it the DB appears empty).
-    if scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db" $tmp_db 2>/dev/null
-        scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
-        scp -q -o ControlMaster=auto -o ControlPath=$cm_path "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
+    # Retrieve the remote atuin DB. The remote folds its WAL into the main file when
+    # it has sqlite3; when it doesn't, the -wal/-shm sidecars carry the recent rows,
+    # so we fetch them too and checkpoint here (the Mac always has sqlite3). Either
+    # way the merge below reads a single consolidated file.
+    if scp -q -o ControlPath=$cm_path "$target:$remote_db" $tmp_db 2>/dev/null
+        scp -q -o ControlPath=$cm_path "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
+        scp -q -o ControlPath=$cm_path "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
+        sqlite3 $tmp_db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null
 
-        # Checkpoint WAL into the main DB file so all data is in one place.
-        # Without this, the main file may have no schema (it's all in the WAL)
-        # and subsequent ATTACH and VACUUM INTO operations see an empty DB.
-        sqlite3 $tmp_db "PRAGMA wal_checkpoint(FULL);" 2>/dev/null
-
-        # sqlite3 now reads the fully checkpointed main file
+        # Columns are named explicitly (not SELECT *) so a schema column-order
+        # change between the remote and local atuin versions can't silently
+        # misalign data. sqlite errors are intentionally NOT hidden here — a failed
+        # merge should be visible, not silently drop history.
+        set -l cols id,timestamp,duration,exit,command,cwd,session,hostname,deleted_at
         sqlite3 $local_db "
             ATTACH '$tmp_db' AS remote;
-            INSERT OR IGNORE INTO main.history SELECT * FROM remote.history;
+            INSERT OR IGNORE INTO main.history ($cols) SELECT $cols FROM remote.history;
             DETACH remote;
-        " 2>/dev/null
+        "
         and echo "  History from $target merged into local atuin"
 
         # Accumulate per-host history for future connects.
-        # Use VACUUM INTO to produce a clean single-file DB (no WAL artifacts).
         mkdir -p ~/.xxh/history
         if test -f $host_db
             sqlite3 $host_db "
                 ATTACH '$tmp_db' AS new_session;
-                INSERT OR IGNORE INTO main.history SELECT * FROM new_session.history;
+                INSERT OR IGNORE INTO main.history ($cols) SELECT $cols FROM new_session.history;
                 DETACH new_session;
-            " 2>/dev/null
+            "
         else
-            sqlite3 $tmp_db "VACUUM INTO '$host_db';" 2>/dev/null
+            rm -f $host_db                                       # VACUUM INTO errors if the dest exists
+            sqlite3 $tmp_db "VACUUM INTO '$host_db';"
         end
 
-        ssh -q -o ControlMaster=auto -o ControlPath=$cm_path $target \
-            "rm -f $remote_db $remote_db-wal $remote_db-shm $remote_preseed" 2>/dev/null
+        ssh -q -o ControlPath=$cm_path $target "rm -f $remote_db $remote_db-wal $remote_db-shm $remote_preseed" 2>/dev/null
         rm -f $tmp_db $tmp_db-wal $tmp_db-shm
     end
 
-    # Verify ~/.xxh was removed — if it's still there, other users can see it
-    if ssh -q -o ControlMaster=auto -o ControlPath=$cm_path -o ConnectTimeout=10 $target "test -d ~/.xxh" 2>/dev/null
+    # Verify ~/.xxh was removed. Ask the remote to report PRESENT/ABSENT explicitly
+    # so a *failed* SSH (e.g. the connection is already gone) can't be misread as
+    # "verified clean" — that earlier bug printed the green all-clear on any ssh error.
+    set -l xxh_state (ssh -q -o ControlPath=$cm_path -o ConnectTimeout=10 $target \
+        "test -d ~/.xxh && echo PRESENT || echo ABSENT" 2>/dev/null)
+    if test "$xxh_state" = PRESENT
         set_color --bold red
         echo ""
-        echo "  ╔══════════════════════════════════════════════════════════════╗"
-        echo "  ║                    CLEANUP FAILURE                           ║"
-        echo "  ║                                                              ║"
-        printf "  ║  ~/.xxh was NOT removed on %-34s║\n" "$target "
-        echo "  ║  Other users on this shared host can see your files.         ║"
-        echo "  ║                                                              ║"
-        printf "  ║  Fix now:  ssh %s \"rm -rf ~/.xxh\"\n" $target
-        echo "  ║                                                              ║"
-        echo "  ╚══════════════════════════════════════════════════════════════╝"
+        echo "  ╔════════════════════════ CLEANUP FAILURE ════════════════════════╗"
+        echo "  ║  ~/.xxh was NOT removed on $target"
+        echo "  ║  Other users on this shared host can see your files."
+        echo "  ║  Fix now:  ssh $target \"rm -rf ~/.xxh\""
+        echo "  ╚══════════════════════════════════════════════════════════════════╝"
         echo ""
         set_color normal
-    else
-        # Confirmed over SSH that nothing remains on the host.
+    else if test "$xxh_state" = ABSENT
         set_color green
         echo "  ✓ Remote cleanup verified — ~/.xxh removed from $target, no trace left behind."
+        set_color normal
+    else
+        # Neither token came back → the verification SSH itself failed.
+        set_color yellow
+        echo "  ⚠ Could not verify remote cleanup on $target (connection closed?)."
+        echo "    Check later with:  ssh $target \"ls -ld ~/.xxh\""
         set_color normal
     end
 

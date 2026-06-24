@@ -86,13 +86,26 @@ if test -f $CURRENT_DIR/bin/fastfetch
     end
 end
 
+# Private staging dir for the history-transfer files, chosen by xxhc and passed in
+# via XXH_STAGE_DIR (a per-user 0700 dir — $XDG_RUNTIME_DIR when available). Falls
+# back sensibly for direct `xxh` use without xxhc. Keeps history out of shared /tmp.
+function _xxhc_stage_dir
+    if set -q XXH_STAGE_DIR; and test -n "$XXH_STAGE_DIR"
+        echo $XXH_STAGE_DIR
+    else if set -q XDG_RUNTIME_DIR; and test -n "$XDG_RUNTIME_DIR"
+        echo $XDG_RUNTIME_DIR
+    else
+        echo /tmp
+    end
+end
+
 if test -f $CURRENT_DIR/bin/atuin
     # Seed atuin DB with history from previous sessions on this host
     mkdir -p $XDG_DATA_HOME/atuin
-    set -l preseed /tmp/.xxh_atuin_pre_$XXH_SSH_ALIAS.db
+    set -l preseed (_xxhc_stage_dir)/xxh_atuin_pre_$XXH_SSH_ALIAS.db
     if test -f $preseed
         cp $preseed $XDG_DATA_HOME/atuin/history.db
-        rm $preseed
+        rm -f $preseed
     end
 
     mkdir -p $XDG_CONFIG_HOME/atuin
@@ -100,14 +113,25 @@ if test -f $CURRENT_DIR/bin/atuin
     atuin init fish | source
 
     function _xxhc_export_history --on-event fish_exit
-        # Export atuin history to /tmp so xxhc can retrieve it after disconnect
+        # Export atuin history to the private staging dir so xxhc can retrieve it.
         if set -q XXH_SSH_ALIAS; and test -n "$XXH_SSH_ALIAS"
             set -l db $XDG_DATA_HOME/atuin/history.db
-            set -l dst /tmp/.xxh_atuin_$XXH_SSH_ALIAS
+            # Per-session filename (matches xxhc's $sid) so concurrent sessions to
+            # the same host don't overwrite each other's export.
+            set -l dst (_xxhc_stage_dir)/xxh_atuin_$XXH_SSH_ALIAS
+            test -n "$XXH_STAGE_ID"; and set dst $dst-$XXH_STAGE_ID
+            set dst $dst.db
             if test -f $db
-                cp $db $dst.db 2>/dev/null
-                test -f $db-shm && cp $db-shm $dst.db-shm 2>/dev/null
-                test -f $db-wal && cp $db-wal $dst.db-wal 2>/dev/null
+                # Best-effort: if the host has the sqlite3 CLI, fold the WAL into
+                # the main file so we can ship one consistent file. We do NOT rely
+                # on it — we also copy any -wal/-shm sidecars, so no freshly-typed
+                # history is lost on hosts without sqlite3 (atuin uses WAL mode).
+                # The local side checkpoints again, where sqlite3 is guaranteed.
+                command -q sqlite3; and sqlite3 $db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null
+                cp $db $dst 2>/dev/null; and chmod 600 $dst 2>/dev/null
+                for ext in -wal -shm
+                    test -f $db$ext; and cp $db$ext $dst$ext 2>/dev/null; and chmod 600 $dst$ext 2>/dev/null
+                end
             end
         end
 
