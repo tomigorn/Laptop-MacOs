@@ -69,25 +69,42 @@ if test -f $CURRENT_DIR/bin/starship
 end
 
 if test -f $CURRENT_DIR/bin/fastfetch
+    # The version line, shared by every greeting variant below.
+    # Passed in by xxhc (+e XXH_SETUP_VERSION) so the remote greeting matches the Mac.
+    function _xxhc_version_line
+        if set -q XXH_SETUP_VERSION; and test -n "$XXH_SETUP_VERSION"
+            printf "\n  Tomigorn's xxhc Terminal Setup — v%s\n" $XXH_SETUP_VERSION
+        end
+    end
+
     function fish_greeting
         if set -q XXH_CONNECT_START; and test -n "$XXH_CONNECT_START"
             set -l elapsed (math (date +%s) - $XXH_CONNECT_START)
             printf "  Connected in %ss\n\n" $elapsed
         end
         fastfetch
-        # Terminal-setup version, passed in by xxhc (+e XXH_SETUP_VERSION) so the
-        # remote greeting shows the same version as the local Mac greeting.
-        if set -q XXH_SETUP_VERSION; and test -n "$XXH_SETUP_VERSION"
-            printf "\n  Tomigorn's xxhc Terminal Setup — v%s\n" $XXH_SETUP_VERSION
-        end
+        _xxhc_version_line
     end
 
-    # clearc = clear + greeting. Shows fastfetch but not the stale
+    # clearc = clear + greeting. Shows fastfetch + version but not the stale
     # "Connected in Xs" line — that timer is only meaningful at connect time.
     # Plain `clear` is left alone for a fully blank screen.
     function clearc --description "clear the screen, then show the greeting"
         command clear
         fastfetch
+        _xxhc_version_line
+    end
+
+    # Re-show the greeting when you return from an inner `ssh` hop, so it's obvious
+    # you're back on this host. fish_postexec fires after every interactive command
+    # (the commandline is $argv[1]); we act only when it was an ssh. Non-destructive
+    # (no screen clear) and without the connect timer.
+    function _xxhc_greet_after_ssh --on-event fish_postexec
+        if string match -qr '^\s*ssh\s' -- "$argv[1]"
+            echo ""
+            fastfetch
+            _xxhc_version_line
+        end
     end
 end
 
