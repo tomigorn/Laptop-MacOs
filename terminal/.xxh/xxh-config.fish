@@ -21,6 +21,44 @@ end
 # anyone running xxh directly without xxhc.
 set -x TERM xterm-256color
 
+# ── Attach to the host's persistent ssh-agent ───────────────────────────────
+# xxh runs a portable fish that never sources /etc/profile.d, so it misses the
+# system ssh-key-handler that normal SSH logins use to attach to (or start) an
+# ssh-agent. Without it, onward hops (e.g. `ssh opennebula`) and key-dependent
+# commands re-prompt for the key passphrase on every connection.
+#
+# Replicate that handler: find an agent socket owned by us and attach; load keys
+# if the agent is empty; start a fresh agent only if none exists. Mirrors the
+# find/attach logic of /etc/profile.d/03-ssh-key-handler.sh on ETH s4d hosts.
+# (ssh-add -l exit codes: 0 = has keys, 1 = reachable but empty, 2 = stale socket.)
+if not set -q SSH_AUTH_SOCK; or not test -S "$SSH_AUTH_SOCK"
+    set -l got_agent 0
+    for sock in (find /tmp -maxdepth 2 -type s -user (whoami) -path '/tmp/ssh-*/agent.*' 2>/dev/null)
+        set -gx SSH_AUTH_SOCK $sock
+        ssh-add -l >/dev/null 2>&1
+        set -l rc $status
+        if test $rc -eq 0
+            set got_agent 1; break                              # has keys — reuse, no prompt
+        else if test $rc -eq 1
+            test -f ~/.ssh/id_ed25519; and ssh-add ~/.ssh/id_ed25519
+            test -f ~/.ssh/id_rsa; and ssh-add ~/.ssh/id_rsa
+            set got_agent 1; break                              # was empty — loaded keys
+        end
+        # rc == 2: stale socket, try the next one
+    end
+    if test $got_agent -eq 0
+        # No usable agent — start one (its socket lives in /tmp and survives the
+        # ~/.xxh cleanup, so later logins reuse it, same as the system handler).
+        set -e SSH_AUTH_SOCK
+        for line in (ssh-agent -s 2>/dev/null)
+            set -l kv (string match -r '^(SSH_AUTH_SOCK|SSH_AGENT_PID)=([^;]+);' -- $line)
+            test (count $kv) -ge 3; and set -gx $kv[2] $kv[3]
+        end
+        test -f ~/.ssh/id_ed25519; and ssh-add ~/.ssh/id_ed25519
+        test -f ~/.ssh/id_rsa; and ssh-add ~/.ssh/id_rsa
+    end
+end
+
 if test -f $CURRENT_DIR/bin/starship; or test -f $CURRENT_DIR/bin/fastfetch; or test -f $CURRENT_DIR/bin/atuin; or test -f $CURRENT_DIR/bin/bat
     set -x PATH $CURRENT_DIR/bin $PATH
 end

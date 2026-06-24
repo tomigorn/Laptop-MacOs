@@ -374,11 +374,12 @@ end
 The fish session init that runs on the remote. In order:
 
 1. **TERM override** — sets `TERM=xterm-256color` as a fallback for direct `xxh` use. When connecting via `xxhc`, `TERM` is already set correctly via `+e` before fish starts (see `xxhc.fish`), so this line is a no-op in normal usage.
-2. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, atuin, and bat are all in PATH
-3. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
-4. **Greeting** — defines `fish_greeting` to print connection time (from `XXH_CONNECT_START`) then run fastfetch
-5. **Atuin** — if a preseed file exists at `/tmp/.xxh_atuin_pre_<alias>.db`, copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config and initialises atuin.
-6. **`fish_exit` handlers** — two handlers registered in definition order:
+2. **ssh-agent attach** — finds an `ssh-agent` socket already running for the user under `/tmp/ssh-*/agent.*` and attaches to it (`SSH_AUTH_SOCK`); loads the keys if the agent is empty; starts a fresh agent only if none exists. xxh's portable fish never sources `/etc/profile.d`, so without this it would miss the host's system ssh-key-handler (`/etc/profile.d/03-ssh-key-handler.sh` on ETH s4d hosts) — and every onward hop (e.g. `ssh opennebula`) and key-dependent command would re-prompt for the key passphrase. This replicates that handler's find/attach logic so `xxhc` sessions reuse the same already-unlocked key as a normal `ssh` login. (`ssh-add -l` exit codes: 0 = has keys, 1 = reachable but empty, 2 = stale socket.)
+3. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, atuin, and bat are all in PATH
+4. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
+5. **Greeting** — defines `fish_greeting` to print connection time (from `XXH_CONNECT_START`) then run fastfetch
+6. **Atuin** — if a preseed file exists at `/tmp/.xxh_atuin_pre_<alias>.db`, copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config and initialises atuin.
+7. **`fish_exit` handlers** — two handlers registered in definition order:
    - `_xxhc_export_history`: copies the atuin DB and its WAL/SHM files to `/tmp/` so `xxhc` can retrieve them after the session ends; also removes `fish/generated_completions` to prevent NFS stub files from interfering with `_xxhc_cleanup_home`
    - `_xxhc_cleanup_home`: removes `~/.xxh/` immediately so other users on the shared host cannot see it even if the local machine is completely gone (VPN drop, terminal crash, etc.). Safe to delete while running: open file descriptors hold the inodes alive until fish actually exits, so no binary is interrupted mid-execution.
 
