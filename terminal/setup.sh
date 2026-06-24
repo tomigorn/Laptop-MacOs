@@ -157,14 +157,42 @@ build_arch_store x86_64  "x86_64-unknown-linux-musl"  "amd64"
 build_arch_store aarch64 "aarch64-unknown-linux-musl" "aarch64"
 
 # ── 7. Stage default (x86_64) binaries in xxh build dir ──────────────────────
-# xxhc swaps in the correct arch per connect (see xxhc.fish). This default keeps
-# a bare `xxh <host>` (without xxhc) working on x86_64 remotes.
+# This keeps a bare `xxh <host>` (without xxhc) working on x86_64 remotes. `xxhc`
+# itself uses the dedicated per-arch homes built in step 8, not this default.
 step "Stage default x86_64 binaries for xxh uploads"
 build=~/.xxh/.xxh/shells/xxh-shell-fish/build
 rm -rf "$build/fish-portable" "$build/bin"
 cp -R ~/.xxh/arch/x86_64/fish-portable "$build/fish-portable"
 cp -R ~/.xxh/arch/x86_64/bin "$build/bin"
 ok "x86_64 store staged into build dir"
+
+# ── 8. Per-architecture xxh homes ────────────────────────────────────────────
+# Each home is a complete xxh local home with that arch's binaries pre-staged.
+# `xxhc` points `+lh` at the matching home per connect, so concurrent connects to
+# different-architecture hosts never share a build dir (no race), and there is no
+# per-connect binary copy. Built once here; reused on every connect.
+step "Per-architecture xxh homes (used by xxhc via +lh)"
+
+build_arch_home() {
+    local arch=$1
+    local home=~/.xxh-homes/$arch
+    local hbuild="$home/.xxh/shells/xxh-shell-fish/build"
+    if [[ ! -d "$home/.xxh/shells/xxh-shell-fish" ]]; then
+        info "Installing xxh-shell-fish into $home..."
+        xxh +I xxh-shell-fish +lh "$home" >/dev/null
+    fi
+    # Same config symlinks as the default build dir (point at the repo).
+    ln -sf "$SCRIPT_DIR/.xxh/xxh-config.fish"  "$hbuild/xxh-config.fish"
+    ln -sf "$SCRIPT_DIR/.config/starship.toml" "$hbuild/starship.toml"
+    # Stage this arch's binaries (idempotent — replaces any previous payload).
+    rm -rf "$hbuild/fish-portable" "$hbuild/bin"
+    cp -R ~/.xxh/arch/$arch/fish-portable "$hbuild/fish-portable"
+    cp -R ~/.xxh/arch/$arch/bin           "$hbuild/bin"
+    ok "$arch home ready at $home"
+}
+
+build_arch_home x86_64
+build_arch_home aarch64
 
 # ── Done ─────────────────────────────────────────────────────────────────────
 echo

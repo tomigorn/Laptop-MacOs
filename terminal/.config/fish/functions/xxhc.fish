@@ -48,22 +48,19 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
             return 1
     end
 
-    set -l store ~/.xxh/arch/$arch
-    set -l build ~/.xxh/.xxh/shells/xxh-shell-fish/build
-    if not test -d $store/bin; or not test -f $store/fish-portable/bin/fish
+    # Each arch has its own pre-built xxh home (see setup.sh step 8) with that
+    # arch's binaries already staged. Pointing `+lh` at the matching home means
+    # concurrent connects to different-arch hosts never share a build dir — no
+    # race — and there's no per-connect binary copy.
+    set -l lxh ~/.xxh-homes/$arch
+    if not test -f $lxh/.xxh/shells/xxh-shell-fish/build/fish-portable/bin/fish
         set_color --bold red
-        echo "  xxhc: binary store for $arch is missing or incomplete at $store"
-        echo "  Run terminal/setup.sh to populate it."
+        echo "  xxhc: xxh home for $arch is missing or incomplete at $lxh"
+        echo "  Run terminal/setup.sh to build it."
         set_color normal
         ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
         return 1
     end
-
-    # Replace the build dir's binary payload; config symlinks (xxh-config.fish,
-    # starship.toml) and entrypoint.sh are left untouched.
-    rm -rf $build/fish-portable $build/bin
-    cp -R $store/fish-portable $build/fish-portable
-    cp -R $store/bin $build/bin
 
     # Per-user private staging dir on the remote for history-transfer files.
     # Prefer $XDG_RUNTIME_DIR (mode 0700, auto-removed by systemd on logout); fall
@@ -90,6 +87,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
 
     set -l start (date +%s)
     env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
+        +lh $lxh \
         +e "TERM=xterm-256color" \
         +e "XXH_SSH_ALIAS=$target" \
         +e "XXH_CONNECT_START=$start" \

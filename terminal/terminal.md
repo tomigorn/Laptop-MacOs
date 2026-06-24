@@ -32,10 +32,10 @@ The remotes are shared admin accounts used by multiple people. Nothing should be
 All config lives in this git directory (`terminal/`). The real paths (`~/.config/starship.toml`, etc.) are symlinks pointing here. This means editing a file in the repo takes effect immediately with no copy step, and git is always the source of truth. Without symlinks you'd have two copies that drift apart.
 
 **Why per-architecture binary stores?**
-The bundled binaries are native Linux ELF executables. An x86_64 binary cannot run on an ARM host (Raspberry Pi) and vice versa — it fails at exec time with `Exec format error`, even though the scp upload itself succeeds. So we keep one store per architecture under `~/.xxh/arch/<arch>/` (`x86_64`, `aarch64`), each holding fish plus starship/atuin/bat/fastfetch built for that arch. On connect, `xxhc` runs `uname -m` on the remote (over the ControlMaster tunnel) and copies the matching store into the upload directory before xxh sends it. See "Multi-architecture support" below.
+The bundled binaries are native Linux ELF executables. An x86_64 binary cannot run on an ARM host (Raspberry Pi) and vice versa — it fails at exec time with `Exec format error`, even though the scp upload itself succeeds. So we keep one store per architecture under `~/.xxh/arch/<arch>/` (`x86_64`, `aarch64`), each holding fish plus starship/atuin/bat/fastfetch built for that arch. `setup.sh` stages those into a dedicated xxh home per arch (`~/.xxh-homes/<arch>`); on connect, `xxhc` runs `uname -m` on the remote and points xxh at the matching home (`+lh`). See "Multi-architecture support" below.
 
 **Why are binaries plain copies instead of symlinks?**
-The binaries in `~/.xxh/.xxh/shells/xxh-shell-fish/build/` are staged copies of the arch-specific sources in `~/.xxh/arch/<arch>/`. They're the same Linux ELF files; `xxhc` overwrites them on every connect with the arch matching the remote, so a plain copy (not a symlink) is the natural fit.
+Each arch home's build dir (`~/.xxh-homes/<arch>/.xxh/shells/xxh-shell-fish/build/`) holds plain copies of the arch-specific sources in `~/.xxh/arch/<arch>/` — the same Linux ELF files. `setup.sh` stages them once per home; a plain copy (not a symlink) is what xxh expects to upload.
 
 ---
 
@@ -79,16 +79,16 @@ The uploaded binaries are native Linux executables, so they must match the remot
 
 1. After establishing the ControlMaster tunnel, it runs `uname -m` on the remote (reuses the tunnel, effectively instant).
 2. It maps the result to a supported architecture — `x86_64`/`amd64` → `x86_64`, `aarch64`/`arm64` → `aarch64`.
-3. It copies the matching store from `~/.xxh/arch/<arch>/` into the xxh upload directory, replacing the previous arch's binaries. The config symlinks (`xxh-config.fish`, `starship.toml`) are left untouched.
-4. xxh then uploads and runs as usual.
+3. It points xxh (`+lh ~/.xxh-homes/<arch>`) at the **dedicated, pre-built home for that arch** — built once by `setup.sh` (step 8) with that arch's binaries already staged and the config symlinks in place. No per-connect copying.
+4. xxh then uploads that home's build dir and runs as usual.
 
 An unknown or undetectable architecture aborts with a clear message and **no upload** — better than shipping binaries that die with `Exec format error` on the remote.
 
-**Binary vs config:** every *binary* (`fish`, `starship`, `atuin`, `bat`, `fastfetch`) is architecture-specific and lives in the per-arch store. Every *config file* (`starship.toml`, `xxh-config.fish`, atuin config) is shared across all hosts and architectures.
+**Why a home per arch (not one shared build dir):** earlier, `xxhc` copied the matching store into a *single* shared upload dir on every connect. That had a race — two `xxhc` sessions to different-arch hosts started simultaneously could interleave the copy with the other's upload and ship the wrong binaries. Giving each arch its own home removes the shared mutable dir entirely (no race, no lock needed) and also drops the ~73 MB per-connect copy, so connects are a touch faster.
+
+**Binary vs config:** every *binary* (`fish`, `starship`, `atuin`, `bat`, `fastfetch`) is architecture-specific and lives in that arch's home (staged from the per-arch store under `~/.xxh/arch/<arch>/`). Every *config file* (`starship.toml`, `xxh-config.fish`, atuin config) is shared — each home symlinks them from the repo.
 
 **fish source:** fish is the official `fish-shell` 4.x `linux-<arch>` release — a single self-contained binary (functions/completions embedded, no `share/` tree), available for both `x86_64` and `aarch64`. This replaced `xxh/fish-portable`, which only ever published x86_64.
-
-**Known limitation:** the upload directory is shared, so running `xxhc` to two different-architecture hosts *simultaneously* can race on staging. Single-user interactive use makes this unlikely; no locking is in place.
 
 ### What gets uploaded on connect (~73 MB every time)
 
@@ -215,10 +215,13 @@ The last two symlinks point into the xxh build directory — the directory xxh u
 
 ~/.xxh/history/<alias>.db    per-host atuin history, grows across sessions
 
-# xxh upload directory — xxhc overwrites these on every connect with the
-# arch matching the remote (uname -m). Plain copies of the store above.
-~/.xxh/.xxh/shells/xxh-shell-fish/build/fish-portable/bin/{fish,fish.sh}
-~/.xxh/.xxh/shells/xxh-shell-fish/build/bin/{starship,atuin,bat,fastfetch}
+# per-arch xxh homes — built once by setup.sh, selected per connect via +lh.
+# Each home's build dir holds plain copies of that arch's store above.
+~/.xxh-homes/x86_64/.xxh/shells/xxh-shell-fish/build/{bin,fish-portable}
+~/.xxh-homes/aarch64/.xxh/shells/xxh-shell-fish/build/{bin,fish-portable}
+
+# default xxh build dir — only for a bare `xxh <host>` (without xxhc), staged x86_64
+~/.xxh/.xxh/shells/xxh-shell-fish/build/{bin,fish-portable}
 ```
 
 ---
@@ -395,7 +398,7 @@ $CURRENT_DIR/fish "$@"
 
 ### 7. Stage a default arch in the xxh build dir
 
-`xxhc` overwrites the build dir with the correct arch on every connect (see "Multi-architecture support"), but staging one arch as a default keeps a bare `xxh <host>` (without `xxhc`) working:
+`xxhc` uses the per-arch homes from step 8, but staging one arch into the default `~/.xxh` build dir keeps a bare `xxh <host>` (without `xxhc`) working:
 
 ```sh
 build=~/.xxh/.xxh/shells/xxh-shell-fish/build
@@ -404,13 +407,28 @@ cp -R ~/.xxh/arch/x86_64/fish-portable "$build/fish-portable"
 cp -R ~/.xxh/arch/x86_64/bin "$build/bin"
 ```
 
+### 8. Build a dedicated xxh home per arch
+
+`xxhc` points `+lh` at `~/.xxh-homes/<arch>` so each architecture has its own pre-staged build dir — no shared upload dir to race on, and no per-connect copy. `setup.sh` does this for both arches; by hand it's, per arch:
+
+```sh
+home=~/.xxh-homes/<arch>
+build="$home/.xxh/shells/xxh-shell-fish/build"
+xxh +I xxh-shell-fish +lh "$home"                         # one-time: install the shell into this home
+ln -sf $BASE/.xxh/xxh-config.fish  "$build/xxh-config.fish"
+ln -sf $BASE/.config/starship.toml "$build/starship.toml"
+rm -rf "$build/fish-portable" "$build/bin"
+cp -R ~/.xxh/arch/<arch>/fish-portable "$build/fish-portable"
+cp -R ~/.xxh/arch/<arch>/bin           "$build/bin"
+```
+
 ---
 
 ## Updating
 
 **Config files** (`starship.toml`, `xxh-config.fish`, `config.xxhc`, `xxhc.fish`, etc.) — edit the file in this repo. Symlinks make the change live immediately. The remote picks it up on the next connect.
 
-**Binaries** — re-run `setup.sh`. It skips binaries that already exist, so to pick up a newer version first delete the ones you want refreshed (e.g. `rm ~/.xxh/arch/*/bin/starship`), then run `setup.sh` again. It repopulates both architecture stores; `xxhc` stages the right one on the next connect.
+**Binaries** — re-run `setup.sh`. It skips binaries that already exist, so to pick up a newer version first delete the ones you want refreshed (e.g. `rm ~/.xxh/arch/*/bin/starship`), then run `setup.sh` again. It repopulates both architecture stores **and** restages them into the per-arch homes (`~/.xxh-homes/<arch>`), which is what `xxhc` uploads. (To force a clean home rebuild, `rm -rf ~/.xxh-homes` first, then re-run `setup.sh`.)
 
 ---
 
