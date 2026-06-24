@@ -75,6 +75,11 @@ if test -f $CURRENT_DIR/bin/fastfetch
             printf "  Connected in %ss\n\n" $elapsed
         end
         fastfetch
+        # Terminal-setup version, passed in by xxhc (+e XXH_VERSION) so the remote
+        # greeting shows the same version as the local Mac greeting.
+        if set -q XXH_VERSION; and test -n "$XXH_VERSION"
+            printf "\n  Tomigorn's macOS Terminal Setup — v%s\n" $XXH_VERSION
+        end
     end
 
     # clearc = clear + greeting. Shows fastfetch but not the stale

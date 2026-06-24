@@ -424,6 +424,12 @@ cp -R ~/.xxh/arch/<arch>/bin           "$build/bin"
 
 ---
 
+## Versioning
+
+`terminal/VERSION` holds the terminal-setup version (semver). It's shown in the fish greeting **both** locally on the Mac (under fastfetch) and on every `xxhc` connect (forwarded to the remote greeting via `XXH_VERSION`) — so you can tell at a glance which version is live. The local greeting reads `VERSION` live, so a bump shows up in any new shell without reloading anything.
+
+**Bump it on every change** to the terminal setup, in the same commit (patch = fix, minor = feature, major = breaking). This is enforced by the project `.claude/CLAUDE.md` so it isn't forgotten.
+
 ## Updating
 
 **Config files** (`starship.toml`, `xxh-config.fish`, `config.xxhc`, `xxhc.fish`, etc.) — edit the file in this repo. Symlinks make the change live immediately. The remote picks it up on the next connect.
