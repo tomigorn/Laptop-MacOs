@@ -123,6 +123,12 @@ How they divide up:
 ## Obsidian
 Tweaks for [Obsidian](https://obsidian.md/), including a CSS snippet that removes the default strikethrough/dimming on completed tasks. See [obsidian/obsidian.md](obsidian/obsidian.md).
 
+## SSH — waking the sleeping homelab host
+`beefy` is kept asleep to save power; `ssh beefy` auto-wakes it by POSTing to a
+Wake-on-LAN endpoint on `fastpi` before connecting, then retries while it boots.
+See [ssh/ssh.md](ssh/ssh.md). Pairs with the [homelab DNS auto-switcher](homelab-dns/homelab-dns.md)
+so `beefy.homelab` resolves at home and over VPN.
+
 ## Developer Setup
 [Homebrew](https://brew.sh/)
 
