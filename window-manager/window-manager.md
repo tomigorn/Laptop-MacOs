@@ -127,11 +127,14 @@ cross-location confusion.
 window-manager/
 ├── install.sh                  # install / re-run
 ├── uninstall.sh                # remove (keeps zones.conf unless --purge-zones)
-├── build-launcher.sh           # builds the Spotlight launcher app
-├── launcher.sh                 # the app's executable (opens config in VS Code)
-├── Info.plist                  # the app's bundle metadata
-├── make-icon.sh                # regenerates AppIcon.icns from an SF Symbol
-├── AppIcon.icns                # the launcher's icon (white tiling glyph on blue)
+├── build-launcher.sh           # builds both Spotlight launcher apps
+├── launcher.sh                 # "yabai window manager" executable (opens config in VS Code)
+├── Info.plist                  # "yabai window manager" bundle metadata
+├── restart-launcher.sh         # "… - restart" executable (restarts yabai + skhd)
+├── restart-Info.plist          # "… - restart" bundle metadata
+├── make-icon.sh                # regenerates an .icns from an SF Symbol
+├── AppIcon.icns                # config launcher's icon (white tiling glyph on blue)
+├── RestartIcon.icns            # restart launcher's icon (white refresh glyph on blue)
 ├── window-manager.md           # this file
 └── config/
     ├── yabairc                 # → ~/.config/yabai/yabairc
@@ -145,15 +148,25 @@ window-manager/
 real files), copies `zones.conf.example` to the live, machine-local
 `zones.conf` only if it doesn't exist yet, and builds the Spotlight launcher.
 
-## Spotlight launcher
+## Spotlight launchers
 
-`install.sh` (via `build-launcher.sh`) creates
-`~/Applications/yabai window manager.app`. Type **`yabai`** in Spotlight and hit
-Enter to open `~/.config/yabai` in VS Code. The app's executable and `Info.plist`
-are symlinked back into this repo, so it's the source of truth; re-run
-`build-launcher.sh` after editing them. Its icon is `AppIcon.icns` — regenerate
-it with `./make-icon.sh` (optionally pass a different SF Symbol name, e.g.
-`./make-icon.sh rectangle.split.2x1`), then re-run `build-launcher.sh`.
+`install.sh` (via `build-launcher.sh`) creates **two** apps in `~/Applications`.
+Both are found by typing **`yabai`** or **`window manager`** in Spotlight:
+
+| App | What it does |
+|-----|--------------|
+| `yabai window manager` | opens `~/.config/yabai` in VS Code |
+| `yabai window manager - restart` | restarts the yabai + skhd services (notifies when done) |
+
+Use **restart** when a window won't move/snap (e.g. a fullscreen-video window
+yabai lost its Accessibility handle to — see [Known limitations](#known-limitations))
+or when the keyboard shortcuts stop firing.
+
+Each app's executable and `Info.plist` are symlinked back into this repo, so it's
+the source of truth; re-run `build-launcher.sh` after editing them. Icons are
+`AppIcon.icns` (tiling glyph) and `RestartIcon.icns` (refresh glyph) — regenerate
+with `./make-icon.sh [symbol] [out-name]` (e.g.
+`./make-icon.sh arrow.clockwise RestartIcon`), then re-run `build-launcher.sh`.
 
 ## Known limitations
 
@@ -185,7 +198,8 @@ instead of erroring out.
 |---------|-----|
 | Nothing happens on a shortcut | Grant **skhd** Accessibility **and** Input Monitoring, then `skhd --restart-service`. |
 | Windows don't move | Grant **yabai** Accessibility; `yabai --restart-service`. Check `/tmp/yabai_$USER.err.log`. |
-| A specific window won't snap | Likely a window with no Accessibility handle (e.g. **Steam**, some overlays/dialogs) — yabai can't move it without the scripting addition. See [Known limitations](#known-limitations). Expected. |
+| A specific window won't snap | Likely a window with no Accessibility handle (e.g. **Steam**, some overlays/dialogs, a **fullscreen YouTube/video window**) — yabai can't move it without the scripting addition. Exit the video's fullscreen, or launch **yabai window manager - restart** to have yabai re-acquire it. See [Known limitations](#known-limitations). |
+| Window-manager just "bugged out" | Launch **yabai window manager - restart** from Spotlight (or `yabai --restart-service && skhd --restart-service`). |
 | Ratios look wrong on a monitor | Check its `monitor` line is named and has a matching `layout` line in `zones.conf`. |
 | Service won't start | `tail /tmp/{yabai,skhd}_$USER.err.log` |
 

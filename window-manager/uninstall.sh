@@ -39,9 +39,11 @@ for f in "$CONFIG_HOME/yabai/yabairc" \
     if [ -L "$f" ]; then rm -f "$f"; ok "removed $f"; fi
 done
 
-step "Remove Spotlight launcher"
-APP="$HOME/Applications/yabai window manager.app"
-if [ -e "$APP" ]; then rm -rf "$APP"; ok "removed launcher app"; else info "no launcher app"; fi
+step "Remove Spotlight launchers"
+for APP in "$HOME/Applications/yabai window manager.app" \
+           "$HOME/Applications/yabai window manager - restart.app"; do
+    if [ -e "$APP" ]; then rm -rf "$APP"; ok "removed $(basename "$APP")"; else info "no $(basename "$APP")"; fi
+done
 
 step "zones.conf"
 if [ "$PURGE_ZONES" -eq 1 ]; then

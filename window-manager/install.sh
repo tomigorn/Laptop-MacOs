@@ -108,13 +108,14 @@ else
     fi
 fi
 
-# ── 5. Spotlight launcher app ────────────────────────────────────────────────
-step "Spotlight launcher: \"yabai window manager.app\""
+# ── 5. Spotlight launcher apps ───────────────────────────────────────────────
+step "Spotlight launchers (\"yabai window manager\" + \"… - restart\")"
 "$SCRIPT_DIR/build-launcher.sh" | sed 's/^/   /'
-ok "type 'yabai' in Spotlight to open the config folder in VS Code"
+ok "type 'yabai' in Spotlight: open the config in VS Code, or restart the services"
 
 step "Done"
 info "Shortcuts:  ⌃⌥ ←/→  walk window left/right (crosses displays)"
 info "            ⌃⌥ ↑    fill the display"
 info "Edit sizes: $CONFIG_HOME/yabai/zones.conf   (no restart needed)"
-info "Spotlight:  type 'yabai' → opens this folder in VS Code"
+info "Spotlight:  'yabai window manager' → open config in VS Code"
+info "            'yabai window manager - restart' → restart yabai + skhd"

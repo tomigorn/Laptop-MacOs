@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Generates AppIcon.icns for the "yabai window manager" launcher: a white
-# window-tiling SF Symbol on a blue rounded-rect. Re-run after changing it,
-# then run build-launcher.sh to apply. Optional arg: a different SF Symbol name.
+# Generates a launcher icon: a white SF Symbol on a blue rounded-rect. Re-run
+# after changing it, then run build-launcher.sh to apply.
+#   make-icon.sh [symbol] [out-name]
+#     symbol    SF Symbol name          (default: rectangle.split.3x1)
+#     out-name  basename of the .icns   (default: AppIcon -> AppIcon.icns)
+# Examples:
+#   ./make-icon.sh                              # AppIcon.icns  (config launcher)
+#   ./make-icon.sh arrow.clockwise RestartIcon  # RestartIcon.icns (restart launcher)
 set -euo pipefail
 
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 SYMBOL="${1:-rectangle.split.3x1}"
+OUT="${2:-AppIcon}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 SWIFT="$TMP/mkicon.swift"; PNG="$TMP/icon.png"
 
@@ -44,5 +50,5 @@ for spec in "16 16x16" "32 16x16@2x" "32 32x32" "64 32x32@2x" "128 128x128" \
   set -- $spec
   sips -z "$1" "$1" "$PNG" --out "$ICONSET/icon_$2.png" >/dev/null
 done
-iconutil -c icns "$ICONSET" -o "$SRC_DIR/AppIcon.icns"
-echo "wrote $SRC_DIR/AppIcon.icns (symbol: $SYMBOL)"
+iconutil -c icns "$ICONSET" -o "$SRC_DIR/$OUT.icns"
+echo "wrote $SRC_DIR/$OUT.icns (symbol: $SYMBOL)"
