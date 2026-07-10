@@ -69,6 +69,21 @@ Configures the prompt. Key design decisions:
 - `env_var.XXH_SSH_ALIAS` only renders when `$XXH_SSH_ALIAS` is set, which only happens via `xxhc` — so `(myserver)` never clutters the local prompt
 - `git_status` uses full-word labels (`!modified`, `?untracked`, etc.) instead of symbols alone for clarity
 
+### Tab-completion for your own scripts
+
+Fish autoloads a command's completions from `~/.config/fish/completions/<cmd>.fish` — but **only when `<cmd>` is resolvable on `$PATH`**. A script you only ever run as `./tool.py` from its own folder never triggers autoload (fish just offers filenames, which looks like completion is "broken"). There's no rescan to trigger — the fix is to get the command on `$PATH`. So for a custom tool, two symlinks:
+
+```fish
+# 1. put the script on PATH (also lets you run it from any directory)
+ln -sf /path/to/tool.py ~/.local/bin/tool.py
+# 2. symlink its completion into fish's completions dir
+ln -sf /path/to/tool.py.fish ~/.config/fish/completions/tool.py.fish
+```
+
+Open a new shell (or `source` the completion file) and `<Tab>` works, for both `tool.py` and `./tool.py`.
+
+Concrete example: the `sync-from-gitlab.py` mirror tool (in `~/development/work/search-repos`) ships its own completion under `completions/`, and those two symlinks wire it in. The completion lives **with the tool**, not in this repo — these are just machine-local symlinks, so `setup.sh` doesn't manage them (it doesn't touch `~/.config/fish/completions/` at all today).
+
 ---
 
 ## Remote setup via xxh
