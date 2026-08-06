@@ -1,2 +1,2 @@
 #!/bin/bash
-exec ssh -o ControlMaster=no -o ControlPath=none "$@"
+exec ssh -o ControlMaster=no -o ControlPath=none -o Compression=yes "$@"

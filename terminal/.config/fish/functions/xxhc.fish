@@ -20,7 +20,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # same connection. Without this, every operation creates a fresh tunnel
     # through the jump host, which is slow and can fail for hosts behind ProxyJump.
     mkdir -p ~/.ssh/cm
-    ssh -o ControlMaster=auto -o ControlPath=$cm_path -fN -o ConnectTimeout=30 $target 2>/dev/null
+    ssh -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes -fN -o ConnectTimeout=30 $target 2>/dev/null
     # Non-fatal: if the master didn't come up, later calls fall back to direct
     # connections (slower). Warn rather than silently degrading the ProxyJump path.
     if not ssh -q -o ControlPath=$cm_path -O check $target 2>/dev/null

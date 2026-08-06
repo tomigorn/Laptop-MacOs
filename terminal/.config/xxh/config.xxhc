@@ -8,5 +8,6 @@ hosts:
     -o:
       - ControlMaster=auto
       - ControlPath=~/.ssh/cm/xxh-%n
+      - Compression=yes
       - ServerAliveInterval=15
       - ServerAliveCountMax=3
