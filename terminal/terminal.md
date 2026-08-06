@@ -325,7 +325,7 @@ search_mode = "fuzzy"
 
 A cold connect is dominated by the SCP upload. Measured *before* compression, on the 79 MB payload: ~6 s on a fast campus link, ~15 s on slower links. With ~27 MB now going over the wire, expect roughly a third of that on bandwidth-limited links — not yet re-measured. On a gigabit LAN the compression step (~42 MB/s) is around break-even, so the gain is concentrated on slow and jumped links, which is where the pain was.
 
-Breakdown (x86_64): fish 14.7 + atuin 35.1 + starship 11.9 + fastfetch 3.2 + bat 6.6 = ~71.5 MB on disk, going over SCP as ~27 MB with compression enabled, on every connect. The aarch64 store is smaller — ~61 MB on disk, ~23 MB on the wire. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
+Breakdown (x86_64): fish 14.7 + atuin 35.1 + starship 11.9 + fastfetch 3.2 + bat 6.6 = ~71.5 MB on disk, going over SCP as ~27 MB with compression enabled, on every connect. The aarch64 store is smaller — ~62 MB on disk, ~25 MB on the wire. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
 
 **Why fish 4.x sped this up beyond the size drop:** the old `xxh/fish-portable` was a *directory tree of hundreds of small files* (`share/fish/completions/*`, `functions/*`, …). SCP transfers those one at a time, and the per-file round-trips dominated the upload. The official fish 4.x build is a **single self-contained binary**, so fish now uploads as one ~15 MB transfer instead of hundreds of tiny ones — fewer bytes *and* far fewer round-trips.
 
