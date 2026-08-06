@@ -321,7 +321,47 @@ to:
 Breakdown: fish 15 MB + atuin 35 MB + starship 12 MB + fastfetch 3 MB + bat 7 MB = ~71 MB on disk, which SSH compression takes to ~27 MB over the wire on every connect.
 ```
 
-- [ ] **Step 6: Verify no stale figures remain**
+- [ ] **Step 6: Update the three remaining `~73 MB` figures elsewhere in the file**
+
+These predate this work (they were already stale before it) but the Step 7 grep will fail until they are fixed. Make these exact replacements:
+
+Line ~102, in the "Why a home per arch" paragraph — change:
+
+```
+and also drops the ~73 MB per-connect copy, so connects are a touch faster.
+```
+
+to:
+
+```
+and also drops the ~71 MB per-connect copy, so connects are a touch faster.
+```
+
+Line ~279, in the ControlMaster pre-setup bullet — change:
+
+```
+All subsequent SSH/SCP calls — including xxh's ~73 MB bundle upload — reuse this socket.
+```
+
+to:
+
+```
+All subsequent SSH/SCP calls — including xxh's bundle upload (~71 MB on disk, ~27 MB compressed on the wire) — reuse this socket.
+```
+
+Line ~462, in the usage example — change:
+
+```
+Uploads ~73 MB, drops into fish. On exit, merges remote history into local atuin.
+```
+
+to:
+
+```
+Uploads ~27 MB (compressed), drops into fish. On exit, merges remote history into local atuin.
+```
+
+- [ ] **Step 7: Verify no stale figures remain**
 
 ```bash
 grep -n "73 MB\|79 MB\|~11 MB" terminal/terminal.md
@@ -329,7 +369,7 @@ grep -n "73 MB\|79 MB\|~11 MB" terminal/terminal.md
 
 Expected: no output. Any match is a figure that was missed.
 
-- [ ] **Step 7: Bump SETUP_VERSION**
+- [ ] **Step 8: Bump SETUP_VERSION**
 
 This changes connect behaviour, not just docs, so it is a minor bump. Change `terminal/SETUP_VERSION` from `1.1.2` to:
 
@@ -337,7 +377,7 @@ This changes connect behaviour, not just docs, so it is a minor bump. Change `te
 1.2.0
 ```
 
-- [ ] **Step 8: Verify the greeting shows the new version**
+- [ ] **Step 9: Verify the greeting shows the new version**
 
 ```bash
 fish -l -i -c 'fish_greeting' 2>&1 | tail -2
@@ -345,7 +385,7 @@ fish -l -i -c 'fish_greeting' 2>&1 | tail -2
 
 Expected: the badge reads `Tomigorn's macOS Terminal Setup — v1.2.0`.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add terminal/terminal.md terminal/SETUP_VERSION
@@ -419,10 +459,10 @@ The fastfetch change is inert by comparison — it only swaps which file is uplo
 - Spec verification item 5 (payload size) → Task 3 Steps 5-6 ✓
 - Spec verification item 4 (live connect) → Task 5 ✓
 - Spec documentation section (three figures, config table, fastfetch note) → Task 4 ✓
-- Spec version bump → Task 4 Step 7 ✓
+- Spec version bump → Task 4 Step 8 ✓
 
 **Placeholder scan:** No TBDs. Every step has the literal text or command to run and its expected output.
 
-**Consistency:** `ff_label` values (`amd64`, `aarch64`) match `build_arch_store`'s existing call sites. Version goes `1.1.2 → 1.2.0` consistently in Task 4 Steps 7-9. The 27.2 MB figure is used consistently and is measured, not estimated.
+**Consistency:** `ff_label` values (`amd64`, `aarch64`) match `build_arch_store`'s existing call sites. Version goes `1.1.2 → 1.2.0` consistently in Task 4 Steps 8-10. The 27.2 MB figure is used consistently and is measured, not estimated.
 
 **Known gap:** Task 5 cannot be executed by an agent. It is called out as user-run rather than silently skipped.
