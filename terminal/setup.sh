@@ -150,7 +150,10 @@ build_arch_store() {
     download_binary "$store/bin/starship"  "starship/starship"        "$triple.tar.gz"         "starship"
     download_binary "$store/bin/atuin"     "atuinsh/atuin"            "atuin-$triple.tar.gz"   "atuin-$triple/atuin"
     download_binary "$store/bin/bat"       "sharkdp/bat"              "$triple.tar.gz"         "find:bat"
-    download_binary "$store/bin/fastfetch" "fastfetch-cli/fastfetch"  "linux-$ff_label.tar.gz" "fastfetch-linux-$ff_label/usr/bin/fastfetch"
+    # -polyfilled is the same build with debug info stripped (11.1 MB -> 3.1 MB),
+    # same GLIBC_2.34 floor as the plain asset. Keep the suffix or the payload
+    # silently grows by 8 MB per connect.
+    download_binary "$store/bin/fastfetch" "fastfetch-cli/fastfetch"  "linux-$ff_label-polyfilled.tar.gz" "fastfetch-linux-$ff_label-polyfilled/usr/bin/fastfetch"
 }
 
 build_arch_store x86_64  "x86_64-unknown-linux-musl"  "amd64"
