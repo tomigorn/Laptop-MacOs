@@ -33,7 +33,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # The bundle ships native binaries; uploading the wrong arch fails at exec
     # time ("Exec format error"). Detect over the ControlMaster tunnel, then copy
     # the matching store into the xxh build dir before xxh uploads it.
-    set -l remote_uname (ssh -o ControlMaster=auto -o ControlPath=$cm_path -o ConnectTimeout=10 $target uname -m 2>/dev/null)
+    set -l remote_uname (ssh -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes -o ConnectTimeout=10 $target uname -m 2>/dev/null)
     set -l arch
     switch $remote_uname
         case x86_64 amd64
@@ -72,7 +72,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # Prefer $XDG_RUNTIME_DIR (mode 0700, auto-removed by systemd on logout); fall
     # back to a 0700 dir in /tmp. Keeps your command history out of world-readable
     # shared /tmp and leaves nothing behind even if the connection later drops.
-    set -l stage (ssh -o ControlPath=$cm_path -o ConnectTimeout=10 $target \
+    set -l stage (ssh -o ControlPath=$cm_path -o Compression=yes -o ConnectTimeout=10 $target \
         'd="${XDG_RUNTIME_DIR:-/tmp/.xxh-$(id -u)}"; mkdir -p "$d" && chmod 700 "$d" && printf %s "$d"' 2>/dev/null)
     test -z "$stage"; and set stage /tmp
     set -l remote_preseed "$stage/xxh_atuin_pre_$target.db"
@@ -86,7 +86,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
             set -l clean_preseed /tmp/.xxh_atuin_pre_clean_$target.db
             rm -f $clean_preseed                                  # VACUUM INTO errors if the dest exists
             sqlite3 $host_db "VACUUM INTO '$clean_preseed';" 2>/dev/null
-            and scp -q -o ControlPath=$cm_path $clean_preseed "$target:$remote_preseed" 2>/dev/null
+            and scp -q -o ControlPath=$cm_path -o Compression=yes $clean_preseed "$target:$remote_preseed" 2>/dev/null
             rm -f $clean_preseed
         end
     end
@@ -103,15 +103,15 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         $argv[2..-1]
 
     # Belt-and-suspenders: remove ~/.xxh if the fish_exit handler didn't (e.g. fish was SIGKILL'd).
-    ssh -q -o ControlMaster=auto -o ControlPath=$cm_path $target "rm -rf ~/.xxh 2>/dev/null" 2>/dev/null
+    ssh -q -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes $target "rm -rf ~/.xxh 2>/dev/null" 2>/dev/null
 
     # Retrieve the remote atuin DB. The remote folds its WAL into the main file when
     # it has sqlite3; when it doesn't, the -wal/-shm sidecars carry the recent rows,
     # so we fetch them too and checkpoint here (the Mac always has sqlite3). Either
     # way the merge below reads a single consolidated file.
-    if scp -q -o ControlPath=$cm_path "$target:$remote_db" $tmp_db 2>/dev/null
-        scp -q -o ControlPath=$cm_path "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
-        scp -q -o ControlPath=$cm_path "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
+    if scp -q -o ControlPath=$cm_path -o Compression=yes "$target:$remote_db" $tmp_db 2>/dev/null
+        scp -q -o ControlPath=$cm_path -o Compression=yes "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
+        scp -q -o ControlPath=$cm_path -o Compression=yes "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
         sqlite3 $tmp_db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null
 
         # Columns are named explicitly (not SELECT *) so a schema column-order
@@ -139,14 +139,14 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
             sqlite3 $tmp_db "VACUUM INTO '$host_db';"
         end
 
-        ssh -q -o ControlPath=$cm_path $target "rm -f $remote_db $remote_db-wal $remote_db-shm $remote_preseed" 2>/dev/null
+        ssh -q -o ControlPath=$cm_path -o Compression=yes $target "rm -f $remote_db $remote_db-wal $remote_db-shm $remote_preseed" 2>/dev/null
         rm -f $tmp_db $tmp_db-wal $tmp_db-shm
     end
 
     # Verify ~/.xxh was removed. Ask the remote to report PRESENT/ABSENT explicitly
     # so a *failed* SSH (e.g. the connection is already gone) can't be misread as
     # "verified clean" — that earlier bug printed the green all-clear on any ssh error.
-    set -l xxh_state (ssh -q -o ControlPath=$cm_path -o ConnectTimeout=10 $target \
+    set -l xxh_state (ssh -q -o ControlPath=$cm_path -o Compression=yes -o ConnectTimeout=10 $target \
         "test -d ~/.xxh && echo PRESENT || echo ABSENT" 2>/dev/null)
     if test "$xxh_state" = PRESENT
         set_color --bold red
