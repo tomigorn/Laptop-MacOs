@@ -105,14 +105,14 @@ An unknown or undetectable architecture aborts with a clear message and **no upl
 
 **fish source:** fish is the official `fish-shell` 4.x `linux-<arch>` release — a single self-contained binary (functions/completions embedded, no `share/` tree), available for both `x86_64` and `aarch64`. This replaced `xxh/fish-portable`, which only ever published x86_64.
 
-### What gets uploaded on connect (~73 MB every time)
+### What gets uploaded on connect (~79 MB every time)
 
 | File | Size | Purpose |
 |---|---|---|
-| `fish-portable/bin/fish` | ~14 MB | Single self-contained fish 4.x binary, runs on any Linux |
-| `atuin` | ~30 MB | Shell history with search |
+| `fish-portable/bin/fish` | ~15 MB | Single self-contained fish 4.x binary, runs on any Linux |
+| `atuin` | ~35 MB | Shell history with search |
 | `starship` | ~12 MB | Prompt binary |
-| `fastfetch` | ~10 MB | System info greeting |
+| `fastfetch` | ~11 MB | System info greeting |
 | `bat` | ~7 MB | Syntax-highlighting file viewer |
 | `xxh-config.fish`, `starship.toml`, entrypoint | <1 MB | Config and session bootstrap |
 
@@ -319,9 +319,9 @@ search_mode = "fuzzy"
 
 A cold connect is dominated by the SCP upload. On a fast campus link this is ~6 s; on slower links closer to ~15 s.
 
-Breakdown: fish 14 MB + atuin 30 MB + starship 12 MB + fastfetch 10 MB + bat 7 MB = ~73 MB uploaded over SCP on every connect. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
+Breakdown: fish 15 MB + atuin 35 MB + starship 12 MB + fastfetch 11 MB + bat 7 MB = ~79 MB uploaded over SCP on every connect. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
 
-**Why fish 4.x sped this up beyond the size drop:** the old `xxh/fish-portable` was a *directory tree of hundreds of small files* (`share/fish/completions/*`, `functions/*`, …). SCP transfers those one at a time, and the per-file round-trips dominated the upload. The official fish 4.x build is a **single self-contained binary**, so fish now uploads as one ~14 MB transfer instead of hundreds of tiny ones — fewer bytes *and* far fewer round-trips.
+**Why fish 4.x sped this up beyond the size drop:** the old `xxh/fish-portable` was a *directory tree of hundreds of small files* (`share/fish/completions/*`, `functions/*`, …). SCP transfers those one at a time, and the per-file round-trips dominated the upload. The official fish 4.x build is a **single self-contained binary**, so fish now uploads as one ~15 MB transfer instead of hundreds of tiny ones — fewer bytes *and* far fewer round-trips.
 
 ---
 
