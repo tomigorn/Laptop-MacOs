@@ -21,11 +21,13 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # through the jump host, which is slow and can fail for hosts behind ProxyJump.
     mkdir -p ~/.ssh/cm
     ssh -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes -fN -o ConnectTimeout=30 $target 2>/dev/null
-    # Non-fatal: if the master didn't come up, later calls fall back to direct
-    # connections (slower). Warn rather than silently degrading the ProxyJump path.
+    # Non-fatal: if the master didn't come up, the next call with ControlMaster=auto
+    # adopts the role instead and ControlPersist (~/.ssh/config) keeps it alive, so
+    # reuse still happens — just one connection setup later. Warn so the extra
+    # round-trip on the ProxyJump path is visible rather than silent.
     if not ssh -q -o ControlPath=$cm_path -O check $target 2>/dev/null
         set_color yellow
-        echo "  xxhc: ControlMaster tunnel not established — continuing without connection reuse (slower)."
+        echo "  xxhc: ControlMaster pre-setup failed — a later call will establish the tunnel instead."
         set_color normal
     end
 
