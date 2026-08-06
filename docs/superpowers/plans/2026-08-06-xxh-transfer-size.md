@@ -105,6 +105,13 @@ silently ignored on the normal path."
 
 Note: `SETUP_VERSION` is intentionally NOT bumped here. Task 4 bumps it once for the whole change.
 
+**Amended during execution:** Steps 2-4 above covered only `xxhc.fish:23`. Review found
+that `Host *` in `~/.ssh/config` sets `ControlMaster auto`, so any ssh/scp call can
+create the master. The flag was added to all nine remaining transport-creating calls
+(lines 36, 75, 89, 106, 112, 113, 114, 142, 149) in a follow-up commit, and the
+ControlMaster fallback warning at line 28 was corrected — it claimed reuse stops on
+failure, which was never true.
+
 ---
 
 ### Task 2: Switch fastfetch to the stripped `-polyfilled` build

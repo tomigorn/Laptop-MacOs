@@ -62,7 +62,16 @@ It must be set in three places:
 | `config.xxhc` `-o` list | covers the fallback where no master socket exists and xxh's scp connects directly |
 | `.xxh/ssh-wrapper.sh` | deliberately sets `ControlMaster=no ControlPath=none`, so it bypasses multiplexing and needs its own flag |
 
-The third is currently dormant (it is the `RSYNC_RSH` path, and rsync is
+**Correction (found during implementation).** The above is incomplete. `~/.ssh/config`
+sets `ControlMaster auto` under `Host *`, and the `xxhc` call sites override only
+`ControlPath` — so *every* ssh/scp call in `xxhc.fish` can create the master, not just
+the `-fN` one. When line 23 fails (the case the yellow warning exists to report), the
+`uname -m` call adopts the role and `ControlPersist` keeps it alive for the upload.
+The flag is therefore set on all ten transport-creating calls. The four `-O check` /
+`-O stop` control operations are correctly excluded: they act on an existing socket
+and never create a transport.
+
+The third table row is currently dormant (it is the `RSYNC_RSH` path, and rsync is
 disabled), but is included so the setting is not missing if that path is ever
 reached.
 
