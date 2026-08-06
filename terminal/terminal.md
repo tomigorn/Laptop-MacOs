@@ -202,7 +202,7 @@ terminal/
         xxhc.fish                         xxh connect wrapper + history sync
 
   .xxh/
-    ssh-wrapper.sh                        forces ControlMaster=no for SCP compat
+    ssh-wrapper.sh                        forces ControlMaster=no + Compression=yes for the (dormant) rsync path
     xxh-config.fish                       fish session init on the remote
 ```
 
@@ -260,6 +260,7 @@ hosts:
     -o:
       - ControlMaster=auto
       - ControlPath=~/.ssh/cm/xxh-%n
+      - Compression=yes
       - ServerAliveInterval=15
       - ServerAliveCountMax=3
 ```
@@ -281,7 +282,7 @@ hosts:
 
 The connect wrapper. The authoritative source is [`fish/functions/xxhc.fish`](.config/fish/functions/xxhc.fish) — what follows is the behavioral walkthrough (kept here so the design stays documented without duplicating the full source, which only drifts).
 
-- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's bundle upload (~71 MB on disk, ~27 MB compressed on the wire) — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump. A non-fatal `ssh -O check` right after warns (yellow) if the master didn't come up, rather than silently degrading to per-call connections.
+- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's bundle upload (~71 MB on disk, ~27 MB compressed on the wire) — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump. A non-fatal `ssh -O check` right after warns (yellow) if the pre-setup didn't come up — the next call with `ControlMaster=auto` adopts the master role and `ControlPersist` keeps it alive, so reuse still happens, just one connection setup later.
 - **Private staging dir**: `xxhc` asks the remote (over the master) for `${XDG_RUNTIME_DIR:-/tmp/.xxh-$(id -u)}`, creating it `0700`, and uses it for all history-transfer files — keeping your command history out of world-readable shared `/tmp`. It's passed to the session as `XXH_STAGE_DIR`; a per-session `XXH_STAGE_ID` (`$fish_pid`) namespaces the export file so concurrent sessions to one host don't collide.
 - `TERM=xterm-256color` — set via `+e` so the remote fish process sees the correct terminal type *before it starts*, preventing the "unknown terminal type" warning. Ghostty (and other modern terminals) export a `$TERM` value the remote has no terminfo for; fish checks this at startup, before any config file runs, so setting it inside `xxh-config.fish` is too late.
 - `RSYNC_RSH` — would make rsync bypass ControlMaster if xxh ever called it. Currently dormant twice over: `++copy-method: scp` means the rsync branch is never taken, and xxh builds rsync with an explicit `-e`, which takes precedence over `RSYNC_RSH` anyway
@@ -322,9 +323,9 @@ search_mode = "fuzzy"
 
 ## Performance
 
-A cold connect is dominated by the SCP upload. On a fast campus link this is ~6 s; on slower links closer to ~15 s.
+A cold connect is dominated by the SCP upload. Measured *before* compression, on the 79 MB payload: ~6 s on a fast campus link, ~15 s on slower links. With ~27 MB now going over the wire, expect roughly a third of that on bandwidth-limited links — not yet re-measured. On a gigabit LAN the compression step (~42 MB/s) is around break-even, so the gain is concentrated on slow and jumped links, which is where the pain was.
 
-Breakdown: fish 15 MB + atuin 35 MB + starship 12 MB + fastfetch 3 MB + bat 7 MB = ~71 MB on disk, going over SCP as ~27 MB with compression enabled, on every connect. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
+Breakdown (x86_64): fish 14.7 + atuin 35.1 + starship 11.9 + fastfetch 3.2 + bat 6.6 = ~71.5 MB on disk, going over SCP as ~27 MB with compression enabled, on every connect. The aarch64 store is smaller — ~61 MB on disk, ~23 MB on the wire. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
 
 **Why fish 4.x sped this up beyond the size drop:** the old `xxh/fish-portable` was a *directory tree of hundreds of small files* (`share/fish/completions/*`, `functions/*`, …). SCP transfers those one at a time, and the per-file round-trips dominated the upload. The official fish 4.x build is a **single self-contained binary**, so fish now uploads as one ~15 MB transfer instead of hundreds of tiny ones — fewer bytes *and* far fewer round-trips.
 
@@ -404,7 +405,7 @@ To do it by hand, run the `build_arch_store` helper from `setup.sh` for each arc
 ~/.xxh/arch/<arch>/bin/starship                  # starship/starship, <triple>.tar.gz
 ~/.xxh/arch/<arch>/bin/atuin                     # atuinsh/atuin, atuin-<triple>.tar.gz
 ~/.xxh/arch/<arch>/bin/bat                        # sharkdp/bat, <triple>.tar.gz (version in dir name)
-~/.xxh/arch/<arch>/bin/fastfetch                  # fastfetch-cli/fastfetch, linux-<label>.tar.gz
+~/.xxh/arch/<arch>/bin/fastfetch                  # fastfetch-cli/fastfetch, linux-<label>-polyfilled.tar.gz
 ```
 
 where `<arch>`/`<triple>`/`<label>` are `x86_64`/`x86_64-unknown-linux-musl`/`amd64` and `aarch64`/`aarch64-unknown-linux-musl`/`aarch64`. The `fish.sh` wrapper is:
@@ -454,7 +455,7 @@ cp -R ~/.xxh/arch/<arch>/bin           "$build/bin"
 
 **Config files** (`starship.toml`, `xxh-config.fish`, `config.xxhc`, `xxhc.fish`, etc.) — edit the file in this repo. Symlinks make the change live immediately. The remote picks it up on the next connect.
 
-**Binaries** — re-run `setup.sh`. It skips binaries that already exist, so to pick up a newer version first delete the ones you want refreshed (e.g. `rm ~/.xxh/arch/*/bin/starship`), then run `setup.sh` again. It repopulates both architecture stores **and** restages them into the per-arch homes (`~/.xxh-homes/<arch>`), which is what `xxhc` uploads. (To force a clean home rebuild, `rm -rf ~/.xxh-homes` first, then re-run `setup.sh`.)
+**Binaries** — re-run `setup.sh`. It skips binaries that already exist, so to pick up a newer version first delete the ones you want refreshed (e.g. `rm ~/.xxh/arch/*/bin/starship`), then run `setup.sh` again. It repopulates both architecture stores **and** restages them into the per-arch homes (`~/.xxh-homes/<arch>`), which is what `xxhc` uploads. (To force a clean home rebuild, `rm -rf ~/.xxh-homes` first, then re-run `setup.sh`.) **Upgrading from ≤1.1.2:** run `rm ~/.xxh/arch/*/bin/fastfetch` once before `setup.sh`, or the old unstripped 11 MB binary is skipped and kept — the greeting will read v1.2.0 while the fat binary is still being uploaded.
 
 ---
 
