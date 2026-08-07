@@ -39,8 +39,8 @@ else
 fi
 
 # ── 2. Local tools ────────────────────────────────────────────────────────────
-step "Local tools (fish, starship, fastfetch, atuin, bat, pipx)"
-brew install fish starship fastfetch atuin bat pipx
+step "Local tools (fish, starship, fastfetch, atuin, bat, pipx, zstd)"
+brew install fish starship fastfetch atuin bat pipx zstd
 ok "brew packages installed"
 
 # ── 3. xxh ───────────────────────────────────────────────────────────────────
@@ -71,6 +71,8 @@ symlink "$SCRIPT_DIR/.config/fish/functions/fish_greeting.fish"  ~/.config/fish/
 symlink "$SCRIPT_DIR/.config/fish/functions/clearc.fish"         ~/.config/fish/functions/clearc.fish
 symlink "$SCRIPT_DIR/.xxh/ssh-wrapper.sh"               ~/.xxh/ssh-wrapper.sh
 chmod +x ~/.xxh/ssh-wrapper.sh
+symlink "$SCRIPT_DIR/.xxh/scp-wrapper.sh"               ~/.xxh/scp-wrapper.sh
+chmod +x ~/.xxh/scp-wrapper.sh
 
 # ── 5. Symlinks: xxh build dir ───────────────────────────────────────────────
 step "Symlinks — xxh build dir"

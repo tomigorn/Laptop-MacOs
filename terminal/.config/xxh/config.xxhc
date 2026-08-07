@@ -3,6 +3,7 @@ hosts:
     +s: xxh-shell-fish
     ++pexpect-timeout: "30"
     ++copy-method: scp
+    ++scp-command: ~/.xxh/scp-wrapper.sh
     +if:
     +hhh: "~"
     -o:
