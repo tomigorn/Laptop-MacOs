@@ -26,7 +26,7 @@ Fish has excellent interactive features (completions, syntax highlighting, histo
 SSH ControlMaster multiplexing (used for fast repeated connections) conflicts with how xxh calls rsync internally. Using SCP avoids this entirely.
 
 **Why wipe on disconnect?**
-The remotes are shared admin accounts used by multiple people. Nothing should be left behind — no history, no binaries, no config. The cost is re-uploading the bundle on every connect — ~71 MB on disk, ~27 MB on the wire with SSH compression enabled. Because SSH-level compression is refused on the ETH fleet, that upload goes through `scp-wrapper.sh`, which compresses it locally and unpacks it remotely.
+The remotes are shared admin accounts used by multiple people. Nothing should be left behind — no history, no binaries, no config. The cost is re-uploading the bundle on every connect — ~71 MB on disk, ~26 MB on the wire. SSH-level compression is refused on the ETH fleet, so the upload goes through `scp-wrapper.sh`, which compresses it locally and unpacks it remotely.
 
 **Why symlinks for config files?**
 All config lives in this git directory (`terminal/`). The real paths (`~/.config/starship.toml`, etc.) are symlinks pointing here. This means editing a file in the repo takes effect immediately with no copy step, and git is always the source of truth. Without symlinks you'd have two copies that drift apart.
@@ -107,7 +107,7 @@ An unknown or undetectable architecture aborts with a clear message and **no upl
 
 **fastfetch source:** fastfetch is the official `linux-<arch>-polyfilled` release asset, **not** the plain `linux-<arch>` one. The two are the same build with the same `GLIBC_2.34` floor; the polyfilled variant is simply stripped of DWARF debug info, which takes it from 11.1 MB to 3.1 MB. Dropping the `-polyfilled` suffix silently re-adds ~8 MB to every connect.
 
-### What gets uploaded on connect (~71 MB on disk, ~27 MB on the wire)
+### What gets uploaded on connect (~71 MB on disk, ~26 MB on the wire)
 
 | File | Size | Purpose |
 |---|---|---|
@@ -118,7 +118,7 @@ An unknown or undetectable architecture aborts with a clear message and **no upl
 | `bat` | ~7 MB | Syntax-highlighting file viewer |
 | `xxh-config.fish`, `starship.toml`, entrypoint | <1 MB | Config and session bootstrap |
 
-SSH compression (`-o Compression=yes`) is enabled on the connection, so the ~71 MB on disk goes over the wire as roughly 27 MB — binaries compress to about 38% with zlib.
+The upload goes through `scp-wrapper.sh`, which tar-pipes it through `zstd`, so the ~71 MB on disk crosses the wire as roughly 26 MB. On a remote without `zstd` it uses `gzip` (~27 MB); on one without `tar` it falls back to plain `scp`, where SSH-level `Compression=yes` applies if the server allows it.
 
 The upload happens on every connect because the remote is always wiped on disconnect — there's nothing to reuse.
 
@@ -277,7 +277,7 @@ hosts:
 | `+hhh: "~"` | Set `HOME` to real remote home | Without this, `HOME` is set to `~/.xxh` and `cd ~` lands in the wrong place |
 | `-o ControlMaster=auto` | Reuse existing ControlMaster socket | `xxhc` pre-creates the socket before xxh runs, so xxh's internal SCP reuses the already-established tunnel — critical for hosts behind ProxyJump |
 | `-o ControlPath=~/.ssh/cm/xxh-%n` | Dedicated socket path for xxh connections | Uses a separate path from regular SSH sockets (which use `%r@%h:%p`) to avoid conflicts |
-| `-o Compression=yes` | zlib-compress the transfer | Binaries compress to ~38%, taking the upload from ~71 MB to ~27 MB. Also set on all ten transport-creating ssh/scp calls in `xxhc` — `Host *` in `~/.ssh/config` sets `ControlMaster auto`, so any of them can become the master, and a master created without the flag would carry the whole upload uncompressed |
+| `-o Compression=yes` | zlib-compress the transfer | The bundle upload is handled by `scp-wrapper.sh` now, so this covers the rest: the atuin history transfers in `xxhc`, and the upload itself whenever the wrapper falls back to plain `scp`. Also set on all ten transport-creating ssh/scp calls in `xxhc` — `Host *` in `~/.ssh/config` sets `ControlMaster auto`, so any of them can become the master, and a master created without the flag would carry everything uncompressed. Has no effect on the ETH fleet, which refuses compression |
 | `++scp-command: ~/.xxh/scp-wrapper.sh` | Use the tar-pipe wrapper instead of plain scp | The ETH fleet sets `Compression no` in `/etc/ssh/sshd_config.d/90-eth.conf`, so SSH-level compression is refused and the full payload crosses the wire. The wrapper compresses locally and unpacks remotely. Measured on root6: connect 6.7 s → 2.8 s. Falls back to the real scp on any unmodelled argv, a remote without `tar`, or any pipeline error |
 | `-o ServerAliveInterval=15` | Local SSH client probes server every 15 s | Detects dead connections on flaky networks; causes the local client to exit within 45 s rather than hanging indefinitely |
 | `-o ServerAliveCountMax=3` | Give up after 3 unanswered probes (45 s) | Works with `ServerAliveInterval` to bound how long a broken session idles before the local side gives up |
@@ -286,7 +286,7 @@ hosts:
 
 The connect wrapper. The authoritative source is [`fish/functions/xxhc.fish`](.config/fish/functions/xxhc.fish) — what follows is the behavioral walkthrough (kept here so the design stays documented without duplicating the full source, which only drifts).
 
-- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's bundle upload (~71 MB on disk, ~27 MB compressed on the wire) — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump. A non-fatal `ssh -O check` right after warns (yellow) if the pre-setup didn't come up — the next call with `ControlMaster=auto` adopts the master role and `ControlPersist` keeps it alive, so reuse still happens, just one connection setup later.
+- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's bundle upload (~71 MB on disk, ~26 MB compressed on the wire) — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump. A non-fatal `ssh -O check` right after warns (yellow) if the pre-setup didn't come up — the next call with `ControlMaster=auto` adopts the master role and `ControlPersist` keeps it alive, so reuse still happens, just one connection setup later.
 - **Private staging dir**: `xxhc` asks the remote (over the master) for `${XDG_RUNTIME_DIR:-/tmp/.xxh-$(id -u)}`, creating it `0700`, and uses it for all history-transfer files — keeping your command history out of world-readable shared `/tmp`. It's passed to the session as `XXH_STAGE_DIR`; a per-session `XXH_STAGE_ID` (`$fish_pid`) namespaces the export file so concurrent sessions to one host don't collide.
 - `TERM=xterm-256color` — set via `+e` so the remote fish process sees the correct terminal type *before it starts*, preventing the "unknown terminal type" warning. Ghostty (and other modern terminals) export a `$TERM` value the remote has no terminfo for; fish checks this at startup, before any config file runs, so setting it inside `xxh-config.fish` is too late.
 - `RSYNC_RSH` — would make rsync bypass ControlMaster if xxh ever called it. Currently dormant twice over: `++copy-method: scp` means the rsync branch is never taken, and xxh builds rsync with an explicit `-e`, which takes precedence over `RSYNC_RSH` anyway
@@ -327,9 +327,9 @@ search_mode = "fuzzy"
 
 ## Performance
 
-A cold connect is dominated by the SCP upload. Measured *before* compression, on the 79 MB payload: ~6 s on a fast campus link, ~15 s on slower links. With ~27 MB now going over the wire, expect roughly a third of that on bandwidth-limited links — not yet re-measured. On a gigabit LAN the compression step (~42 MB/s) is around break-even, so the gain is concentrated on slow and jumped links, which is where the pain was.
+A cold connect is dominated by the upload. Measured on root6 over office ethernet (~17 MB/s link), full `xxhc` connect with the ControlMaster socket removed beforehand so tunnel setup is included: **~6.7 s with plain scp, ~2.8 s through the wrapper**. For historical reference, before any of this work the same payload took ~6 s on a fast campus link and ~15 s on slower ones.
 
-Breakdown (x86_64): fish 14.7 + atuin 35.1 + starship 11.9 + fastfetch 3.2 + bat 6.6 = ~71.5 MB on disk, going over SCP as ~27 MB with compression enabled, on every connect. The aarch64 store is smaller — ~62 MB on disk, ~25 MB on the wire. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
+Breakdown (x86_64): fish 14.7 + atuin 35.1 + starship 11.9 + fastfetch 3.2 + bat 6.6 = ~71.5 MB on disk, going over the wire as ~26 MB via the wrapper, on every connect. The aarch64 store is smaller — ~62 MB on disk, ~24 MB on the wire. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
 
 **Why fish 4.x sped this up beyond the size drop:** the old `xxh/fish-portable` was a *directory tree of hundreds of small files* (`share/fish/completions/*`, `functions/*`, …). SCP transfers those one at a time, and the per-file round-trips dominated the upload. The official fish 4.x build is a **single self-contained binary**, so fish now uploads as one ~15 MB transfer instead of hundreds of tiny ones — fewer bytes *and* far fewer round-trips.
 
@@ -489,7 +489,7 @@ cp -R ~/.xxh/arch/<arch>/bin           "$build/bin"
 xxhc myserver
 ```
 
-Uploads ~27 MB (compressed), drops into fish. On exit, merges remote history into local atuin.
+Uploads ~26 MB (compressed), drops into fish. On exit, merges remote history into local atuin.
 
 Pass extra xxh flags after the host name as normal:
 ```sh
