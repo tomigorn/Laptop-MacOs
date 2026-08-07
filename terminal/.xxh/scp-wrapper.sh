@@ -68,8 +68,19 @@ for s in "${srcs[@]}"; do
     tar_args+=( -C "$(dirname -- "$s")" "$(basename -- "$s")" )
 done
 
+# -h (dereference) is REQUIRED, not an optimisation: setup.sh symlinks
+# xxh-config.fish and starship.toml in the build dir back into this repo, and
+# scp -r copies their *contents*. Without -h tar would ship the symlinks
+# themselves, which dangle on the remote and leave the session with no config.
+tar_flags=( -h )
+# bsdtar otherwise writes AppleDouble ._ files and LIBARCHIVE.xattr headers,
+# which litter the remote and make GNU tar print warnings on extract.
+if tar --no-mac-metadata -cf /dev/null -T /dev/null 2>/dev/null; then
+    tar_flags+=( --no-mac-metadata )
+fi
+
 rq=$(squote "$rpath")
-tar -cf - "${tar_args[@]}" \
+tar "${tar_flags[@]}" -cf - "${tar_args[@]}" \
     | "${comp[@]}" \
     | ssh "${ssh_opts[@]}" "$host" "mkdir -p $rq && $decomp | tar -xf - -C $rq" \
     || fallback

@@ -169,6 +169,10 @@ build=~/.xxh/.xxh/shells/xxh-shell-fish/build
 rm -rf "$build/fish-portable" "$build/bin"
 cp -R ~/.xxh/arch/x86_64/fish-portable "$build/fish-portable"
 cp -R ~/.xxh/arch/x86_64/bin "$build/bin"
+# macOS tags files with com.apple.provenance; scp-wrapper.sh tars the tree, and
+# GNU tar on the remote prints "Ignoring unknown extended header keyword" for
+# every tagged file. Harmless but noisy on every connect, so strip them here.
+xattr -cr "$build" 2>/dev/null || true
 ok "x86_64 store staged into build dir"
 
 # ── 8. Per-architecture xxh homes ────────────────────────────────────────────
@@ -193,6 +197,7 @@ build_arch_home() {
     rm -rf "$hbuild/fish-portable" "$hbuild/bin"
     cp -R ~/.xxh/arch/$arch/fish-portable "$hbuild/fish-portable"
     cp -R ~/.xxh/arch/$arch/bin           "$hbuild/bin"
+    xattr -cr "$hbuild" 2>/dev/null || true   # see note in step 7
     ok "$arch home ready at $home"
 }
 
