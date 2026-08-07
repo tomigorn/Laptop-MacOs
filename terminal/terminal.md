@@ -333,6 +333,26 @@ Breakdown (x86_64): fish 14.7 + atuin 35.1 + starship 11.9 + fastfetch 3.2 + bat
 
 **Why fish 4.x sped this up beyond the size drop:** the old `xxh/fish-portable` was a *directory tree of hundreds of small files* (`share/fish/completions/*`, `functions/*`, …). SCP transfers those one at a time, and the per-file round-trips dominated the upload. The official fish 4.x build is a **single self-contained binary**, so fish now uploads as one ~15 MB transfer instead of hundreds of tiny ones — fewer bytes *and* far fewer round-trips.
 
+### Which transfer path a connect used
+
+Every connect prints one line naming the path it took, so a silent downgrade is
+visible rather than something you discover from the clock:
+
+```
+  transfer: tar-pipe + zstd  (fastest)
+  transfer: tar-pipe + gzip  (remote has no zstd)
+  transfer: scp + SSH compression  (wrapper fell back)
+  transfer: scp, UNCOMPRESSED  (wrapper fell back; server refuses compression)
+```
+
+Best first. The first two are `scp-wrapper.sh` doing the work. The last two mean
+the wrapper handed off to real `scp` — an argv shape it does not model, a remote
+without `tar`, or a pipeline error — and are worth investigating: the bottom one
+is the pre-v1.2.0 behaviour and ships the full ~71 MB. The wrapper distinguishes
+the last two by probing what the transport actually negotiated, forcing its own
+connection to do it, since a ControlMaster slave performs no key exchange and so
+reports no compression at all.
+
 **Why there are two compression mechanisms.** SSH-level `Compression=yes` handles
 hosts that allow it. The ETH fleet refuses it via a managed sshd drop-in
 (`/etc/ssh/sshd_config.d/90-eth.conf`), so `scp-wrapper.sh` compresses the payload
