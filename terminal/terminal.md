@@ -26,7 +26,7 @@ Fish has excellent interactive features (completions, syntax highlighting, histo
 SSH ControlMaster multiplexing (used for fast repeated connections) conflicts with how xxh calls rsync internally. Using SCP avoids this entirely.
 
 **Why wipe on disconnect?**
-The remotes are shared admin accounts used by multiple people. Nothing should be left behind — no history, no binaries, no config. The cost is re-uploading the bundle on every connect — ~71 MB on disk, ~27 MB on the wire with SSH compression enabled.
+The remotes are shared admin accounts used by multiple people. Nothing should be left behind — no history, no binaries, no config. The cost is re-uploading the bundle on every connect — ~71 MB on disk, ~27 MB on the wire with SSH compression enabled. Because SSH-level compression is refused on the ETH fleet, that upload goes through `scp-wrapper.sh`, which compresses it locally and unpacks it remotely.
 
 **Why symlinks for config files?**
 All config lives in this git directory (`terminal/`). The real paths (`~/.config/starship.toml`, etc.) are symlinks pointing here. This means editing a file in the repo takes effect immediately with no copy step, and git is always the source of truth. Without symlinks you'd have two copies that drift apart.
@@ -203,6 +203,7 @@ terminal/
 
   .xxh/
     ssh-wrapper.sh                        forces ControlMaster=no + Compression=yes for the (dormant) rsync path
+    scp-wrapper.sh                        tar-pipes the upload through zstd/gzip; falls back to scp
     xxh-config.fish                       fish session init on the remote
 ```
 
@@ -217,6 +218,7 @@ Set up once by `setup.sh` (or manually), then completely transparent:
 ~/.config/fish/functions/fish_greeting.fish             → terminal/.config/fish/functions/fish_greeting.fish
 ~/.config/fish/functions/xxhc.fish                      → terminal/.config/fish/functions/xxhc.fish
 ~/.xxh/ssh-wrapper.sh                                   → terminal/.xxh/ssh-wrapper.sh
+~/.xxh/scp-wrapper.sh                                   → terminal/.xxh/scp-wrapper.sh
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/xxh-config.fish → terminal/.xxh/xxh-config.fish
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/starship.toml   → terminal/.config/starship.toml
 ```
@@ -255,6 +257,7 @@ hosts:
     +s: xxh-shell-fish
     ++pexpect-timeout: "30"
     ++copy-method: scp
+    ++scp-command: ~/.xxh/scp-wrapper.sh
     +if:
     +hhh: "~"
     -o:
@@ -275,6 +278,7 @@ hosts:
 | `-o ControlMaster=auto` | Reuse existing ControlMaster socket | `xxhc` pre-creates the socket before xxh runs, so xxh's internal SCP reuses the already-established tunnel — critical for hosts behind ProxyJump |
 | `-o ControlPath=~/.ssh/cm/xxh-%n` | Dedicated socket path for xxh connections | Uses a separate path from regular SSH sockets (which use `%r@%h:%p`) to avoid conflicts |
 | `-o Compression=yes` | zlib-compress the transfer | Binaries compress to ~38%, taking the upload from ~71 MB to ~27 MB. Also set on all ten transport-creating ssh/scp calls in `xxhc` — `Host *` in `~/.ssh/config` sets `ControlMaster auto`, so any of them can become the master, and a master created without the flag would carry the whole upload uncompressed |
+| `++scp-command: ~/.xxh/scp-wrapper.sh` | Use the tar-pipe wrapper instead of plain scp | The ETH fleet sets `Compression no` in `/etc/ssh/sshd_config.d/90-eth.conf`, so SSH-level compression is refused and the full payload crosses the wire. The wrapper compresses locally and unpacks remotely. Measured on root6: connect 6.7 s → 2.8 s. Falls back to the real scp on any unmodelled argv, a remote without `tar`, or any pipeline error |
 | `-o ServerAliveInterval=15` | Local SSH client probes server every 15 s | Detects dead connections on flaky networks; causes the local client to exit within 45 s rather than hanging indefinitely |
 | `-o ServerAliveCountMax=3` | Give up after 3 unanswered probes (45 s) | Works with `ServerAliveInterval` to bound how long a broken session idles before the local side gives up |
 
@@ -329,6 +333,24 @@ Breakdown (x86_64): fish 14.7 + atuin 35.1 + starship 11.9 + fastfetch 3.2 + bat
 
 **Why fish 4.x sped this up beyond the size drop:** the old `xxh/fish-portable` was a *directory tree of hundreds of small files* (`share/fish/completions/*`, `functions/*`, …). SCP transfers those one at a time, and the per-file round-trips dominated the upload. The official fish 4.x build is a **single self-contained binary**, so fish now uploads as one ~15 MB transfer instead of hundreds of tiny ones — fewer bytes *and* far fewer round-trips.
 
+**Why there are two compression mechanisms.** SSH-level `Compression=yes` handles
+hosts that allow it. The ETH fleet refuses it via a managed sshd drop-in
+(`/etc/ssh/sshd_config.d/90-eth.conf`), so `scp-wrapper.sh` compresses the payload
+itself instead. Both are needed: the wrapper covers only xxh's bundle upload, while
+`Compression=yes` still applies to the atuin history transfers in `xxhc`.
+
+Measured on root6 over office ethernet (~17 MB/s link). Full `xxhc` connect, with
+the ControlMaster socket removed beforehand so tunnel setup is included:
+
+| | connect |
+|---|---|
+| plain scp | ~6.7 s |
+| tar-pipe wrapper | ~2.8 s |
+
+Transfer alone, piped to `/dev/null` so remote disk is excluded: 4.14 s raw,
+2.06 s via gzip, 1.58 s via zstd. Remote disk writes at 633 MB/s, so it is not a
+factor — the wire is.
+
 ---
 
 ## Setup on a new machine
@@ -355,7 +377,7 @@ git clone <repo> ~/development/private/Laptop-MacOs
 ### 2. Install local tools
 
 ```sh
-brew install fish starship fastfetch atuin pipx
+brew install fish starship fastfetch atuin bat pipx zstd
 pipx ensurepath
 # open a new shell or: export PATH="$HOME/.local/bin:$PATH"
 ```
@@ -382,6 +404,8 @@ ln -sf $BASE/.config/fish/functions/fish_greeting.fish   ~/.config/fish/function
 ln -sf $BASE/.config/fish/functions/xxhc.fish            ~/.config/fish/functions/xxhc.fish
 ln -sf $BASE/.xxh/ssh-wrapper.sh                         ~/.xxh/ssh-wrapper.sh
 chmod +x ~/.xxh/ssh-wrapper.sh
+ln -sf $BASE/.xxh/scp-wrapper.sh                         ~/.xxh/scp-wrapper.sh
+chmod +x ~/.xxh/scp-wrapper.sh
 ```
 
 ### 5. Create symlinks into the xxh build dir
