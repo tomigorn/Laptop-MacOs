@@ -126,13 +126,20 @@ The upload happens on every connect because the remote is always wiped on discon
 
 On connect the greeting prints:
 ```
-  Connected in 15s
-
 [fastfetch output — OS, CPU, memory, uptime, hostname, distro logo]
+
+    Tomigorn's xxhc Terminal Setup — v1.4.1
+  Connected in 15.3s
 
 tomigorn @ remote-host (myserver) ~
 ›
 ```
+
+The connect time is measured end to end: the clock starts on the *first line* of
+`xxhc` (before the ControlMaster dial, arch probe, staging-dir probe and history
+pre-seed) and is read at the *end* of the greeting (after fastfetch has rendered),
+so the figure matches the wait you actually experience — from pressing enter to
+getting the prompt back. It is shown to a tenth of a second.
 
 | Prompt part | Meaning | Colour | When shown |
 |---|---|---|---|
@@ -286,12 +293,13 @@ hosts:
 
 The connect wrapper. The authoritative source is [`fish/functions/xxhc.fish`](.config/fish/functions/xxhc.fish) — what follows is the behavioral walkthrough (kept here so the design stays documented without duplicating the full source, which only drifts).
 
-- **ControlMaster pre-setup**: before anything else, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's bundle upload (~71 MB on disk, ~26 MB compressed on the wire) — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump. A non-fatal `ssh -O check` right after warns (yellow) if the pre-setup didn't come up — the next call with `ControlMaster=auto` adopts the master role and `ControlPersist` keeps it alive, so reuse still happens, just one connection setup later.
+- **Connect timer**: the very first statement of the function stamps `$start` (`date +%s.%N`), so everything below — including the ControlMaster dial through the jump host and the history pre-seed — counts toward the connect time reported by the remote greeting.
+- **ControlMaster pre-setup**: before anything else *that touches the network*, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's bundle upload (~71 MB on disk, ~26 MB compressed on the wire) — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump. A non-fatal `ssh -O check` right after warns (yellow) if the pre-setup didn't come up — the next call with `ControlMaster=auto` adopts the master role and `ControlPersist` keeps it alive, so reuse still happens, just one connection setup later.
 - **Private staging dir**: `xxhc` asks the remote (over the master) for `${XDG_RUNTIME_DIR:-/tmp/.xxh-$(id -u)}`, creating it `0700`, and uses it for all history-transfer files — keeping your command history out of world-readable shared `/tmp`. It's passed to the session as `XXH_STAGE_DIR`; a per-session `XXH_STAGE_ID` (`$fish_pid`) namespaces the export file so concurrent sessions to one host don't collide.
 - `TERM=xterm-256color` — set via `+e` so the remote fish process sees the correct terminal type *before it starts*, preventing the "unknown terminal type" warning. Ghostty (and other modern terminals) export a `$TERM` value the remote has no terminfo for; fish checks this at startup, before any config file runs, so setting it inside `xxh-config.fish` is too late.
 - `RSYNC_RSH` — would make rsync bypass ControlMaster if xxh ever called it. Currently dormant twice over: `++copy-method: scp` means the rsync branch is never taken, and xxh builds rsync with an explicit `-e`, which takes precedence over `RSYNC_RSH` anyway
 - `XXH_SSH_ALIAS` — the alias you typed; forwarded to the remote so the prompt shows `(myserver)`
-- `XXH_CONNECT_START` — Unix timestamp before connecting; remote greeting subtracts it to show total connection time
+- `XXH_CONNECT_START` — Unix timestamp with sub-second precision (`date +%s.%N`), stamped on the **first line of `xxhc`** so every pre-connect step above is inside the measurement; the remote greeting subtracts it after fastfetch renders to show the true end-to-end connection time. Because it is stamped on the Mac and compared against the remote's clock, a badly-skewed remote clock would skew the figure — the greeting prints nothing rather than a negative number if that happens
 - **Pre-seed**: before xxh runs, if `~/.xxh/history/<alias>.db` exists and has a history table, a clean copy (via `VACUUM INTO`, with the destination `rm -f`'d first since `VACUUM INTO` errors on an existing file) is SCP'd into the remote staging dir for atuin to load at startup
 - **WAL handling**: atuin uses SQLite WAL mode so recent writes are in `-wal`. The remote checkpoints (`TRUNCATE`) when it has `sqlite3`, and copies any `-wal`/`-shm` sidecars regardless; the Mac (which always has `sqlite3`) fetches them and checkpoints again before reading — so nothing is lost on hosts without `sqlite3`
 - **Merge**: into local atuin with `INSERT OR IGNORE` over an **explicit column list** (`id,timestamp,duration,exit,command,cwd,session,hostname,deleted_at`) so a schema column-order change between atuin versions can't misalign data; sqlite errors on the merge are deliberately *not* hidden so a failed merge is visible
@@ -308,7 +316,7 @@ The fish session init that runs on the remote. In order:
 2. **ssh-agent attach** — finds an `ssh-agent` socket already running for the user under `/tmp/ssh-*/agent.*` and attaches to it (`SSH_AUTH_SOCK`); loads the keys if the agent is empty; starts a fresh agent only if none exists. xxh's portable fish never sources `/etc/profile.d`, so without this it would miss the host's system ssh-key-handler (`/etc/profile.d/03-ssh-key-handler.sh` on ETH s4d hosts) — and every onward hop (e.g. `ssh opennebula`) and key-dependent command would re-prompt for the key passphrase. This replicates that handler's find/attach logic so `xxhc` sessions reuse the same already-unlocked key as a normal `ssh` login. (`ssh-add -l` exit codes: 0 = has keys, 1 = reachable but empty, 2 = stale socket.)
 3. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, atuin, and bat are all in PATH
 4. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
-5. **Greeting** — defines `fish_greeting` to print connection time (from `XXH_CONNECT_START`) then run fastfetch
+5. **Greeting** — defines `fish_greeting` to run fastfetch, then the version badge, then the connect-time line (from `XXH_CONNECT_START`). The timer is read *last*, so fastfetch's own render cost is inside the reported figure rather than outside it. `clearc` and the post-`ssh`-hop re-greet reuse the same pieces minus the timer, which is only meaningful at connect time.
 6. **Atuin** — if a preseed file exists in the private staging dir (`_xxhc_stage_dir`, i.e. `$XXH_STAGE_DIR`/`$XDG_RUNTIME_DIR`, not shared `/tmp`), copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config (`auto_sync = false`, which keeps the direct-SQL merge safe — see "Remote atuin history sync") and initialises atuin.
 7. **`fish_exit` handlers** — two handlers registered in definition order:
    - `_xxhc_export_history`: checkpoints the atuin DB's WAL into the main file (`PRAGMA wal_checkpoint(TRUNCATE)`, when the host has `sqlite3`) and copies it — plus any `-wal`/`-shm` sidecars as a fallback — into the private staging dir (`chmod 600`), under a per-session filename (`$XXH_STAGE_ID`) so `xxhc` can retrieve it after the session ends without concurrent sessions colliding; also removes `fish/generated_completions` to prevent NFS stub files from interfering with `_xxhc_cleanup_home`

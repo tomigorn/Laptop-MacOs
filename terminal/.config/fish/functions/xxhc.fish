@@ -1,4 +1,17 @@
 function xxhc --description "xxh with SSH alias forwarded to remote prompt"
+    # ── Connect timer: start it on the very first line ──────────────────────────
+    # This must come before ANY work. Everything below — the ControlMaster setup
+    # (which dials through ProxyJump on jump-hosted targets), the `-O check`, the
+    # arch probe, the staging-dir probe, and the history pre-seed VACUUM + scp —
+    # runs before `xxh` is ever invoked, and all of it is wall-clock the user waits
+    # through. Starting the timer just above the `xxh` call hid those seconds and
+    # made the greeting under-report by 2-3s.
+    #
+    # `%N` gives sub-second precision (supported by both GNU date and macOS date);
+    # the guard falls back to whole seconds on anything that doesn't support it.
+    set -l start (date +%s.%N 2>/dev/null)
+    string match -qr '^[0-9]+(\.[0-9]+)?$' -- "$start"; or set start (date +%s)
+
     set -l target $argv[1]
     set -l host_db ~/.xxh/history/$target.db
     set -l local_db ~/.local/share/atuin/history.db
@@ -93,7 +106,6 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         end
     end
 
-    set -l start (date +%s)
     env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
         +lh $lxh \
         +e "TERM=xterm-256color" \

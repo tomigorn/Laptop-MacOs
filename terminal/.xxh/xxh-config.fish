@@ -82,13 +82,32 @@ if test -f $CURRENT_DIR/bin/fastfetch
         end
     end
 
+    # Connect time, read at the END of the greeting. It used to print above
+    # fastfetch, which stopped the clock before fastfetch had rendered — so the
+    # remote's own greeting cost (disk/GPU/network probes) fell outside the number
+    # even though you sit and wait for it. Reading it here means the figure covers
+    # everything from pressing enter to the prompt appearing.
+    #
+    # Caveat: $XXH_CONNECT_START is stamped on the Mac and compared against this
+    # host's clock, so a badly-skewed remote clock skews the figure. A negative
+    # result means exactly that, and we print nothing rather than nonsense.
+    function _xxhc_connect_time_line
+        set -q XXH_CONNECT_START; or return
+        string match -qr '^[0-9]+(\.[0-9]+)?$' -- "$XXH_CONNECT_START"; or return
+        set -l now (date +%s.%N 2>/dev/null)
+        string match -qr '^[0-9]+(\.[0-9]+)?$' -- "$now"; or set now (date +%s)
+        set -l elapsed (math -s1 $now - $XXH_CONNECT_START)
+        string match -q -- '-*' $elapsed; and return    # skewed clock — no figure beats a wrong one
+        set_color brblack
+        printf "  Connected in %ss\n" $elapsed
+        set_color normal
+    end
+
     function fish_greeting
-        if set -q XXH_CONNECT_START; and test -n "$XXH_CONNECT_START"
-            set -l elapsed (math (date +%s) - $XXH_CONNECT_START)
-            printf "  Connected in %ss\n\n" $elapsed
-        end
         fastfetch
         _xxhc_version_line
+        _xxhc_connect_time_line
+        echo ""
     end
 
     # clearc = clear + greeting. Shows fastfetch + version but not the stale
