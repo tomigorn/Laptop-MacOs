@@ -102,9 +102,42 @@ Monitors are recognised by UUID and **registered automatically**:
 3. Open `zones.conf`, rename them (e.g. `Dell27 office-a`, `Dell24 office-a`)
    and add a `layout <name> …` line for each (or let them ride on `default`).
 
+The "currently connected" block at the top of `zones.conf` tells you which of the
+accumulated UUIDs you are actually looking at; freshly registered screens appear
+there with `-` for name and location.
+
 Because each physical screen has its own UUID line, your home Dell-27 and Dell-24
 get separate layouts, and office screens stay distinct from home — no
 cross-location confusion.
+
+## Which monitors are connected right now?
+
+`zones.conf` accumulates every monitor ever plugged in, so the top of the file
+carries an auto-generated block naming the ones that are live — the built-in
+laptop screen included:
+
+```
+# --- Currently connected (auto-generated — do not edit) ---------------------
+#   Last refreshed 2026-08-18 09:45. Regenerate with:  ./yabai-snap.sh connected
+#   (also runs automatically when you open this folder from Spotlight)
+#
+#   idx uuid                                 width   name                location      layout
+#   1   37D8832A-2D66-02CA-B9F7-8F30A301B230 1470pt  MacBook             laptop        50 50
+# * 2   269F4E09-0D04-41E9-A7A4-CE591643DAE0 3440pt  HP                  home          40 60
+#
+#   * = display with keyboard focus.  name/location "-" = not named below yet.
+# --- end currently connected ------------------------------------------------
+```
+
+`yabai-snap.sh connected` regenerates it (and prints the same table to stdout).
+`launcher.sh` runs it before opening the folder, so the **yabai window manager**
+Spotlight app always leaves you looking at current information. Only the lines
+between the two `# ---` markers are rewritten, via a temp file copied back over
+the original — a failed run leaves `zones.conf` untouched rather than truncated.
+If yabai isn't running, the command says so and changes nothing.
+
+Unlike the other subcommands, `connected` doesn't need a focused window, so it
+skips the focused-window guard that makes the snap commands no-op.
 
 ## How it works
 
@@ -119,7 +152,9 @@ cross-location confusion.
     auto-registering any unknown connected monitors,
   - figures out which zone the window currently occupies (by position **and**
     width, so a filled window matches nothing),
-  - snaps to the next/previous zone, crossing displays only at the real edge.
+  - snaps to the next/previous zone, crossing displays only at the real edge,
+  - and, as `yabai-snap.sh connected`, rewrites the "currently connected" block
+    at the top of `zones.conf` (see above).
 
 ## Files
 
@@ -155,7 +190,7 @@ Both are found by typing **`yabai`** or **`window manager`** in Spotlight:
 
 | App | What it does |
 |-----|--------------|
-| `yabai window manager` | opens `~/.config/yabai` in VS Code |
+| `yabai window manager` | refreshes the connected-monitor block in `zones.conf`, then opens `~/.config/yabai` in VS Code |
 | `yabai window manager - restart` | restarts the yabai + skhd services (notifies when done) |
 
 Use **restart** when a window won't move/snap (e.g. a fullscreen-video window

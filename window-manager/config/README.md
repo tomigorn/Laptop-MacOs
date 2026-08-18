@@ -10,7 +10,7 @@ This folder holds the live config for the keyboard-driven window snapper
 
 | File | What it is | Edit it? |
 |------|------------|----------|
-| `zones.conf`   | **Your monitors + their split sizes** | ✅ yes — this is the main one |
+| `zones.conf`   | **Your monitors + their split sizes**, with a live "currently connected" block at the top | ✅ yes — this is the main one |
 | `keys.conf`    | Keyboard shortcuts | ✅ to rebind keys |
 | `yabairc`      | yabai settings (float layout) | rarely |
 | `yabai-snap.sh`| The snapping logic | no |
@@ -28,6 +28,40 @@ This folder holds the live config for the keyboard-driven window snapper
 | `⇧⌥⌘ ←` / `⇧⌥⌘ →` | extend the window across zones (grow left / right; reset with plain `⌥⌘ ←/→`) |
 
 See `keys.conf` for the full list of options and conventions from other tools.
+
+## Which monitors are connected right now?
+
+`zones.conf` grows into *every* monitor you have ever plugged in, so the top of
+the file carries an auto-generated block naming the ones that are actually live:
+
+```
+# --- Currently connected (auto-generated — do not edit) ---------------------
+#   Last refreshed 2026-08-18 09:45. Regenerate with:  ./yabai-snap.sh connected
+#   (also runs automatically when you open this folder from Spotlight)
+#
+#   idx uuid                                 width   name                location      layout
+#   1   37D8832A-2D66-02CA-B9F7-8F30A301B230 1470pt  MacBook             laptop        50 50
+# * 2   269F4E09-0D04-41E9-A7A4-CE591643DAE0 3440pt  HP                  home          40 60
+#
+#   * = display with keyboard focus.  name/location "-" = not named below yet.
+# --- end currently connected ------------------------------------------------
+```
+
+The built-in laptop screen appears like any other display (`MacBook` above).
+`idx` is yabai's display index, `uuid` the stable id used by the `monitor` lines
+further down, and `layout` the zone sizes that id currently resolves to. A `-`
+under name/location means that screen hasn't been named yet.
+
+It refreshes **every time you open this folder from Spotlight** ("yabai window
+manager"), so it is current whenever you arrive here to edit. To refresh by hand
+— which also prints the same table to the terminal:
+
+```sh
+~/.config/yabai/yabai-snap.sh connected
+```
+
+Only the lines between the two `# ---` markers are rewritten; everything else in
+`zones.conf` is yours. If yabai isn't running the block is left untouched.
 
 ## Change window sizes — `zones.conf`
 
@@ -62,6 +96,9 @@ automatically:
 2. Press any shortcut once → each new screen is appended here as
    `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`.
 3. Rename it (e.g. `Dell27 office-a`) and add a `layout <name> …` line.
+
+The "currently connected" block at the top of `zones.conf` tells you which UUIDs
+you're looking at — the new ones show up there with `-` for name and location.
 
 ## Change the keyboard shortcuts — `keys.conf`
 

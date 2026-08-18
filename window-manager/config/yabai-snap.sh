@@ -7,6 +7,7 @@
 #   yabai-snap.sh fill    fill the whole display (NOT native fullscreen)
 #   yabai-snap.sh extend-right  grow the window's right edge into the next zone
 #   yabai-snap.sh extend-left   grow the window's left edge into the previous zone
+#   yabai-snap.sh connected     rewrite the "Currently connected" block in zones.conf
 #
 # Each monitor's zones are defined in ~/.config/yabai/zones.conf, matched by
 # stable display UUID so reconnecting a monitor never scrambles the ratios.
@@ -22,17 +23,28 @@ JQ="$(command -v jq)"
 ZONES_FILE="${YABAI_ZONES_FILE:-$HOME/.config/yabai/zones.conf}"
 FILL_GRID="1:1:0:0:1:1"
 
+displays="$("$YABAI" -m query --displays 2>/dev/null || true)"
+if [ -z "$displays" ]; then                      # yabai not running / not answering
+  if [ "$cmd" = "connected" ]; then
+    echo "yabai is not running — connected-monitor list not refreshed" >&2
+  fi
+  exit 0
+fi
+
 # Act on the focused window, addressed by id (focus doesn't reliably follow a
 # window across displays, so we never re-query "the focused window").
 #
 # Guard the query: some focused windows can't be queried (no managed/AX window —
 # see "Known limitations" in window-manager.md). A yabai error or non-JSON result
 # must make us no-op cleanly, not abort the whole script under `set -e`.
-win="$("$YABAI" -m query --windows --window 2>/dev/null || true)"
-wid="$(printf '%s' "$win" | "$JQ" -r '.id // empty' 2>/dev/null || true)"
-[ -n "$wid" ] || exit 0
-di="$(printf '%s' "$win" | "$JQ" -r '.display' 2>/dev/null || true)"
-displays="$("$YABAI" -m query --displays)"
+# "connected" reports on displays only, so it skips this guard — otherwise it
+# would silently do nothing whenever no window happens to be focusable.
+if [ "$cmd" != "connected" ]; then
+  win="$("$YABAI" -m query --windows --window 2>/dev/null || true)"
+  wid="$(printf '%s' "$win" | "$JQ" -r '.id // empty' 2>/dev/null || true)"
+  [ -n "$wid" ] || exit 0
+  di="$(printf '%s' "$win" | "$JQ" -r '.display' 2>/dev/null || true)"
+fi
 
 disp_json() { echo "$displays" | "$JQ" "map(select(.index==$1))[0]"; }
 snap()      { "$YABAI" -m window "$wid" --grid "$1"; }
@@ -48,6 +60,75 @@ register_displays() {
     printf 'monitor %s  mon-%s  unknown    # %spt, first seen %s\n' \
       "$uuid" "${uuid:0:8}" "$w" "$(date +%F)" >> "$ZONES_FILE"
   done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor)"')
+}
+
+# --- "Currently connected" report -------------------------------------------
+# zones.conf grows into "every monitor I've ever plugged in", so the interesting
+# question when you open it is which of those lines are live *right now*. The
+# block below answers that, in the file itself, and is refreshed on demand.
+
+# "<name> <location>" for a display UUID; "- -" if it isn't in zones.conf yet.
+monitor_entry() {
+  awk -v u="$1" '
+    $1=="monitor" && $2==u { print $3, ($4=="" ? "-" : $4); found=1; exit }
+    END { if (!found) print "-", "-" }' "$ZONES_FILE"
+}
+
+# The layout percentages for monitor <name>, falling back to "layout default".
+layout_sizes() {
+  awk -v n="$1" '
+    $1=="layout" && $2==n         { for (i=3;i<=NF;i++) s = s (i>3 ? " " : "") $i; got=1 }
+    $1=="layout" && $2=="default" { for (i=3;i<=NF;i++) d = d (i>3 ? " " : "") $i }
+    END { print (got ? s : d) }' "$ZONES_FILE"
+}
+
+# The whole comment block, on stdout. Line 1 and the last line are the sentinels
+# update_connected_block() matches on — keep them in sync if you reword them.
+connected_block() {
+  local idx uuid w focus name loc sizes entry mark
+  local fmt='# %s %-3s %-36s %-7s %-19s %-13s %s\n'
+  echo "# --- Currently connected (auto-generated — do not edit) ---------------------"
+  echo "#   Last refreshed $(date '+%F %H:%M'). Regenerate with:  ./yabai-snap.sh connected"
+  echo "#   (also runs automatically when you open this folder from Spotlight)"
+  echo "#"
+  # shellcheck disable=SC2059
+  printf "$fmt" ' ' 'idx' 'uuid' 'width' 'name' 'location' 'layout'
+  while read -r idx uuid w focus; do
+    [ -n "$uuid" ] || continue
+    entry="$(monitor_entry "$uuid")"
+    name="${entry%% *}"
+    loc="${entry##* }"
+    sizes="$(layout_sizes "$name")"
+    if [ "$focus" = "true" ]; then mark='*'; else mark=' '; fi
+    # shellcheck disable=SC2059
+    printf "$fmt" "$mark" "$idx" "$uuid" "${w}pt" "$name" "$loc" "$sizes"
+  done < <(echo "$displays" | "$JQ" -r '.[] | "\(.index) \(.uuid) \(.frame.w|floor) \(.["has-focus"])"')
+  echo "#"
+  echo "#   * = display with keyboard focus.  name/location \"-\" = not named below yet."
+  echo "# --- end currently connected ------------------------------------------------"
+}
+
+# Replace the block in zones.conf (or insert it above the monitor list the first
+# time). Written via a temp file and copied back, so the config is never left
+# half-written and the original file/symlink and its permissions survive.
+update_connected_block() {
+  [ -w "$ZONES_FILE" ] || return 0
+  local blk tmp
+  blk="$(mktemp "${TMPDIR:-/tmp}/yabai-block.XXXXXX")" || return 0
+  tmp="$(mktemp "${TMPDIR:-/tmp}/yabai-zones.XXXXXX")" || { rm -f "$blk"; return 0; }
+  connected_block > "$blk"
+
+  awk -v blk="$blk" '
+    function emit(   l) { while ((getline l < blk) > 0) print l; close(blk); done=1 }
+    /^# --- Currently connected/     { emit(); skip=1; next }          # replace in place
+    skip                             { if (/^# --- end currently connected/) skip=0; next }
+    !done && /^# --- Monitors/       { emit(); print ""; print; next }  # first run
+    { print }
+    END { if (!done) emit() }                                          # no anchor: append
+  ' "$ZONES_FILE" > "$tmp"
+
+  [ -s "$tmp" ] && cat "$tmp" > "$ZONES_FILE"   # never truncate on a failed awk
+  rm -f "$blk" "$tmp"
 }
 
 # Echo display $1's zones as grid specs (ROWS:COLS:X:Y:W:H), left -> right.
@@ -162,7 +243,11 @@ case "$cmd" in
     if [ "$lo" -gt 0 ]; then lo=$(( lo - 1 )); fi                     # grow left edge one zone
     snap "$(span_grid "$lo" "$hi")"
     ;;
+  connected)
+    update_connected_block
+    connected_block | sed -e 's/^# //' -e 's/^#$//'                    # same thing, readable
+    ;;
   *)
-    echo "usage: $(basename "$0") left|right|fill|extend-left|extend-right" >&2; exit 1
+    echo "usage: $(basename "$0") left|right|fill|extend-left|extend-right|connected" >&2; exit 1
     ;;
 esac
