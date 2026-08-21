@@ -1,3 +1,44 @@
+# ── Remote-clock skew estimate ──────────────────────────────────────────────
+# The connect timer is stamped on the Mac but subtracted on the remote, so a
+# remote clock that is off by N seconds shifts the reported figure by N. A host
+# whose clock ran ~7 min fast reported "Connected in 422.3s" for a ~2s connect.
+#
+# Estimate the offset the way NTP does: bracket one remote timestamp between two
+# local ones and take the local midpoint as "when the remote said that". What is
+# left is bounded by half the probe round trip (a fraction of a second through a
+# jump host, biased slightly low because the remote's shell spawn sits on the
+# outbound leg) rather than by however far the remote's clock has wandered.
+#
+# Prints 0 if any input is unusable. That is exactly the old, uncorrected
+# behaviour, and it is the correct answer whenever the clocks are in sync.
+function _xxhc_clock_skew -a remote_clock local_before local_after \
+        --description "estimate how far a remote clock is ahead of this Mac"
+    # `date +%s.%N` on a host without %N support prints e.g. "1787308450.N".
+    # Keep the whole-second part rather than throwing the measurement away —
+    # the remote greeting falls back to whole seconds on those hosts too.
+    if not string match -qr '^[0-9]+(\.[0-9]+)?$' -- "$remote_clock"
+        set remote_clock (string match -r '^[0-9]+' -- "$remote_clock")
+    end
+    for t in "$remote_clock" "$local_before" "$local_after"
+        if not string match -qr '^[0-9]+(\.[0-9]+)?$' -- "$t"
+            echo 0
+            return
+        end
+    end
+    set -l raw (math "$remote_clock - ($local_before + $local_after) / 2")
+
+    # Deadband: the estimate is only good to half the probe round trip, so a
+    # "skew" smaller than that is indistinguishable from zero. Report 0 there —
+    # a well-synced host (the common case) then keeps exactly the accuracy it
+    # had before, instead of having round-trip noise injected into its figure.
+    # Corrections only kick in for skew large enough to be certainly real.
+    if test (math -s0 "(abs($raw) - ($local_after - $local_before) / 2) * 1000") -le 0
+        echo 0
+        return
+    end
+    echo $raw
+end
+
 function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # ── Connect timer: start it on the very first line ──────────────────────────
     # This must come before ANY work. Everything below — the ControlMaster setup
@@ -48,7 +89,18 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # The bundle ships native binaries; uploading the wrong arch fails at exec
     # time ("Exec format error"). Detect over the ControlMaster tunnel, then copy
     # the matching store into the xxh build dir before xxh uploads it.
-    set -l remote_uname (ssh -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes -o ConnectTimeout=10 $target uname -m 2>/dev/null)
+    #
+    # The same probe carries the remote's `date` back, so the clock-skew estimate
+    # below costs no extra round trip. Local timestamps bracket the ssh call so
+    # the midpoint dates the remote reading (see _xxhc_clock_skew).
+    set -l probe_t0 (date +%s.%N 2>/dev/null)
+    set -l probe (ssh -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes -o ConnectTimeout=10 $target 'date +%s.%N; uname -m' 2>/dev/null)
+    set -l probe_t1 (date +%s.%N 2>/dev/null)
+    # uname is last so it survives a remote `date` that printed nothing; the
+    # clock line only counts when both came back.
+    set -l remote_uname $probe[-1]
+    set -l remote_clock ""
+    test (count $probe) -ge 2; and set remote_clock $probe[1]
     set -l arch
     switch $remote_uname
         case x86_64 amd64
@@ -67,6 +119,21 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
             set_color normal
             ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
             return 1
+    end
+
+    # Rebase the connect-timer start onto the REMOTE's clock, so the greeting's
+    # subtraction is honest even when that clock is minutes off. Without this the
+    # remote's skew is added straight onto the reported connect time.
+    set -l skew (_xxhc_clock_skew "$remote_clock" "$probe_t0" "$probe_t1")
+    set -l start_remote (math "$start + $skew")
+    # A clock that far out is worth knowing about in its own right (it breaks
+    # certificate validity, `make`, and log correlation), so say so once.
+    if test (math -s0 "abs($skew)") -ge 2
+        set -l direction "ahead of"
+        string match -qr '^-' -- $skew; and set direction "behind"
+        set_color brblack
+        echo "  xxhc: $target's clock is "(math -s1 "abs($skew)")"s $direction this Mac — connect timer corrected for it."
+        set_color normal
     end
 
     # Each arch has its own pre-built xxh home (see setup.sh step 8) with that
@@ -110,7 +177,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         +lh $lxh \
         +e "TERM=xterm-256color" \
         +e "XXH_SSH_ALIAS=$target" \
-        +e "XXH_CONNECT_START=$start" \
+        +e "XXH_CONNECT_START=$start_remote" \
         +e "XXH_STAGE_DIR=$stage" \
         +e "XXH_STAGE_ID=$sid" \
         +e "XXH_SETUP_VERSION=$setup_version" \

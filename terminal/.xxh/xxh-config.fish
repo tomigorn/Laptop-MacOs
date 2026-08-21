@@ -88,9 +88,11 @@ if test -f $CURRENT_DIR/bin/fastfetch
     # even though you sit and wait for it. Reading it here means the figure covers
     # everything from pressing enter to the prompt appearing.
     #
-    # Caveat: $XXH_CONNECT_START is stamped on the Mac and compared against this
-    # host's clock, so a badly-skewed remote clock skews the figure. A negative
-    # result means exactly that, and we print nothing rather than nonsense.
+    # $XXH_CONNECT_START is stamped on the Mac, but xxhc rebases it onto THIS
+    # host's clock before sending it (it measures the offset during the arch
+    # probe), so a remote clock that is minutes off no longer lands in the
+    # figure — that bug reported 422.3s for a ~2s connect. A negative result now
+    # means the correction itself failed; print nothing rather than nonsense.
     function _xxhc_connect_time_line
         set -q XXH_CONNECT_START; or return
         string match -qr '^[0-9]+(\.[0-9]+)?$' -- "$XXH_CONNECT_START"; or return
