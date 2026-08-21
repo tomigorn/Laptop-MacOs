@@ -25,6 +25,8 @@ PROBE_EXPECT="198.51.100.53"  # sentinel A it MUST return — RFC 5737 TEST-NET-
                               # NB: the set of network services is discovered at
                               # runtime via `networksetup -listallnetworkservices`,
                               # so no interface needs to be named here.
+PROBE_TRIES=3                 # attempts before we believe "away" (see the probe below)
+PROBE_GAP=2                   # seconds between attempts
 LOG="/var/log/homelab-dns.log"
 LOG_MAX_BYTES=65536           # rotate at 64 KB; keeps current + one old = 128 KB max
 
@@ -45,15 +47,35 @@ iface=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
 [ -n "${gw}" ]    || gw="none"
 [ -n "${iface}" ] || iface="none"
 
-# Reachable only if the homelab DNS returns our EXACT sentinel answer (1s, single
-# try). Matching the secret — not just "an IP" — rejects NXDOMAIN-hijacking or
-# wildcard resolvers we might hit on a foreign 192.168.1.x network.
-ans=$(dig +time=1 +tries=1 +short "@${DNS_SERVER}" "${PROBE_NAME}" 2>/dev/null | head -n1)
-if [ "${ans}" = "${PROBE_EXPECT}" ]; then
-    reachable=1; reach_str="reachable"
-else
-    reachable=0; reach_str="unreachable"
-fi
+# Reachable only if the homelab DNS returns our EXACT sentinel answer. Matching the
+# secret — not just "an IP" — rejects NXDOMAIN-hijacking or wildcard resolvers we
+# might hit on a foreign 192.168.1.x network.
+#
+# The probe goes over TCP, and retries, for one specific reason: AdGuard Home
+# rate-limits plain UDP DNS per client (default 20 qps) and DROPS the excess
+# silently. The moment this script succeeds it points ALL of the Mac's DNS at the
+# homelab, so the Mac's own query bursts blow through that limit — and the next
+# UDP probe is one of the packets AdGuard throws away. A single-shot UDP probe read
+# that drop as "away", stripped DNS off every interface, which moved the load back
+# to the router, which let the probe succeed again… a self-sustaining set/revert
+# oscillation that left .homelab names unresolvable half the time.
+#
+# TCP is not subject to that UDP rate limiter (measured: 0/12 TCP failures vs 9/15
+# UDP under the same load), and the retries cover genuine blips like the Pi
+# rebooting. Retries only cost time when the homelab is actually unreachable.
+probe_once() {
+    dig +tcp +time=2 +tries=1 +short "@${DNS_SERVER}" "${PROBE_NAME}" 2>/dev/null | head -n1
+}
+
+reachable=0; reach_str="unreachable"; tries=0
+while [ "${tries}" -lt "${PROBE_TRIES}" ]; do
+    tries=$((tries + 1))
+    if [ "$(probe_once)" = "${PROBE_EXPECT}" ]; then
+        reachable=1; reach_str="reachable"
+        break
+    fi
+    [ "${tries}" -lt "${PROBE_TRIES}" ] && sleep "${PROBE_GAP}"
+done
 
 # ── decide + act on every network service ─────────────────────────────────────
 # One global probe, applied to all interfaces. We only write DNS when it actually
@@ -114,4 +136,4 @@ if [ "${REASON}" = "timer" ] && [ "${changed}" = "none" ]; then
     exit 0
 fi
 
-log "${REASON}  iface=${iface} gw=${gw}  homelab=${reach_str}  changed=${changed}"
+log "${REASON}  iface=${iface} gw=${gw}  homelab=${reach_str} tries=${tries}  changed=${changed}"

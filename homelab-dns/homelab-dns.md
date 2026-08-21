@@ -29,7 +29,8 @@ Three parts, run by two `LaunchDaemon`s:
   and is idle (zero CPU) on a stable network. On each change it debounces, waits
   a few seconds for things to settle, then calls the actor.
 - **[`homelab-dns.sh`](homelab-dns.sh)** — the actor: probes the homelab DNS for
-  a dedicated name (`probe.homelab`) and checks it returns an exact **sentinel**
+  a dedicated name (`probe.homelab`) **over TCP, up to 3 times**, and checks it
+  returns an exact **sentinel**
   answer (`198.51.100.53`), then updates the DNS on the network services (Wi-Fi,
   Ethernet, USB / Thunderbolt adapters — discovered at runtime, so docking or
   swapping adapters needs no config change). It's deliberately asymmetric: when
@@ -40,13 +41,14 @@ Three parts, run by two `LaunchDaemon`s:
   re-runs the actor every 300s as a safety net (see *Why a timer too?* below). It's
   silent unless it actually changes the DNS, so a stable network stays quiet.
 
-| Probe result                     | Meaning            | Action                              |
-| -------------------------------- | ------------------ | ----------------------------------- |
-| returns the sentinel IP          | home or on VPN     | every interface's DNS → `192.168.1.2` |
-| anything else (or 1s timeout)    | away               | revert our interfaces → DHCP (`empty`) |
+| Probe result                       | Meaning            | Action                              |
+| ---------------------------------- | ------------------ | ----------------------------------- |
+| returns the sentinel IP            | home or on VPN     | every interface's DNS → `192.168.1.2` |
+| 3 tries all fail / wrong answer    | away               | revert our interfaces → DHCP (`empty`) |
 
 This is self-validating (no SSID / IP guessing), there's no per-lookup timeout
-penalty (one 1s probe per network change, not per query), and on the way *out*
+penalty (one probe per network change, not per query — and the retries only cost
+time when the homelab really is unreachable), and on the way *out*
 it only ever reverts DNS it set itself — a resolver something else configured on
 an interface is left untouched. (When the homelab *is* reachable it does take
 over each interface's DNS — that's the whole point.)
@@ -63,6 +65,46 @@ probe into "did the homelab answer?" rather than "did something answer?".
 > **Setup:** add a DNS rewrite in AdGuard Home: `probe.homelab → 198.51.100.53`.
 > The two `fastpi.homelab` rewrites stay as-is; the probe gets its own name so the
 > real records keep their real meaning and the secret can change independently.
+
+### Why the probe uses TCP and retries (the rate-limit oscillation)
+
+AdGuard Home rate-limits plain **UDP** DNS per client (`ratelimit`, default
+**20 qps**) and silently **drops** whatever exceeds it — no error, no response,
+indistinguishable from "the server isn't there".
+
+That turned an earlier single-shot UDP probe (`dig +time=1 +tries=1`) into a
+self-sustaining oscillation:
+
+1. The probe succeeds, so the actor points **all** of the Mac's DNS at `192.168.1.2`.
+2. The Mac's own DNS traffic now goes to AdGuard and bursts past 20 qps.
+3. AdGuard drops the excess — including the next probe packet.
+4. The actor reads that one dropped packet as "away" and strips DNS off every
+   interface.
+5. The Mac's load moves back to the ISP router, AdGuard goes quiet, the next probe
+   succeeds → back to step 1.
+
+The net effect: `*.homelab` names resolved only about half the time, because the
+setup spent half its life in the reverted state. **Success caused the load that
+caused the failure.**
+
+Measured on the affected network:
+
+| Probe                       | Idle    | Under ~25 qps load |
+| --------------------------- | ------- | ------------------ |
+| UDP, single try (old)       | 0 / 15  | **9 / 15 fail**    |
+| TCP, 3 tries (current)      | 0 / 15  | **0 / 12 fail**    |
+
+TCP is not subject to AdGuard's UDP rate limiter, so the probe stays truthful no
+matter how much the Mac is querying. The 3 tries (`PROBE_TRIES`, 2s apart) cover
+genuine blips such as the Pi rebooting, and only cost time when the homelab really
+is unreachable — an away verdict takes ~10s instead of 1s, which is well inside the
+watcher's reaction window.
+
+> **Worth doing on the server too:** 20 qps is low for a full client machine, so the
+> rate limit also drops *real* lookups (slow/failed page loads) once the Mac points
+> at AdGuard. Raise it in AdGuard Home under *Settings → DNS settings → Rate limit*
+> (`0` disables it), or add the Mac to `ratelimit_whitelist`. The TCP probe makes
+> the switcher immune regardless, but it does not fix ordinary UDP lookups.
 
 ### Set enabled, revert everything (the parked-dock landmine)
 
@@ -132,12 +174,15 @@ sudo launchctl kickstart -k system/com.tmilata.homelab-dns   # force a run
 Every evaluation writes one line, e.g.:
 
 ```
-2026-05-29 15:01:44  change  iface=en0 gw=10.113.253.86  homelab=reachable  changed=[Wi-Fi]set->192.168.1.2 [Thunderbolt Ethernet Slot 1]set->192.168.1.2
+2026-05-29 15:01:44  change  iface=en0 gw=10.113.253.86  homelab=reachable tries=1  changed=[Wi-Fi]set->192.168.1.2 [Thunderbolt Ethernet Slot 1]set->192.168.1.2
 ```
 
 - first field — why it ran: `boot` (daemon start), `change` (network change), `timer` (5-min safety net — only logs when it changed DNS), `manual`
 - `iface` / `gw` — interface + gateway of the default route (which network you're on)
 - `homelab`      — probe result: `reachable` / `unreachable`
+- `tries`        — probe attempts used (`1` = answered first shot; `2`/`3` = a retry
+  saved it; `3` on an `unreachable` line = all attempts failed). A creeping `tries`
+  count is the early warning that the homelab DNS is getting flaky
 - `changed`      — the services actually modified this run, each `[service]set->…` or
   `[service]revert->dhcp`; `none` if nothing needed changing (services already in
   the right state, or carrying a DNS that isn't ours, are not listed)
@@ -162,6 +207,8 @@ has since pointed at a custom resolver, is left untouched. Safe to re-run. (Leav
 - `DNS_SERVER`   — homelab DNS IP (`192.168.1.2`)
 - `PROBE_NAME`   — dedicated probe name resolved by the homelab DNS (`probe.homelab`)
 - `PROBE_EXPECT` — exact sentinel A record the probe must return (`198.51.100.53`)
+- `PROBE_TRIES`  — probe attempts before believing "away" (`3`)
+- `PROBE_GAP`    — seconds between attempts (`2`)
 
 (The interfaces to manage are no longer a tunable — every enabled network service
 is discovered at runtime via `networksetup -listallnetworkservices`.)
