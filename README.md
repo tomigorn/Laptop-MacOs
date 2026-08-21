@@ -152,10 +152,12 @@ setup for multiple git accounts to automatically use a certain user when cloning
 ├── .ssh/
 │   ├── allowed_signers-private
 │   ├── allowed_signers-work
-│   ├── gitHub-Tomigorn
-│   ├── gitHub-Tomigorn.pub
-│   ├── gitLab-ETH
-│   ├── gitLab-ETH.pub
+│   └── keys/
+│       └── git/
+│           ├── gitHub-Tomigorn
+│           ├── gitHub-Tomigorn.pub
+│           ├── gitLab-ETH
+│           └── gitLab-ETH.pub
 └── development/
   ├── private/
   │   └── sample-1-private-repo/

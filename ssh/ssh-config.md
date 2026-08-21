@@ -35,6 +35,44 @@ Therefore `~/.ssh/config` lists its includes **specific → general**, with the
     └── eth.config            git forges, ETH central
 ```
 
+## Where the keys live
+
+Key files are grouped by scope under `~/.ssh/keys/`, so the top level of
+`~/.ssh` holds only config, state and directories. Filenames are historical and
+deliberately unchanged.
+
+```
+~/.ssh/keys/
+├── eth/       tmilata.ethServers        nethz account, ETH-wide
+│              tmilata.4ea.ethServers    tmil4ea, S4D admin
+│              tmilata.4la.ethServers    tmil4la, ITET/TIK admin
+│              sysadmin                  shared local account, legacy TIK boxes
+├── homelab/   fastpi.EthMac  beefy.EthMac  tower
+└── git/       gitHub-Tomigorn  gitLab-ETH
+```
+
+All nine are ED25519; there are no RSA keys. The three `*.ethServers` keys and
+`sysadmin` are passphrase-protected; the homelab and git keys are not.
+
+Moving or renaming keys is a local-only operation — `authorized_keys` on the
+remote stores the public key, not the filename — but every reference has to move
+with it. Beyond `config.d/`, key paths appear in `~/.gitconfig-private` and
+`~/.gitconfig-work` (both `user.signingkey` and `core.sshCommand`), and in this
+repo's `README.md` and `multiple-git-accounts/` templates.
+
+To check nothing dangles after such a change:
+
+```sh
+ssh -G <host> | grep -i identityfile     # per host
+```
+
+Note that a key already loaded in the agent will keep authenticating even if the
+file path is wrong, which hides the mistake. Force the file to be used:
+
+```sh
+env -u SSH_AUTH_SOCK ssh -T -o IdentityAgent=none git@github.com
+```
+
 ## Two mechanics that make the pattern files work
 
 Both are load-bearing; changing either breaks the design.
@@ -52,7 +90,7 @@ Host chouffe
 # tik.config -- matches because the RESOLVED name is ee-tik-nsgsrv01.ethz.ch
 Match host "ee-tik-*"
     User                tmil4la
-    IdentityFile        ~/.ssh/tmilata.4la.ethServers
+    IdentityFile        ~/.ssh/keys/eth/tmilata.4la.ethServers
     IdentitiesOnly      yes
 ```
 

@@ -39,7 +39,7 @@ Match host tower exec "nc -z -w 2 tower.homelab 22 2>/dev/null || curl -fsSk -X 
 Host beefy
     HostName            beefy.homelab
     User                buntu
-    IdentityFile        ~/.ssh/beefy.EthMac
+    IdentityFile        ~/.ssh/keys/homelab/beefy.EthMac
     IdentitiesOnly      yes
     ConnectTimeout      5
     ConnectionAttempts  30
@@ -47,7 +47,7 @@ Host beefy
 Host tower
     HostName            tower.homelab
     User                root
-    IdentityFile        ~/.ssh/tower
+    IdentityFile        ~/.ssh/keys/homelab/tower
     IdentitiesOnly      yes
     ConnectTimeout      5
     ConnectionAttempts  30

@@ -1,10 +1,10 @@
 [user]
 	name = full name
 	email = work-email
-	signingkey = ~/.ssh/gitLab-ETH.pub
+	signingkey = ~/.ssh/keys/git/gitLab-ETH.pub
 
 [core]
-	sshCommand = ssh -i ~/.ssh/gitLab-ETH -o IdentitiesOnly=yes
+	sshCommand = ssh -i ~/.ssh/keys/git/gitLab-ETH -o IdentitiesOnly=yes
 
 [gpg]
 	format = ssh
