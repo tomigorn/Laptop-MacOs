@@ -139,6 +139,68 @@ already-qualified name would be rewritten to `…ethz.ch.ethz.ch`.
 
 ## Debugging
 
+### `ssh-why <host>`
+
+The fish function `ssh-why` answers "which files and which key did ssh use to
+get here?" — `ssh -vvv` with the 99% that isn't about files removed. It follows
+the whole ProxyJump chain and reports, per hop:
+
+- what it resolves to (user, host, port, key, `IdentitiesOnly`, jump)
+- **which blocks actually applied**, as `file:line`, distinguishing `Host` from
+  `Match`
+- every config file read, in order — including the `/etc/ssh/*` ones you did not
+  write
+
+```
+$ ssh-why cn100
+
+  ── hop 1/2  j2comsec  (jump host)
+       connects to    tmil4la@comsec-jumphost.ethz.ch:22
+       key            ~/.ssh/keys/eth/tmilata.4la.ethServers
+       blocks that applied:
+         ~/.ssh/config.d/jumphosts.config:82      Host  j2comsec
+         ~/.ssh/config:40                         Host  *
+
+  ── hop 2/2  cn100  (target)
+       connects to    tmil4la@ee-tik-cn100.ethz.ch:22
+       key            ~/.ssh/keys/eth/tmilata.4la.ethServers
+       via            j2comsec
+       blocks that applied:
+         ~/.ssh/config.d/aliases.config:18        Host  cn???
+         ~/.ssh/config.d/tik.config:22            Match ee-tik-cn*
+         ~/.ssh/config.d/tik.config:26            Match ee-tik-*
+         ~/.ssh/config:40                         Host  *
+```
+
+That output is the design in miniature: the alias supplies `HostName`, and the
+`Match` rules — which see the *resolved* name — supply routing and identity.
+
+`-c` / `--connect` additionally opens one real login per hop and reports the key
+the server actually accepted:
+
+```
+  KEY ACTUALLY ACCEPTED (one real login per hop)
+       j2comsec               OK  ~/.ssh/keys/eth/tmilata.4la.ethServers ED25519
+       cn100                  OK  ~/.ssh/keys/eth/tmilata.4la.ethServers ED25519
+```
+
+Three things to know:
+
+- **Offline by default.** Without `-c` it parses config only and touches no
+  network — about 10 ms, safe to run in a loop.
+- **`Match … exec` blocks still fire.** Their command runs during config
+  parsing, so `ssh-why beefy` sends a Wake-on-LAN packet and powers the machine
+  on. That is inherent to `Match exec`, not to this tool — plain `ssh -G beefy`
+  does it too.
+- **`-c` disables multiplexing on purpose.** A reused `ControlMaster` session
+  performs no key exchange, so it would report no key at all. It costs one login
+  per hop; mind fail2ban on hosts that ban repeated failures.
+
+The function lives in `terminal/.config/fish/functions/ssh-why.fish` and is
+symlinked by `terminal/setup.sh`.
+
+### Raw ssh
+
 ```sh
 ssh -G <host>     # the fully resolved answer for every keyword
 ssh -vvv <host>   # which files were read, in what order
@@ -146,6 +208,14 @@ ssh -vvv <host>   # which files were read, in what order
 
 `ssh -G` is the authority. Read down the `Include` list in `~/.ssh/config` and
 stop at the first file that matches.
+
+Note that `Match` blocks do **not** produce `Applying options` lines the way
+`Host` blocks do — they report at `debug3` as `matched 'host "..."'`. If you grep
+for that, exclude `not matched`, since "matched" is a substring of it.
+
+One trap when reading `-v` output by hand: **send stderr to a file, not a pipe.**
+With `ControlPersist` the backgrounded master inherits the file descriptor, so a
+pipe never sees EOF and the command appears to hang.
 
 To check a change didn't alter anything you didn't intend, diff the resolved
 output before and after:

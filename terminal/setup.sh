@@ -69,6 +69,7 @@ symlink "$SCRIPT_DIR/.config/fish/config.fish"          ~/.config/fish/config.fi
 symlink "$SCRIPT_DIR/.config/fish/functions/xxhc.fish"          ~/.config/fish/functions/xxhc.fish
 symlink "$SCRIPT_DIR/.config/fish/functions/fish_greeting.fish"  ~/.config/fish/functions/fish_greeting.fish
 symlink "$SCRIPT_DIR/.config/fish/functions/clearc.fish"         ~/.config/fish/functions/clearc.fish
+symlink "$SCRIPT_DIR/.config/fish/functions/ssh-why.fish"         ~/.config/fish/functions/ssh-why.fish
 symlink "$SCRIPT_DIR/.xxh/ssh-wrapper.sh"               ~/.xxh/ssh-wrapper.sh
 chmod +x ~/.xxh/ssh-wrapper.sh
 symlink "$SCRIPT_DIR/.xxh/scp-wrapper.sh"               ~/.xxh/scp-wrapper.sh
