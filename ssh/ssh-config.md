@@ -24,16 +24,25 @@ Therefore `~/.ssh/config` lists its includes **specific → general**, with the
 ~/.ssh/
 ├── config                    the only file ssh opens directly:
 │                             the ordered Include list + Host * defaults
-└── config.d/
-    ├── private.config        homelab: fastpi, beefy, tower
-    ├── jumphosts.config      every jump host, each with ProxyJump none
-    ├── exceptions.config     hosts that break their family's rules
-    ├── aliases.config        short name -> HostName. Nothing else.
-    ├── s4d.config            root*, id-s4d-*, mtec-*      (patterns)
-    ├── tik.config            ee-tik-*                     (patterns)
-    ├── legacy.config         virt*, cpuvm*, pc-*          (patterns)
-    └── eth.config            git forges, ETH central
+├── config.d/
+│   ├── private.config        homelab: fastpi, beefy, tower
+│   ├── jumphosts.config      every jump host, each with ProxyJump none
+│   ├── exceptions.config     hosts that break their family's rules
+│   ├── aliases.config        short name -> HostName. Nothing else.
+│   ├── s4d.config            root*, id-s4d-*, mtec-*      (patterns)
+│   ├── tik.config            ee-tik-*                     (patterns)
+│   ├── legacy.config         virt*, cpuvm*, pc-*          (patterns)
+│   └── eth.config            git forges, ETH central
+├── keys/                     key material, grouped by scope (see below)
+├── agent/  cm/               sockets and ControlMaster state
+├── backup/                   dated restore points
+└── known_hosts(.old)
 ```
+
+Everything under `~/.ssh` is now read by ssh itself. Notably, the git signing
+trust lists (`allowed_signers-*`) used to live here and do **not** any more —
+nothing in ssh ever opened them, only git does via `ssh-keygen -Y verify`. They
+are in `~/.config/git/`; see the Git section of the [README](../README.md).
 
 ## Where the keys live
 
