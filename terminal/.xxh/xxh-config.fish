@@ -179,7 +179,12 @@ end
 if test -f $CURRENT_DIR/bin/atuin
     # Seed atuin DB with history from previous sessions on this host
     mkdir -p $XDG_DATA_HOME/atuin
-    set -l preseed (_xxhc_stage_dir)/xxh_atuin_pre_$XXH_SSH_ALIAS.db
+    # Per-session filename (matches xxhc's $sid), for the same reason the export
+    # file carries one: a per-host name is racy against a concurrent session's
+    # teardown, which removes the pre-seed it thinks is its own.
+    set -l preseed (_xxhc_stage_dir)/xxh_atuin_pre_$XXH_SSH_ALIAS
+    test -n "$XXH_STAGE_ID"; and set preseed $preseed-$XXH_STAGE_ID
+    set preseed $preseed.db
     if test -f $preseed
         cp $preseed $XDG_DATA_HOME/atuin/history.db
         rm -f $preseed

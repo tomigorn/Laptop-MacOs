@@ -166,7 +166,9 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     set -l stage (ssh -o ControlPath=$cm_path -o Compression=yes -o ConnectTimeout=10 $target \
         'd="${XDG_RUNTIME_DIR:-/tmp/.xxh-$(id -u)}"; mkdir -p "$d" && chmod 700 "$d" && printf %s "$d"' 2>/dev/null)
     test -z "$stage"; and set stage /tmp
-    set -l remote_preseed "$stage/xxh_atuin_pre_$target.db"
+    # Both names carry $sid. A per-host pre-seed name let one session's teardown
+    # `rm -f` the pre-seed a concurrent session was about to read.
+    set -l remote_preseed "$stage/xxh_atuin_pre_$target-$sid.db"
     set -l remote_db "$stage/xxh_atuin_$target-$sid.db"
 
     # Pre-seed remote with this host's accumulated history.
@@ -174,7 +176,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     if test -f $host_db
         set -l has_table (sqlite3 $host_db "SELECT name FROM sqlite_master WHERE type='table' AND name='history';" 2>/dev/null)
         if test "$has_table" = history
-            set -l clean_preseed /tmp/.xxh_atuin_pre_clean_$target.db
+            set -l clean_preseed /tmp/.xxh_atuin_pre_clean_$target-$sid.db
             rm -f $clean_preseed                                  # VACUUM INTO errors if the dest exists
             sqlite3 $host_db "VACUUM INTO '$clean_preseed';" 2>/dev/null
             and scp -q -o ControlPath=$cm_path -o Compression=yes $clean_preseed "$target:$remote_preseed" 2>/dev/null
