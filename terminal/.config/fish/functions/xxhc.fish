@@ -56,11 +56,20 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     set -l target $argv[1]
     set -l host_db ~/.xxh/history/$target.db
     set -l local_db ~/.local/share/atuin/history.db
-    set -l tmp_db /tmp/.xxh_atuin_$target\_local.db
     set -l cm_path ~/.ssh/cm/xxh-$target
-    # Unique per-session id so concurrent xxhc sessions to the SAME host don't
-    # clobber each other's history-export file ($fish_pid differs per terminal).
-    set -l sid $fish_pid
+    set -l cm_users $cm_path.users
+    # Unique per-session id. $fish_pid alone distinguishes terminals but the OS
+    # recycles it; the epoch suffix keeps a stale remote home from a long-dead
+    # session out of a new session's way. Used for the remote home, every
+    # history-transfer filename, and XXH_STAGE_ID.
+    set -l sid $fish_pid-(date +%s)
+    set -l tmp_db /tmp/.xxh_atuin_local_$target-$sid.db
+    # Each session gets its OWN remote xxh home. A single shared ~/.xxh made the
+    # binaries and the atuin DB a shared mutable path: a second session's
+    # install-force wipe (+if) and its exit cleanup destroyed the first session's
+    # environment and its unexported history. Costs no extra transfer -- +if
+    # already forces a full re-upload on every connect either way.
+    set -l remote_home .xxh-$sid
     # Terminal-setup version (terminal/SETUP_VERSION, three levels up from this
     # file), forwarded to the remote greeting so it shows the same version as the
     # Mac. NB: do NOT use a variable named `version` — that's reserved in fish (the
@@ -174,6 +183,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     end
 
     env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
+        +hh "~/$remote_home" \
         +lh $lxh \
         +e "TERM=xterm-256color" \
         +e "XXH_SSH_ALIAS=$target" \
@@ -183,8 +193,10 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         +e "XXH_SETUP_VERSION=$setup_version" \
         $argv[2..-1]
 
-    # Belt-and-suspenders: remove ~/.xxh if the fish_exit handler didn't (e.g. fish was SIGKILL'd).
-    ssh -q -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes $target "rm -rf ~/.xxh 2>/dev/null" 2>/dev/null
+    # Belt-and-suspenders: remove THIS session's home if the fish_exit handler
+    # didn't (e.g. fish was SIGKILL'd). Only ours -- a concurrent session's home
+    # is none of our business, and removing it is what used to break that session.
+    ssh -q -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes $target "rm -rf ~/$remote_home 2>/dev/null" 2>/dev/null
 
     # Retrieve the remote atuin DB. The remote folds its WAL into the main file when
     # it has sqlite3; when it doesn't, the -wal/-shm sidecars carry the recent rows,
@@ -228,26 +240,26 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # so a *failed* SSH (e.g. the connection is already gone) can't be misread as
     # "verified clean" — that earlier bug printed the green all-clear on any ssh error.
     set -l xxh_state (ssh -q -o ControlPath=$cm_path -o Compression=yes -o ConnectTimeout=10 $target \
-        "test -d ~/.xxh && echo PRESENT || echo ABSENT" 2>/dev/null)
+        "test -d ~/$remote_home && echo PRESENT || echo ABSENT" 2>/dev/null)
     if test "$xxh_state" = PRESENT
         set_color --bold red
         echo ""
         echo "  ╔════════════════════════ CLEANUP FAILURE ════════════════════════╗"
-        echo "  ║  ~/.xxh was NOT removed on $target"
+        echo "  ║  ~/$remote_home was NOT removed on $target"
         echo "  ║  Other users on this shared host can see your files."
-        echo "  ║  Fix now:  ssh $target \"rm -rf ~/.xxh\""
+        echo "  ║  Fix now:  ssh $target \"rm -rf ~/$remote_home\""
         echo "  ╚══════════════════════════════════════════════════════════════════╝"
         echo ""
         set_color normal
     else if test "$xxh_state" = ABSENT
         set_color green
-        echo "  ✓ Remote cleanup verified — ~/.xxh removed from $target, no trace left behind."
+        echo "  ✓ Remote cleanup verified — ~/$remote_home removed from $target, no trace left behind."
         set_color normal
     else
         # Neither token came back → the verification SSH itself failed.
         set_color yellow
         echo "  ⚠ Could not verify remote cleanup on $target (connection closed?)."
-        echo "    Check later with:  ssh $target \"ls -ld ~/.xxh\""
+        echo "    Check later with:  ssh $target \"ls -ld ~/$remote_home\""
         set_color normal
     end
 
