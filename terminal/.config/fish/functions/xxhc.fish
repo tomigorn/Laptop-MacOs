@@ -233,7 +233,9 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     if scp -q -o ControlPath=$cm_path -o Compression=yes "$target:$remote_db" $tmp_db 2>/dev/null
         scp -q -o ControlPath=$cm_path -o Compression=yes "$target:$remote_db-wal" $tmp_db-wal 2>/dev/null
         scp -q -o ControlPath=$cm_path -o Compression=yes "$target:$remote_db-shm" $tmp_db-shm 2>/dev/null
-        sqlite3 $tmp_db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null
+        # >/dev/null too: the pragma prints a "0|0|0" result row on stdout, which
+        # was landing in the middle of the connect output.
+        sqlite3 $tmp_db "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null 2>&1
 
         # Columns are named explicitly (not SELECT *) so a schema column-order
         # change between the remote and local atuin versions can't silently
@@ -241,6 +243,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         # merge should be visible, not silently drop history.
         set -l cols id,timestamp,duration,exit,command,cwd,session,hostname,deleted_at
         sqlite3 $local_db "
+            PRAGMA busy_timeout=5000;
             ATTACH '$tmp_db' AS remote;
             INSERT OR IGNORE INTO main.history ($cols) SELECT $cols FROM remote.history;
             DETACH remote;
@@ -251,6 +254,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         mkdir -p ~/.xxh/history
         if test -f $host_db
             sqlite3 $host_db "
+                PRAGMA busy_timeout=5000;
                 ATTACH '$tmp_db' AS new_session;
                 INSERT OR IGNORE INTO main.history ($cols) SELECT $cols FROM new_session.history;
                 DETACH new_session;
@@ -262,6 +266,14 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
 
         ssh -q -o ControlPath=$cm_path -o Compression=yes $target "rm -f $remote_db $remote_db-wal $remote_db-shm $remote_preseed" 2>/dev/null
         rm -f $tmp_db $tmp_db-wal $tmp_db-shm
+    else
+        # Losing a session's history used to be completely silent: the `if scp`
+        # simply fell through. That is how a concurrent session's history
+        # disappeared without a word while its home was deleted underneath it.
+        set_color yellow
+        echo "  ⚠ No history retrieved from $target — this session's commands were not merged."
+        echo "    Expected the export at $target:$remote_db"
+        set_color normal
     end
 
     # Verify ~/.xxh was removed. Ask the remote to report PRESENT/ABSENT explicitly
