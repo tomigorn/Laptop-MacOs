@@ -21,6 +21,35 @@ end
 # anyone running xxh directly without xxhc.
 set -x TERM xterm-256color
 
+# ── Per-session home bookkeeping ────────────────────────────────────────────
+# xxhc gives every session its own remote home (~/.xxh-<sid>), so concurrent
+# sessions to one host never share binaries or an atuin DB. Record which process
+# owns this one, then remove the homes whose owner is gone.
+#
+# The old fixed ~/.xxh was self-cleaning: the next session removed whatever the
+# last one left. Per-session names give that up, so a session killed with
+# SIGKILL -- which never runs its fish_exit handler -- would leak a directory
+# forever. This sweep restores the property without bringing back a shared path.
+# The bare `.xxh` in the glob catches homes left by the pre-1.5 scheme.
+if set -q XXH_HOME; and test -n "$XXH_HOME"
+    echo $fish_pid > $XXH_HOME/.owner-pid 2>/dev/null
+    for d in (dirname $XXH_HOME)/.xxh (dirname $XXH_HOME)/.xxh-*
+        test -d $d; or continue
+        test "$d" = "$XXH_HOME"; and continue
+        set -l owner (cat $d/.owner-pid 2>/dev/null | string trim)
+        if string match -qr '^[0-9]+$' -- "$owner"
+            # kill -0 only probes for the process; it sends no signal.
+            command kill -0 $owner 2>/dev/null; or rm -rf $d 2>/dev/null
+        else
+            # No owner recorded: either a peer that is still uploading and has
+            # not started its shell yet, or a home from before this scheme.
+            # Only the unambiguously stale ones go.
+            set -l stale (find $d -maxdepth 0 -mtime +1 2>/dev/null)
+            test (count $stale) -gt 0; and rm -rf $d 2>/dev/null
+        end
+    end
+end
+
 # ── Attach to the host's persistent ssh-agent ───────────────────────────────
 # xxh runs a portable fish that never sources /etc/profile.d, so it misses the
 # system ssh-key-handler that normal SSH logins use to attach to (or start) an
@@ -192,10 +221,25 @@ if test -f $CURRENT_DIR/bin/atuin
 end
 
 # Runs on both clean exit and SIGHUP (VPN drop, terminal crash, lost connection).
-# Deletes ~/.xxh immediately so other users can't see it even if local xxhc never runs.
-# Safe to delete while running: open file descriptors hold the inodes alive until exit.
+# Deletes THIS session's home immediately so other users can't see it even if
+# local xxhc never runs. Safe to delete while running: open file descriptors hold
+# the inodes alive until exit.
+#
+# It used to delete the fixed ~/.xxh. With concurrent sessions that meant deleting
+# a *peer's* live environment and its unexported history, which is exactly how a
+# second connect broke the first one.
 function _xxhc_cleanup_home --on-event fish_exit
-    rm -rf ~/.xxh 2>/dev/null
+    # $XXH_HOME is an environment variable, so guard the values that would turn
+    # this into `rm -rf ~` or worse before letting rm -rf near it.
+    set -q XXH_HOME; or return
+    test -n "$XXH_HOME"; or return
+    test "$XXH_HOME" = /; and return
+    test "$XXH_HOME" = "$HOME"; and return
+    test "$XXH_HOME" = "$USER_HOME"; and return
+    # Must look like an xxh home: .xxh, or .xxh-<pid>-<epoch>. Anything else is
+    # not ours to delete.
+    string match -qr '/\.xxh(-[0-9]+-[0-9]+)?$' -- "$XXH_HOME"; or return
+    rm -rf $XXH_HOME 2>/dev/null
 end
 
 cd ~
