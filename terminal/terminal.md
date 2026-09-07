@@ -10,7 +10,7 @@ The setup has two parts:
 
 **Local (Mac):** fish shell with starship prompt, fastfetch system info greeting, and atuin for searchable shell history.
 
-**Remote (via xxh):** when you run `xxhc hostname`, the tool [xxh](https://github.com/xxh/xxh) uploads a self-contained bundle to the remote over SCP — portable fish binary, starship, fastfetch, atuin, bat, and all config — starts a fish session inside it, and on disconnect removes everything. The remote host never gets a modified `.bashrc`, no binaries persist in `PATH`, and `~/.xxh/` is deleted the moment you exit. Remote shell history is merged back into your local atuin database before cleanup, tagged with the remote hostname so you can tell where each command ran.
+**Remote (via xxh):** when you run `xxhc hostname`, the tool [xxh](https://github.com/xxh/xxh) uploads a self-contained bundle to the remote over SCP — portable fish binary, starship, fastfetch, atuin, bat, and all config — starts a fish session inside it, and on disconnect removes everything. The remote host never gets a modified `.bashrc`, no binaries persist in `PATH`, and the session's home (`~/.xxh-<sid>`) is deleted the moment you exit. Remote shell history is merged back into your local atuin database before cleanup, tagged with the remote hostname so you can tell where each command ran.
 
 ---
 
@@ -155,23 +155,78 @@ running 7 minutes fast reported `Connected in 422.3s` for a two-second connect).
 | `(myserver)` | SSH alias you typed | blue | via `xxhc` only |
 | `~` | current directory | cyan | always |
 
+### Tests
+
+`terminal/tests/concurrent-sessions.fish <host>` is a live integration test — it
+needs a reachable host and takes about 90 seconds. It runs two overlapping
+sessions and asserts that the first keeps its binaries while the second connects
+and exits, that both merge their history, that no home is left on the remote, and
+that a home whose owner is dead is swept on the next connect.
+
+```
+terminal/tests/concurrent-sessions.fish root6
+```
+
 ### What gets cleaned up on disconnect
 
 - `fish/generated_completions/` — removed by the `fish_exit` handler to avoid NFS stub file issues
-- `~/.xxh/` — deleted by the `_xxhc_cleanup_home` `fish_exit` handler on the remote (see below); `xxhc` also runs an explicit `rm -rf ~/.xxh` via SSH after the session as a backup
+- `~/.xxh-<sid>/` — this session's remote home, deleted by the `_xxhc_cleanup_home` `fish_exit` handler on the remote (see below); `xxhc` also runs an explicit `rm -rf ~/.xxh-<sid>` via SSH after the session as a backup. Only ever *this* session's home — see "Concurrent sessions to one host"
 - history-transfer files — written to a **per-user private staging dir** (`$XDG_RUNTIME_DIR`, mode `0700`, or a `0700` fallback dir in `/tmp`), removed by `xxhc` after the history merge; `$XDG_RUNTIME_DIR` is also auto-cleared by systemd on logout, so nothing leaks even if the connection drops. They are never written to world-readable shared `/tmp`.
 - `.bashrc`, `.bash_profile`, `.profile` — never touched
 - No binaries left in `PATH`. No background processes are started by xxhc itself — the one exception is the ssh-agent attach (see the "ssh-agent attach" step under `xxh/xxh-config.fish` below): it reuses an existing agent when one is running, and only *starts* a persistent `ssh-agent` if none exists, matching what the host's own `/etc/profile.d` login handler does for a normal `ssh` login
 
-**Why two cleanup paths for `~/.xxh/`?** The `_xxhc_cleanup_home` fish handler is the primary cleanup: it runs on both clean exit and SIGHUP (VPN drop, terminal crash, lost connection), because the remote sshd sends SIGHUP to the fish process as soon as it detects the connection is dead. `xxhc` also runs an explicit `ssh … "rm -rf ~/.xxh"` after the session returns as a fallback for the rare case where fish is SIGKILL'd without firing `fish_exit`. Note: previously xxh's `+hhr` flag was used for a second pass, but it ran its own `chmod -R u+w ~/.xxh && rm -rf` *after* the fish handler had already deleted the directory, producing a spurious `chmod: cannot access … No such file or directory` error on every exit.
+**Why two cleanup paths for the session home?** The `_xxhc_cleanup_home` fish handler is the primary cleanup: it runs on both clean exit and SIGHUP (VPN drop, terminal crash, lost connection), because the remote sshd sends SIGHUP to the fish process as soon as it detects the connection is dead. It removes `$XXH_HOME` and nothing else, guarded against `/`, `$HOME`, `$USER_HOME` and any path not shaped like an xxh home. `xxhc` also runs an explicit `ssh … "rm -rf ~/.xxh-<sid>"` after the session returns as a fallback for the rare case where fish is SIGKILL'd without firing `fish_exit`; a SIGKILL that defeats both is caught by the stale-home sweep on the next connect. Note: previously xxh's `+hhr` flag was used for a second pass, but it ran its own `chmod -R u+w ~/.xxh && rm -rf` *after* the fish handler had already deleted the directory, producing a spurious `chmod: cannot access … No such file or directory` error on every exit.
 
-If `~/.xxh/` cannot be removed (permissions, filesystem issue), `xxhc` detects this by SSH-ing back after the session and shows a red warning box with the manual fix command.
+If the session home cannot be removed (permissions, filesystem issue), `xxhc` detects this by SSH-ing back after the session and shows a red warning box with the manual fix command.
+
+### Concurrent sessions to one host
+
+Several `xxhc` sessions to the same host can run at once. Each is fully
+independent: its own binaries, its own atuin database, its own cleanup.
+
+**Each session gets its own remote home.** `xxhc` passes `+hh ~/.xxh-<sid>`,
+where `<sid>` is `<local fish pid>-<epoch>`. This matters because `+hhh: "~"`
+puts `HOME` at the real remote home but leaves `XDG_*` resolving *inside* the xxh
+home, so `XDG_DATA_HOME/atuin/history.db` — and the whole binary bundle on
+`PATH` — live there. A single shared `~/.xxh` therefore made every session's
+environment and history one shared mutable path.
+
+It cost nothing to split. `+if` already forces a full re-upload on every connect,
+so a fresh per-session directory transfers exactly what a shared one did.
+
+**What a second session used to do to the first**, before v1.5:
+
+| | effect on the live session |
+|---|---|
+| `+if` wipe at connect (`rm -rf ~/.xxh/.xxh`) | deleted the binaries it was running — `atuin: command not found` |
+| `rm -rf ~/.xxh` at exit | deleted its environment *and* its unexported history |
+| `cp <preseed> history.db` at startup | overwrote the SQLite file it had open, leaving mismatched `-wal`/`-shm` — atuin then printed errors instead of history |
+
+**Stale homes.** A fixed `~/.xxh` was self-cleaning: the next session removed
+whatever the last one left. Per-session names give that up, so every session
+writes its own remote fish PID to `$XXH_HOME/.owner-pid` and, at startup, removes
+the other `~/.xxh*` homes whose owner is no longer alive (`kill -0`). A home with
+no `.owner-pid` is removed only when it is more than a day old, which leaves a
+peer that is still uploading alone and clears out any `~/.xxh` left by the
+pre-1.5 scheme.
+
+**Shared tunnel, unshared teardown.** The ControlMaster stays shared — one
+multiplexed tunnel per host is the point of it — but each session claims it with
+a file at `~/.ssh/cm/xxh-<alias>.users/<sid>`, and only the session that removes
+the last claim runs `-O stop`. The master is created only when `-O check` finds
+none, since with a socket already present `-fN` would attach as a background
+slave that lingers for the life of the master.
+
+**History between concurrent sessions** is not shared live, by design. Each
+session pre-seeds from `~/.xxh/history/<alias>.db` as it stood at connect time,
+and merges back on disconnect. Two sessions that ran at once therefore see each
+other's commands only after both have ended.
 
 ### Remote atuin history sync
 
 History flows in both directions so each host accumulates its own history across sessions:
 
-All transfer files live in a **per-user private staging dir** on the remote — `$XDG_RUNTIME_DIR` (mode `0700`, auto-cleaned by systemd on logout) or a `0700` fallback in `/tmp` — never world-readable shared `/tmp`. `xxhc` resolves that dir once over the ControlMaster tunnel and passes it to the session via `XXH_STAGE_DIR`. The export file also carries a per-session id (`XXH_STAGE_ID`, the local `$fish_pid`) so two concurrent `xxhc` sessions to the same host don't overwrite each other's export.
+All transfer files live in a **per-user private staging dir** on the remote — `$XDG_RUNTIME_DIR` (mode `0700`, auto-cleaned by systemd on logout) or a `0700` fallback in `/tmp` — never world-readable shared `/tmp`. `xxhc` resolves that dir once over the ControlMaster tunnel and passes it to the session via `XXH_STAGE_DIR`. Every transfer file — pre-seed and export alike — carries the per-session id `XXH_STAGE_ID` (see "Concurrent sessions to one host").
 
 **On connect:**
 `xxhc` checks for a per-host history file at `~/.xxh/history/<alias>.db` on the Mac. If it exists (from a previous session), it SCPs it into the remote staging dir before calling xxh. The remote fish startup (`xxh-config.fish`) picks this up and uses it to seed the atuin database — so you immediately have history from all previous sessions on that host.
@@ -286,8 +341,8 @@ hosts:
 | `+s: xxh-shell-fish` | Use the portable fish plugin | Carries fish to any Linux host |
 | `++pexpect-timeout: "30"` | Wait up to 30 s during handshake | Some hosts are slow to respond |
 | `++copy-method: scp` | Use SCP for uploads | rsync conflicts with ControlMaster |
-| `+if:` | Always upload without prompting | `xxhc` wipes `~/.xxh` on disconnect, so xxh would ask "Install? [Y/n]" every time without this |
-| `+hhh: "~"` | Set `HOME` to real remote home | Without this, `HOME` is set to `~/.xxh` and `cd ~` lands in the wrong place |
+| `+if:` | Always upload without prompting | `xxhc` wipes the session home on disconnect and each session gets a fresh one, so xxh would ask "Install? [Y/n]" every time without this |
+| `+hhh: "~"` | Set `HOME` to real remote home | Without this, `HOME` is set to the session home and `cd ~` lands in the wrong place. `XDG_*` still resolves inside the session home, which is what keeps each session's atuin DB separate |
 | `-o ControlMaster=auto` | Reuse existing ControlMaster socket | `xxhc` pre-creates the socket before xxh runs, so xxh's internal SCP reuses the already-established tunnel — critical for hosts behind ProxyJump |
 | `-o ControlPath=~/.ssh/cm/xxh-%n` | Dedicated socket path for xxh connections | Uses a separate path from regular SSH sockets (which use `%r@%h:%p`) to avoid conflicts |
 | `-o Compression=yes` | zlib-compress the transfer | The bundle upload is handled by `scp-wrapper.sh` now, so this covers the rest: the atuin history transfers in `xxhc`, and the upload itself whenever the wrapper falls back to plain `scp`. Also set on all ten transport-creating ssh/scp calls in `xxhc` — `Host *` in `~/.ssh/config` sets `ControlMaster auto`, so any of them can become the master, and a master created without the flag would carry everything uncompressed. Has no effect on the ETH fleet, which refuses compression |
@@ -301,18 +356,19 @@ The connect wrapper. The authoritative source is [`fish/functions/xxhc.fish`](.c
 
 - **Connect timer**: the very first statement of the function stamps `$start` (`date +%s.%N`), so everything below — including the ControlMaster dial through the jump host and the history pre-seed — counts toward the connect time reported by the remote greeting.
 - **Clock-skew correction** (`_xxhc_clock_skew`): the timer starts on the Mac but stops on the remote, so a remote clock that is off by N seconds shifts the reported figure by N — that is what produced `Connected in 422.3s` for a two-second connect to a host whose clock ran ~7 min fast. The arch probe therefore carries the remote's `date` back, bracketed by local timestamps; the local midpoint dates the remote reading and the difference is the offset, NTP-style. `$start` is rebased by it before being sent as `XXH_CONNECT_START`, so the greeting subtracts two readings of the *same* clock. Two deliberate limits: the residual error is half the probe round trip (a fraction of a second through a jump host, biased slightly low since the remote's shell spawn sits on the outbound leg), and a measured offset **smaller** than that uncertainty is reported as zero — a well-synced host, the common case, keeps exactly the accuracy it had before instead of having round-trip noise injected. An offset of 2 s or more also prints a dim one-line notice naming the host and direction, since a clock that far out breaks more than this banner.
-- **ControlMaster pre-setup**: before anything else *that touches the network*, `xxhc` creates a ControlMaster tunnel (`ssh -fN`) to the target at `~/.ssh/cm/xxh-<alias>`. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's bundle upload (~71 MB on disk, ~26 MB compressed on the wire) — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump. A non-fatal `ssh -O check` right after warns (yellow) if the pre-setup didn't come up — the next call with `ControlMaster=auto` adopts the master role and `ControlPersist` keeps it alive, so reuse still happens, just one connection setup later.
-- **Private staging dir**: `xxhc` asks the remote (over the master) for `${XDG_RUNTIME_DIR:-/tmp/.xxh-$(id -u)}`, creating it `0700`, and uses it for all history-transfer files — keeping your command history out of world-readable shared `/tmp`. It's passed to the session as `XXH_STAGE_DIR`; a per-session `XXH_STAGE_ID` (`$fish_pid`) namespaces the export file so concurrent sessions to one host don't collide.
+- **ControlMaster pre-setup**: before anything else *that touches the network*, `xxhc` claims the shared master at `~/.ssh/cm/xxh-<alias>` (a file at `~/.ssh/cm/xxh-<alias>.users/<sid>`) and, only if `-O check` finds no master already, creates the tunnel with `ssh -fN`. The check is not an optimisation: with a socket already present, `-fN` attaches as a background *slave* that lingers for the life of the master, leaking one ssh process per concurrent session. This handles ProxyJump (and any SSH config) once upfront. All subsequent SSH/SCP calls — including xxh's bundle upload (~71 MB on disk, ~26 MB compressed on the wire) — reuse this socket. Without this, each operation creates a fresh jump-host connection, which is slow and can fail silently for hosts behind ProxyJump. A non-fatal `ssh -O check` right after warns (yellow) if the pre-setup didn't come up — the next call with `ControlMaster=auto` adopts the master role and `ControlPersist` keeps it alive, so reuse still happens, just one connection setup later.
+- **Per-session remote home**: `xxhc` passes `+hh ~/.xxh-<sid>` so each session owns its whole remote tree — binaries, `XDG_*`, atuin DB. Every cleanup and every transfer filename is keyed to the same `<sid>`. See "Concurrent sessions to one host" for why a shared `~/.xxh` broke concurrent sessions
+- **Private staging dir**: `xxhc` asks the remote (over the master) for `${XDG_RUNTIME_DIR:-/tmp/.xxh-$(id -u)}`, creating it `0700`, and uses it for all history-transfer files — keeping your command history out of world-readable shared `/tmp`. It's passed to the session as `XXH_STAGE_DIR`; a per-session `XXH_STAGE_ID` (`<fish pid>-<epoch>`) namespaces the pre-seed *and* the export so concurrent sessions to one host don't collide.
 - `TERM=xterm-256color` — set via `+e` so the remote fish process sees the correct terminal type *before it starts*, preventing the "unknown terminal type" warning. Ghostty (and other modern terminals) export a `$TERM` value the remote has no terminfo for; fish checks this at startup, before any config file runs, so setting it inside `xxh-config.fish` is too late.
 - `RSYNC_RSH` — would make rsync bypass ControlMaster if xxh ever called it. Currently dormant twice over: `++copy-method: scp` means the rsync branch is never taken, and xxh builds rsync with an explicit `-e`, which takes precedence over `RSYNC_RSH` anyway
 - `XXH_SSH_ALIAS` — the alias you typed; forwarded to the remote so the prompt shows `(myserver)`
 - `XXH_CONNECT_START` — Unix timestamp with sub-second precision (`date +%s.%N`), stamped on the **first line of `xxhc`** so every pre-connect step above is inside the measurement, then **rebased onto the remote's clock** by the skew correction above; the remote greeting subtracts it after fastfetch renders to show the true end-to-end connection time. If the correction itself fails the subtraction can come out negative, and the greeting prints nothing rather than a negative number
 - **Pre-seed**: before xxh runs, if `~/.xxh/history/<alias>.db` exists and has a history table, a clean copy (via `VACUUM INTO`, with the destination `rm -f`'d first since `VACUUM INTO` errors on an existing file) is SCP'd into the remote staging dir for atuin to load at startup
 - **WAL handling**: atuin uses SQLite WAL mode so recent writes are in `-wal`. The remote checkpoints (`TRUNCATE`) when it has `sqlite3`, and copies any `-wal`/`-shm` sidecars regardless; the Mac (which always has `sqlite3`) fetches them and checkpoints again before reading — so nothing is lost on hosts without `sqlite3`
-- **Merge**: into local atuin with `INSERT OR IGNORE` over an **explicit column list** (`id,timestamp,duration,exit,command,cwd,session,hostname,deleted_at`) so a schema column-order change between atuin versions can't misalign data; sqlite errors on the merge are deliberately *not* hidden so a failed merge is visible
+- **Merge**: into local atuin with `INSERT OR IGNORE` over an **explicit column list** (`id,timestamp,duration,exit,command,cwd,session,hostname,deleted_at`) so a schema column-order change between atuin versions can't misalign data; sqlite errors on the merge are deliberately *not* hidden so a failed merge is visible. Both merges set `PRAGMA busy_timeout=5000` so two sessions disconnecting at once wait for each other's lock instead of failing. If the export can't be retrieved at all, `xxhc` prints a yellow warning — that path used to fall through silently, which is how a clobbered concurrent session lost its history without saying so
 - **Host DB**: per-host history is accumulated in `~/.xxh/history/<alias>.db` and grows across sessions
-- **Cleanup check**: after everything, SSHs back and has the remote echo `PRESENT`/`ABSENT` for `~/.xxh`, so a *failed* verification SSH can't be misread as "verified clean" — it reports green (gone), red (still there, with the manual fix), or yellow (couldn't verify)
-- **ControlMaster teardown**: at the very end, `ssh -O stop` closes the ControlMaster socket cleanly
+- **Cleanup check**: after everything, SSHs back and has the remote echo `PRESENT`/`ABSENT` for `~/.xxh-<sid>`, so a *failed* verification SSH can't be misread as "verified clean" — it reports green (gone), red (still there, with the manual fix), or yellow (couldn't verify)
+- **ControlMaster teardown**: at the very end, `xxhc` drops its claim and runs `ssh -O stop` **only if no other session still holds one**. Stopping unconditionally used to close the socket a live concurrent session was still using
 - **Local greeting on return**: after teardown, `fish_greeting` (local fastfetch) is printed so it's unmistakable you're back on the Mac — the remote session shows the remote's banner, this shows the local one
 
 ### `xxh/xxh-config.fish`
@@ -320,14 +376,15 @@ The connect wrapper. The authoritative source is [`fish/functions/xxhc.fish`](.c
 The fish session init that runs on the remote. In order:
 
 1. **TERM override** — sets `TERM=xterm-256color` as a fallback for direct `xxh` use. When connecting via `xxhc`, `TERM` is already set correctly via `+e` before fish starts (see `xxhc.fish`), so this line is a no-op in normal usage.
-2. **ssh-agent attach** — finds an `ssh-agent` socket already running for the user under `/tmp/ssh-*/agent.*` and attaches to it (`SSH_AUTH_SOCK`); loads the keys if the agent is empty; starts a fresh agent only if none exists. xxh's portable fish never sources `/etc/profile.d`, so without this it would miss the host's system ssh-key-handler (`/etc/profile.d/03-ssh-key-handler.sh` on ETH s4d hosts) — and every onward hop (e.g. `ssh opennebula`) and key-dependent command would re-prompt for the key passphrase. This replicates that handler's find/attach logic so `xxhc` sessions reuse the same already-unlocked key as a normal `ssh` login. (`ssh-add -l` exit codes: 0 = has keys, 1 = reachable but empty, 2 = stale socket.)
-3. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, atuin, and bat are all in PATH
-4. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
-5. **Greeting** — defines `fish_greeting` to run fastfetch, then the version badge, then the connect-time line (from `XXH_CONNECT_START`, already expressed on this host's clock by `xxhc`, so the subtraction compares like with like). The timer is read *last*, so fastfetch's own render cost is inside the reported figure rather than outside it. `clearc` and the post-`ssh`-hop re-greet reuse the same pieces minus the timer, which is only meaningful at connect time.
-6. **Atuin** — if a preseed file exists in the private staging dir (`_xxhc_stage_dir`, i.e. `$XXH_STAGE_DIR`/`$XDG_RUNTIME_DIR`, not shared `/tmp`), copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config (`auto_sync = false`, which keeps the direct-SQL merge safe — see "Remote atuin history sync") and initialises atuin.
-7. **`fish_exit` handlers** — two handlers registered in definition order:
+2. **Home bookkeeping** — writes this session's fish PID to `$XXH_HOME/.owner-pid`, then sweeps the other `~/.xxh*` homes whose owner process is gone (`kill -0`), plus any home with no owner recorded that is more than a day old. See "Concurrent sessions to one host".
+3. **ssh-agent attach** — finds an `ssh-agent` socket already running for the user under `/tmp/ssh-*/agent.*` and attaches to it (`SSH_AUTH_SOCK`); loads the keys if the agent is empty; starts a fresh agent only if none exists. xxh's portable fish never sources `/etc/profile.d`, so without this it would miss the host's system ssh-key-handler (`/etc/profile.d/03-ssh-key-handler.sh` on ETH s4d hosts) — and every onward hop (e.g. `ssh opennebula`) and key-dependent command would re-prompt for the key passphrase. This replicates that handler's find/attach logic so `xxhc` sessions reuse the same already-unlocked key as a normal `ssh` login. (`ssh-add -l` exit codes: 0 = has keys, 1 = reachable but empty, 2 = stale socket.)
+4. **PATH** — adds the uploaded `bin/` dir so starship, fastfetch, atuin, and bat are all in PATH
+5. **Starship** — sets `STARSHIP_CONFIG` and initialises the prompt
+6. **Greeting** — defines `fish_greeting` to run fastfetch, then the version badge, then the connect-time line (from `XXH_CONNECT_START`, already expressed on this host's clock by `xxhc`, so the subtraction compares like with like). The timer is read *last*, so fastfetch's own render cost is inside the reported figure rather than outside it. `clearc` and the post-`ssh`-hop re-greet reuse the same pieces minus the timer, which is only meaningful at connect time.
+7. **Atuin** — if a preseed file exists in the private staging dir (`_xxhc_stage_dir`, i.e. `$XXH_STAGE_DIR`/`$XDG_RUNTIME_DIR`, not shared `/tmp`), copies it into `$XDG_DATA_HOME/atuin/history.db` before atuin starts so previous session history is available immediately. Then writes a minimal config (`auto_sync = false`, which keeps the direct-SQL merge safe — see "Remote atuin history sync") and initialises atuin.
+8. **`fish_exit` handlers** — two handlers registered in definition order:
    - `_xxhc_export_history`: checkpoints the atuin DB's WAL into the main file (`PRAGMA wal_checkpoint(TRUNCATE)`, when the host has `sqlite3`) and copies it — plus any `-wal`/`-shm` sidecars as a fallback — into the private staging dir (`chmod 600`), under a per-session filename (`$XXH_STAGE_ID`) so `xxhc` can retrieve it after the session ends without concurrent sessions colliding; also removes `fish/generated_completions` to prevent NFS stub files from interfering with `_xxhc_cleanup_home`
-   - `_xxhc_cleanup_home`: removes `~/.xxh/` immediately so other users on the shared host cannot see it even if the local machine is completely gone (VPN drop, terminal crash, etc.). Safe to delete while running: open file descriptors hold the inodes alive until fish actually exits, so no binary is interrupted mid-execution.
+   - `_xxhc_cleanup_home`: removes `$XXH_HOME` — this session's home, and only that — immediately so other users on the shared host cannot see it even if the local machine is completely gone (VPN drop, terminal crash, etc.). Safe to delete while running: open file descriptors hold the inodes alive until fish actually exits, so no binary is interrupted mid-execution.
 
 The atuin config written on each connect:
 ```toml
@@ -336,7 +393,7 @@ search_mode = "fuzzy"
 ```
 `auto_sync = false` prevents atuin from contacting any external server — important on shared hosts where network behaviour is unpredictable.
 
-**NFS cleanup note:** On NFS-mounted home directories (common in university/enterprise environments), fish generates shell completions asynchronously. When those files are open, deleting them creates invisible `.nfsXXXX` stub files that leave the directory non-empty, which would cause `rm -rf ~/.xxh` to fail. The `_xxhc_export_history` handler pre-emptively removes `$XDG_DATA_HOME/fish/` while fish is still running (so the stubs are created and immediately owned by the same process) before `_xxhc_cleanup_home` removes `~/.xxh/`.
+**NFS cleanup note:** On NFS-mounted home directories (common in university/enterprise environments), fish generates shell completions asynchronously. When those files are open, deleting them creates invisible `.nfsXXXX` stub files that leave the directory non-empty, which would cause the `rm -rf` of the session home to fail. The `_xxhc_export_history` handler pre-emptively removes `$XDG_DATA_HOME/fish/` while fish is still running (so the stubs are created and immediately owned by the same process) before `_xxhc_cleanup_home` removes `$XXH_HOME`.
 
 ---
 
@@ -535,7 +592,7 @@ xxhc myserver +vv    # verbose upload
 
 ## Uninstall
 
-**Remote** — just disconnect. `xxhc` deletes `~/.xxh` automatically (via the remote fish handler and an explicit SSH cleanup). If cleanup fails for any reason: `ssh <host> "rm -rf ~/.xxh"`
+**Remote** — just disconnect. `xxhc` deletes the session home `~/.xxh-<sid>` automatically (via the remote fish handler and an explicit SSH cleanup), and the next connect sweeps any home an earlier session left behind. If cleanup fails for any reason: `ssh <host> "rm -rf ~/.xxh ~/.xxh-*"` (the bare `~/.xxh` catches homes left by the pre-1.5 scheme).
 
 **Local:**
 ```sh

@@ -10,6 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-07-xxh-concurrent-sessions-design.md`
 
+**Status:** implemented 2026-09-07. One deviation from the plan as written: the
+project CLAUDE.md requires `terminal/SETUP_VERSION` to be bumped in the *same*
+commit as any `terminal/` change, so each task bumped a patch level (1.4.3 ->
+1.4.8) rather than the single 1.5.0 bump Task 7 describes; 1.5.0 lands with the
+docs commit.
+
 ---
 
 ## File Structure
@@ -32,7 +38,7 @@ body of `xxhc` further.
 **Files:**
 - Create: `terminal/tests/concurrent-sessions.fish`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```fish
 #!/usr/bin/env fish
@@ -104,14 +110,14 @@ else
 end
 ```
 
-- [ ] **Step 2: Run it to confirm it fails against today's code**
+- [x] **Step 2: Run it to confirm it fails against today's code**
 
 Run: `chmod +x terminal/tests/concurrent-sessions.fish; terminal/tests/concurrent-sessions.fish root6`
 Expected: FAIL on "A keeps its binaries while B runs", "A reaches its late
 command", "A's history merged", and "stale home swept". This is the reproduction
 from the spec, now automated.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add terminal/tests/concurrent-sessions.fish
@@ -125,7 +131,7 @@ git commit -m "terminal: add a live test for concurrent xxhc sessions"
 **Files:**
 - Modify: `terminal/.config/fish/functions/xxhc.fish` (session id, `+hh`, cleanup, verification)
 
-- [ ] **Step 1: Widen the session id and derive the home from it**
+- [x] **Step 1: Widen the session id and derive the home from it**
 
 Replace the `sid` block (currently around lines 57-63) with:
 
@@ -149,7 +155,7 @@ Replace the `sid` block (currently around lines 57-63) with:
     set -l remote_home .xxh-$sid
 ```
 
-- [ ] **Step 2: Point xxh at that home**
+- [x] **Step 2: Point xxh at that home**
 
 In the `xxh` invocation, add `+hh` as the first option after the target:
 
@@ -159,7 +165,7 @@ In the `xxh` invocation, add `+hh` as the first option after the target:
         +lh $lxh \
 ```
 
-- [ ] **Step 3: Scope the belt-and-suspenders removal to this session**
+- [x] **Step 3: Scope the belt-and-suspenders removal to this session**
 
 ```fish
     # Belt-and-suspenders: remove this session's home if the fish_exit handler
@@ -168,7 +174,7 @@ In the `xxh` invocation, add `+hh` as the first option after the target:
     ssh -q -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes $target "rm -rf ~/$remote_home 2>/dev/null" 2>/dev/null
 ```
 
-- [ ] **Step 4: Scope the cleanup verification to this session**
+- [x] **Step 4: Scope the cleanup verification to this session**
 
 ```fish
     set -l xxh_state (ssh -q -o ControlPath=$cm_path -o Compression=yes -o ConnectTimeout=10 $target \
@@ -189,12 +195,12 @@ and in the three report branches replace `~/.xxh` with `~/$remote_home`:
         echo "    Check later with:  ssh $target \"ls -ld ~/$remote_home\""
 ```
 
-- [ ] **Step 5: Verify the home is per-session**
+- [x] **Step 5: Verify the home is per-session**
 
 Run: `fish -c 'xxhc root6 +hc "echo \$XXH_HOME"'`
 Expected: prints `/home/<user>/.xxh-<pid>-<epoch>`, not `/home/<user>/.xxh`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add terminal/.config/fish/functions/xxhc.fish
@@ -208,7 +214,7 @@ git commit -m "terminal: give each xxhc session its own remote xxh home"
 **Files:**
 - Modify: `terminal/.xxh/xxh-config.fish`
 
-- [ ] **Step 1: Record the owner and sweep dead peers**
+- [x] **Step 1: Record the owner and sweep dead peers**
 
 Insert immediately after the `set -x TERM xterm-256color` line:
 
@@ -242,7 +248,7 @@ if set -q XXH_HOME; and test -n "$XXH_HOME"
 end
 ```
 
-- [ ] **Step 2: Make the exit cleanup remove only this session's home**
+- [x] **Step 2: Make the exit cleanup remove only this session's home**
 
 Replace `_xxhc_cleanup_home` (currently at the end of the file) with:
 
@@ -266,7 +272,7 @@ function _xxhc_cleanup_home --on-event fish_exit
 end
 ```
 
-- [ ] **Step 3: Run the integration test**
+- [x] **Step 3: Run the integration test**
 
 Run: `terminal/tests/concurrent-sessions.fish root6`
 Expected: "A keeps its binaries while B runs", "A reaches its late command", "A
@@ -274,7 +280,7 @@ exits cleanly", "B exits cleanly", "no remote homes left behind" and "stale home
 swept" all PASS. The two "history merged" checks may still fail — Task 4 covers
 those.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add terminal/.xxh/xxh-config.fish
@@ -289,7 +295,7 @@ git commit -m "terminal: scope remote cleanup to the session that owns the home"
 - Modify: `terminal/.config/fish/functions/xxhc.fish` (pre-seed names)
 - Modify: `terminal/.xxh/xxh-config.fish` (pre-seed name)
 
-- [ ] **Step 1: Namespace the remote pre-seed and the local scratch copy**
+- [x] **Step 1: Namespace the remote pre-seed and the local scratch copy**
 
 In `xxhc.fish`, replace the pre-seed name and the VACUUM scratch file:
 
@@ -301,7 +307,7 @@ In `xxhc.fish`, replace the pre-seed name and the VACUUM scratch file:
             set -l clean_preseed /tmp/.xxh_atuin_pre_clean_$target-$sid.db
 ```
 
-- [ ] **Step 2: Read the matching name on the remote**
+- [x] **Step 2: Read the matching name on the remote**
 
 In `xxh-config.fish`, replace the `preseed` assignment inside the atuin block:
 
@@ -314,12 +320,12 @@ In `xxh-config.fish`, replace the `preseed` assignment inside the atuin block:
     set preseed $preseed.db
 ```
 
-- [ ] **Step 3: Run the integration test**
+- [x] **Step 3: Run the integration test**
 
 Run: `terminal/tests/concurrent-sessions.fish root6`
 Expected: all checks PASS, including both "history merged" checks.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add terminal/.config/fish/functions/xxhc.fish terminal/.xxh/xxh-config.fish
@@ -333,7 +339,7 @@ git commit -m "terminal: namespace every history transfer file per session"
 **Files:**
 - Modify: `terminal/.config/fish/functions/xxhc.fish`
 
-- [ ] **Step 1: Add the release helper above `function xxhc`**
+- [x] **Step 1: Add the release helper above `function xxhc`**
 
 ```fish
 # ── Shared ControlMaster, released by the last session out ──────────────────
@@ -354,7 +360,7 @@ function _xxhc_release_master -a target cm_path cm_users sid \
 end
 ```
 
-- [ ] **Step 2: Claim the master before creating it**
+- [x] **Step 2: Claim the master before creating it**
 
 Replace the ControlMaster setup block:
 
@@ -371,7 +377,7 @@ Replace the ControlMaster setup block:
     end
 ```
 
-- [ ] **Step 3: Release instead of stopping, on all three exits**
+- [x] **Step 3: Release instead of stopping, on all three exits**
 
 Replace each of the three `ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null` calls
 (the unsupported-arch return, the missing-`$lxh` return, and the end of the function) with:
@@ -380,14 +386,14 @@ Replace each of the three `ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev
     _xxhc_release_master $target $cm_path $cm_users $sid
 ```
 
-- [ ] **Step 4: Verify the master survives a peer's exit**
+- [x] **Step 4: Verify the master survives a peer's exit**
 
 Run: `terminal/tests/concurrent-sessions.fish root6`
 Then: `ls -A ~/.ssh/cm/ | grep -c 'xxh-root6.users'`
 Expected: test all PASS, and `0` — the claim directory is removed once the last
 session leaves.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add terminal/.config/fish/functions/xxhc.fish
@@ -401,7 +407,7 @@ git commit -m "terminal: let the last xxhc session out stop the shared ControlMa
 **Files:**
 - Modify: `terminal/.config/fish/functions/xxhc.fish`
 
-- [ ] **Step 1: Warn when retrieval fails, and wait for the merge lock**
+- [x] **Step 1: Warn when retrieval fails, and wait for the merge lock**
 
 Add `PRAGMA busy_timeout=5000;` to both merges so two sessions disconnecting
 together wait for each other instead of failing, silence the checkpoint's
@@ -441,17 +447,17 @@ and after the closing `end` of the retrieval block:
     end
 ```
 
-- [ ] **Step 2: Verify the warning appears when the export is missing**
+- [x] **Step 2: Verify the warning appears when the export is missing**
 
 Run: `fish -c 'xxhc root6 +hc "rm -f \$XXH_HOME/.local/share/atuin/history.db; echo GONE"'`
 Expected: the yellow "No history retrieved from root6" warning, and no crash.
 
-- [ ] **Step 3: Run the full test once more**
+- [x] **Step 3: Run the full test once more**
 
 Run: `terminal/tests/concurrent-sessions.fish root6`
 Expected: ALL PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add terminal/.config/fish/functions/xxhc.fish
@@ -467,7 +473,7 @@ git commit -m "terminal: report a failed history retrieval instead of dropping i
 - Modify: `README.md`
 - Modify: `terminal/SETUP_VERSION`
 
-- [ ] **Step 1: Correct the concurrency claim**
+- [x] **Step 1: Correct the concurrency claim**
 
 `terminal.md:174` currently says concurrency is handled because `XXH_STAGE_ID`
 namespaces the export file. Replace that paragraph with an accurate account:
@@ -477,7 +483,7 @@ files are all named with the same `$sid`; the ControlMaster is shared and
 released by the last session out; a startup sweep removes homes whose owner
 process is gone.
 
-- [ ] **Step 2: Update every `~/.xxh` reference that now means the per-session home**
+- [x] **Step 2: Update every `~/.xxh` reference that now means the per-session home**
 
 Search: `grep -n '~/\.xxh' terminal/terminal.md README.md`
 Every reference to the *remote* home becomes `~/.xxh-<sid>`. References to the
@@ -485,13 +491,13 @@ Every reference to the *remote* home becomes `~/.xxh-<sid>`. References to the
 `~/.xxh/ssh-wrapper.sh`, the local build dir symlinks) are unchanged — do not
 rewrite those.
 
-- [ ] **Step 3: Document the test**
+- [x] **Step 3: Document the test**
 
 Add a short "Tests" subsection to `terminal.md` pointing at
 `terminal/tests/concurrent-sessions.fish`, saying it is a live test that needs a
 reachable host and takes about 90 seconds.
 
-- [ ] **Step 4: Bump the version**
+- [x] **Step 4: Bump the version**
 
 ```bash
 echo 1.5.0 > terminal/SETUP_VERSION
@@ -499,12 +505,12 @@ echo 1.5.0 > terminal/SETUP_VERSION
 
 Minor bump, not a patch: the remote layout changes.
 
-- [ ] **Step 5: Verify the greeting shows the new version**
+- [x] **Step 5: Verify the greeting shows the new version**
 
 Run: `fish -c 'xxhc root6 +hc "echo \$XXH_SETUP_VERSION"'`
 Expected: `1.5.0`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add terminal/terminal.md README.md terminal/SETUP_VERSION
