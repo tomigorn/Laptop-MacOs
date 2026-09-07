@@ -39,6 +39,23 @@ function _xxhc_clock_skew -a remote_clock local_before local_after \
     echo $raw
 end
 
+# ── Shared ControlMaster, released by the last session out ──────────────────
+# One multiplexed tunnel per host is what ControlMaster is for, so concurrent
+# xxhc sessions share it. What they must not share is the teardown: a session
+# ending used to `-O stop` the master a live peer was still using, pushing that
+# peer's remaining transfers onto fresh ProxyJump connections. Each session
+# claims the master with a file named after its $sid; only the session that
+# removes the last claim stops it.
+function _xxhc_release_master -a target cm_path cm_users sid \
+        --description "drop this session's claim on the shared ControlMaster"
+    rm -f $cm_users/$sid 2>/dev/null
+    set -l still (ls -A $cm_users 2>/dev/null)
+    if test (count $still) -eq 0
+        ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
+        rmdir $cm_users 2>/dev/null
+    end
+end
+
 function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # ── Connect timer: start it on the very first line ──────────────────────────
     # This must come before ANY work. Everything below — the ControlMaster setup
@@ -82,8 +99,17 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     # subsequent SSH/SCP calls — including xxh's own bundle upload — reuse the
     # same connection. Without this, every operation creates a fresh tunnel
     # through the jump host, which is slow and can fail for hosts behind ProxyJump.
-    mkdir -p ~/.ssh/cm
-    ssh -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes -fN -o ConnectTimeout=30 $target 2>/dev/null
+    mkdir -p ~/.ssh/cm $cm_users
+    # Claim the master before dialling, so a peer tearing down mid-connect can
+    # never see an empty claim directory and stop the master out from under us.
+    touch $cm_users/$sid
+    # Create the master only when there isn't one already. With ControlMaster=auto
+    # and a socket already present, `-fN` attaches as a background *slave* that
+    # lingers for the life of the master — one leaked ssh process per concurrent
+    # session.
+    if not ssh -q -o ControlPath=$cm_path -O check $target 2>/dev/null
+        ssh -o ControlMaster=auto -o ControlPath=$cm_path -o Compression=yes -fN -o ConnectTimeout=30 $target 2>/dev/null
+    end
     # Non-fatal: if the master didn't come up, the next call with ControlMaster=auto
     # adopts the role instead and ControlPersist (~/.ssh/config) keeps it alive, so
     # reuse still happens — just one connection setup later. Warn so the extra
@@ -126,7 +152,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
             end
             echo "  Aborting — no binaries uploaded."
             set_color normal
-            ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
+            _xxhc_release_master $target $cm_path $cm_users $sid
             return 1
     end
 
@@ -155,7 +181,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         echo "  xxhc: xxh home for $arch is missing or incomplete at $lxh"
         echo "  Run terminal/setup.sh to build it."
         set_color normal
-        ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
+        _xxhc_release_master $target $cm_path $cm_users $sid
         return 1
     end
 
@@ -265,8 +291,8 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         set_color normal
     end
 
-    # Tear down the ControlMaster now that all operations are done
-    ssh -q -o ControlPath=$cm_path -O stop $target 2>/dev/null
+    # Drop our claim; the master is stopped only if no other session holds one.
+    _xxhc_release_master $target $cm_path $cm_users $sid
 
     # Print the local greeting so it's unmistakable you're back on the Mac
     # (the remote session shows the remote's fastfetch; this shows the local one).
