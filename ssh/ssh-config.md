@@ -32,6 +32,7 @@ Therefore `~/.ssh/config` lists its includes **specific → general**, with the
 │   ├── s4d.config            root*, id-s4d-*, mtec-*      (patterns)
 │   ├── tik.config            ee-tik-*                     (patterns)
 │   ├── legacy.config         virt*, cpuvm*, pc-*          (patterns)
+│   ├── itet.config           itet-*                       (patterns)
 │   └── eth.config            git forges, ETH central
 ├── keys/                     key material, grouped by scope (see below)
 ├── agent/  cm/               sockets and ControlMaster state
@@ -125,7 +126,7 @@ everywhere — including `git push`. There is deliberately **no** `IdentityFile`
 | `jumphosts.config` | every jump host | each needs its **own** block with `User`, `IdentityFile`, `IdentitiesOnly` and `ProxyJump none` |
 | `exceptions.config` | hosts whose family pattern would be wrong | every block states **why**; if the reason expires, delete the block |
 | `aliases.config` | `Host <name>` + `HostName <fqdn>` | **`HostName` only.** No `User`, no `IdentityFile`, no `ProxyJump` |
-| `s4d/tik/legacy` | `Match host` pattern rules | identity + routing for whole families |
+| `s4d/tik/legacy/itet` | `Match host` pattern rules | identity + routing for whole families |
 | `eth.config` | git forges and ETH central services | most general, included last |
 
 `jumphosts.config` must precede the pattern files: the wildcards there would
@@ -133,9 +134,9 @@ otherwise hand a jump host a `ProxyJump` to itself.
 
 The FQDN-completion rules at the **bottom** of `aliases.config` append `.ethz.ch`
 to bare machine names. They must stay last in that file, because `HostName` is
-first-match-wins and the specific aliases above them have to win. The `ee-tik-*`
-rule carries a `!*.*` negation because `*` matches dots too — without it an
-already-qualified name would be rewritten to `…ethz.ch.ethz.ch`.
+first-match-wins and the specific aliases above them have to win. The `ee-tik-*` and
+`itet-*` rules carry a `!*.*` negation because `*` matches dots too — without it
+an already-qualified name would be rewritten to `…ethz.ch.ethz.ch`.
 
 ## Debugging
 
@@ -239,7 +240,8 @@ diff <(ssh -G somehost) <(ssh -G -F /path/to/old/config somehost)
 - **Some hosts refuse `ProxyJump`.** `root-itet` has `AllowTcpForwarding`
   disabled, so `-W` is refused with "administratively prohibited". Use a netcat
   `ProxyCommand` instead, which runs in a real shell on the jump host:
-  `ProxyCommand ssh -q root-itet exec nc %h %p`.
+  `ProxyCommand ssh -q root-itet exec nc %h %p`. The whole `itet-*` family is
+  routed this way by `itet.config`; see the ITET section below.
 - **Local SOCKS ports collide.** `DynamicForward` values are documented in the
   header of `exceptions.config`. Two hosts sharing a port only matters if both are
   connected at once.
@@ -247,6 +249,49 @@ diff <(ssh -G somehost) <(ssh -G -F /path/to/old/config somehost)
   the source for ~10 min (TCP/22 dropped while ICMP still works). Fix the
   key/account first, then test once. Do not loop over many hosts to "test" the
   config — use `ssh -G`, which touches no network at all.
+
+## The ITET family
+
+`itet.config` covers the departmental ITET boxes — `itet-ifa-*`, `itet-aps-*`,
+`itet-hvl-*` — with one `Match host "itet-*.ethz.ch"` rule supplying `tmil4la`,
+`tmilata.4la.ethServers` and the routing. `aliases.config` adds the short forms
+(`ifa-s52`, `aps-s50`, `hvl-503`, …) plus `Host itet-* !*.*` FQDN completion, so
+a bare name resolves to the FQDN and then matches the family rule.
+
+**Routing.** These sit behind the ETH border firewall: `:22` is dropped from
+off-campus while ICMP still answers, so a host that pings can still be
+unreachable. They are reached from `root-itet`, and because `root-itet` has
+`AllowTcpForwarding` disabled, via the netcat `ProxyCommand`, not `ProxyJump`.
+Some (`itet-ifa-s53`) also answer directly on campus; the proxy hop is applied to
+the whole family anyway so one config works from anywhere.
+
+**Two standing exceptions**, both in `exceptions.config`:
+
+| Host | Why |
+|---|---|
+| `itet-hvl-503` | needs `DynamicForward 1081`; also runs fail2ban/sshguard |
+| `itet-ifa-s52` | no key in its `authorized_keys` yet — forced to password auth |
+
+`itet-ifa-s52` was added on 2026-09-10. `:22` is open from `root-itet`, but the
+host offers `publickey,password` and rejects all three ETH keys, so the block
+sets `PubkeyAuthentication no` and forces password auth (the same shape as
+`opennebula`). Its `User` is inherited from the family rule and is **unverified**
+on that box. Once a key is installed there, delete the block — the family rule
+already gives the right answer.
+
+**Exception blocks must list every alias.** `Host` matches only what you typed,
+and `exceptions.config` is read *before* `aliases.config`, so at that point
+`HostName` is not yet resolved and `Match host` cannot be used either. A block
+that names only `itet-ifa-s52` would silently not apply to `ssh ifa-s52`. Both
+ITET exception blocks therefore enumerate short name, long name and FQDN. Check
+with `ssh -G <every spelling> | grep pubkeyauthentication`.
+
+**known_hosts.** Entries recorded under a bare name (`itet-ifa-s53`) do not match
+once the config resolves to `itet-ifa-s53.ethz.ch`. The FQDN spellings for
+`itet-ifa-s53` and `itet-aps-s50` were added on 2026-09-10 after verifying with
+`ssh-keyscan` on `root-itet` that the live key is byte-identical to the stored
+one. Verify before adding a name; never just re-accept a key to make an error go
+away.
 
 ## Backups
 
