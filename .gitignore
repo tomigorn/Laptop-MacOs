@@ -18,9 +18,12 @@ Icon?
 .vscode/
 *.sublime-*
 
-# ── Claude Code ──────────────────────────────────────────────────────────────
-# Local, machine-specific settings (also covered by ~/.gitignore_global).
-.claude/settings.local.json
+# ── Files only an AI tool uses ───────────────────────────────────────────────
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+docs/superpowers/
 
 # ── Secrets & credentials — never commit real ones ───────────────────────────
 # NOTE: the placeholder keys under multiple-git-accounts/.ssh/ are intentional
