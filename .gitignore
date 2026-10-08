@@ -18,9 +18,8 @@ Icon?
 .vscode/
 *.sublime-*
 
-# ── Files only an AI tool uses ───────────────────────────────────────────────
-.claude/
-CLAUDE.md
+# ── AI working files ─────────────────────────────────────────────────────────
+.claude/settings.local.json
 CLAUDE.local.md
 AGENTS.md
 docs/superpowers/
