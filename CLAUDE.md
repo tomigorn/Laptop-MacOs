@@ -14,6 +14,6 @@ Global rules apply (`~/.claude/CLAUDE.md`). Only what is special here:
 
 ## Version
 - file: `terminal/SETUP_VERSION` (not `VERSION`: `version` is reserved in fish)
-- tag: no
-- bumps only for changes under `terminal/`
-- extra step: open a new fish shell, the greeting shows the version (also on every `xxhc` connect)
+- tag: `terminal-X.Y.Z`, annotated (`terminal setup X.Y.Z`)
+- bumps: only changes under `terminal/`
+- extra steps: open a new fish shell, the greeting shows the version (also on every `xxhc` connect)
