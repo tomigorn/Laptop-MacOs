@@ -14,4 +14,8 @@ yabai -m config mouse_follows_focus off
 yabai -m config focus_follows_mouse off
 yabai -m config window_origin_display default
 
+# Place the screens per "arrange" in zones.conf when one is plugged in or out.
+yabai -m signal --add label=arrange_added   event=display_added   action="$HOME/.config/yabai/yabai-snap.sh arrange"
+yabai -m signal --add label=arrange_removed event=display_removed action="$HOME/.config/yabai/yabai-snap.sh arrange"
+
 echo "yabai configuration loaded"

@@ -8,6 +8,7 @@
 #   yabai-snap.sh extend-right  grow the window's right edge into the next zone
 #   yabai-snap.sh extend-left   grow the window's left edge into the previous zone
 #   yabai-snap.sh connected     rewrite the "Currently connected" block in zones.conf
+#   yabai-snap.sh arrange       place the screens as the matching "arrange" line says
 #
 # Each monitor's zones are defined in ~/.config/yabai/zones.conf, matched by
 # stable display UUID so reconnecting a monitor never scrambles the ratios.
@@ -37,9 +38,9 @@ fi
 # Guard the query: some focused windows can't be queried (no managed/AX window —
 # see "Known limitations" in window-manager.md). A yabai error or non-JSON result
 # must make us no-op cleanly, not abort the whole script under `set -e`.
-# "connected" reports on displays only, so it skips this guard — otherwise it
-# would silently do nothing whenever no window happens to be focusable.
-if [ "$cmd" != "connected" ]; then
+# "connected" and "arrange" work on displays only, so they skip this guard —
+# otherwise they would silently do nothing whenever no window is focusable.
+if [ "$cmd" != "connected" ] && [ "$cmd" != "arrange" ]; then
   win="$("$YABAI" -m query --windows --window 2>/dev/null || true)"
   wid="$(printf '%s' "$win" | "$JQ" -r '.id // empty' 2>/dev/null || true)"
   [ -n "$wid" ] || exit 0
@@ -81,6 +82,7 @@ model_for_display() {
 }
 
 model_rule() { awk -v m="$1" '$1=="model" && $2==m && m!="" {print $3; exit}' "$ZONES_FILE"; }
+model_rule_location() { awk -v m="$1" '$1=="model" && $2==m && m!="" {print $4; exit}' "$ZONES_FILE"; }
 has_layout() { awk -v n="$1" '$1=="layout" && $2==n {f=1; exit} END {exit !f}' "$ZONES_FILE"; }
 
 # Set RES_NAME for display UUID $1 with frame $2 x $3: the UUID's monitor name if
@@ -181,6 +183,112 @@ update_connected_block() {
 
   [ -s "$tmp" ] && cat "$tmp" > "$ZONES_FILE"   # never truncate on a failed awk
   rm -f "$blk" "$tmp"
+}
+
+# --- Screen arrangement -------------------------------------------------------
+# "arrange <location> <top|bottom|center> <name>..." places the screens left to
+# right, applied with displayplacer.
+
+# Set RES_NAME and RES_LOC for display UUID $1 with frame $2 x $3. The location is
+# the UUID line's when resolve_name picked that line, else the model rule's.
+resolve_location() {
+  local entry
+  resolve_name "$1" "$2" "$3"
+  entry="$(monitor_entry "$1")"
+  if [ "${entry%% *}" = "$RES_NAME" ]; then
+    RES_LOC="${entry##* }"; [ "$RES_LOC" != "-" ] || RES_LOC=""
+  else
+    load_models
+    RES_LOC="$(model_rule_location "$(model_for_display "$2" "$3")")"
+  fi
+}
+
+sorted_words() { printf '%s\n' "$@" | sort | tr '\n' ' '; }
+upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+arrange_screens() {
+  local uuid x y w h line kw loc align names have i j n found=""
+  local S_UUID=() S_NAME=() S_LOC=() S_X=() S_Y=() S_W=() S_H=() ORDER=() USED=()
+  load_models
+  while read -r uuid x y w h; do
+    [ -n "$uuid" ] || continue
+    resolve_location "$uuid" "$w" "$h"
+    S_UUID+=("$(upper "$uuid")"); S_NAME+=("$RES_NAME"); S_LOC+=("$RES_LOC")
+    S_X+=("$x"); S_Y+=("$y"); S_W+=("$w"); S_H+=("$h"); USED+=("")
+  done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.x|floor) \(.frame.y|floor) \(.frame.w|floor) \(.frame.h|floor)"')
+  n="${#S_UUID[@]}"
+  if [ "$n" -eq 0 ]; then echo "yabai reports no screens — screens not arranged" >&2; return 0; fi
+  have="$(sorted_words "${S_NAME[@]}")"
+
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    read -r kw loc align names <<<"$line"
+    [ "$kw" = "arrange" ] || continue
+    case " ${S_LOC[*]} " in *" $loc "*) ;; *) continue ;; esac
+    # shellcheck disable=SC2086
+    [ "$(sorted_words $names)" = "$have" ] || continue
+    found=1; break
+  done < "$ZONES_FILE"
+  if [ -z "$found" ]; then echo "no arrange line for the connected screens" >&2; return 0; fi
+
+  # screen index per listed name, left to right (equal names take the next unused screen)
+  # shellcheck disable=SC2086
+  for kw in $names; do
+    for ((j = 0; j < n; j++)); do
+      if [ "${S_NAME[$j]}" = "$kw" ] && [ -z "${USED[$j]}" ]; then USED[j]=1; ORDER+=("$j"); break; fi
+    done
+  done
+
+  local maxh=0 cx=0 NX=() NY=()
+  for j in "${ORDER[@]}"; do [ "${S_H[$j]}" -le "$maxh" ] || maxh="${S_H[$j]}"; done
+  for j in "${ORDER[@]}"; do
+    NX[j]="$cx"; cx=$(( cx + S_W[j] ))
+    case "$align" in
+      top)    NY[j]=0 ;;
+      center) NY[j]=$(( (maxh - S_H[j]) / 2 )) ;;
+      *)      NY[j]=$(( maxh - S_H[j] )) ;;
+    esac
+  done
+
+  local dp list cmdline rest arg id main="" ARGS=() NEW=()
+  dp="$(command -v displayplacer || true)"
+  if [ -z "$dp" ]; then echo "displayplacer is not installed — screens not arranged" >&2; return 0; fi
+  list="$("$dp" list 2>/dev/null || true)"
+  cmdline="$(printf '%s\n' "$list" | grep '^displayplacer "' | tail -n 1 || true)"
+  rest="${cmdline#displayplacer }"
+  while :; do
+    case "$rest" in *'"'*'"'*) ;; *) break ;; esac
+    rest="${rest#*\"}"; ARGS+=("${rest%%\"*}"); rest="${rest#*\"}"
+  done
+  if [ "${#ARGS[@]}" -eq 0 ]; then echo "displayplacer list gave no arrangement — screens not arranged" >&2; return 0; fi
+  # asleep or locked screens are listed as "enabled:false"; applying that would switch them off
+  case "${ARGS[*]}" in *enabled:false*) echo "a screen is reported disabled — screens not arranged" >&2; return 0 ;; esac
+
+  # index of the screen for each displayplacer argument ("" if none)
+  local AIDX=()
+  for ((i = 0; i < ${#ARGS[@]}; i++)); do
+    arg="${ARGS[$i]}"
+    id="${arg#*id:}"; id="$(upper "${id%% *}")"
+    AIDX[i]=""
+    for ((j = 0; j < n; j++)); do [ "${S_UUID[$j]}" != "$id" ] || AIDX[i]="$j"; done
+    case "$arg" in *"origin:(0,0)"*) main="${AIDX[$i]}" ;; esac
+  done
+
+  local dx=0 dy=0 same=1
+  if [ -n "$main" ]; then dx=$(( -NX[main] )); dy=$(( -NY[main] )); fi
+  for j in "${ORDER[@]}"; do
+    NX[j]=$(( NX[j] + dx )); NY[j]=$(( NY[j] + dy ))
+    [ "${NX[$j]}" = "${S_X[$j]}" ] && [ "${NY[$j]}" = "${S_Y[$j]}" ] || same=""
+  done
+  if [ -n "$same" ]; then echo "already arranged"; return 0; fi
+
+  for ((i = 0; i < ${#ARGS[@]}; i++)); do
+    arg="${ARGS[$i]}"; j="${AIDX[$i]}"
+    [ -z "$j" ] || arg="$(printf '%s' "$arg" | sed -E "s/origin:\([^)]*\)/origin:(${NX[$j]},${NY[$j]})/")"
+    NEW+=("$arg")
+  done
+  printf 'displayplacer'; printf ' "%s"' "${NEW[@]}"; echo
+  "$dp" "${NEW[@]}"
 }
 
 # Echo the zones of layout $1 as grid specs (ROWS:COLS:X:Y:W:H), left -> right,
@@ -296,7 +404,10 @@ case "$cmd" in
     update_connected_block
     connected_block | sed -e 's/^# //' -e 's/^#$//'                    # same thing, readable
     ;;
+  arrange)
+    arrange_screens
+    ;;
   *)
-    echo "usage: $(basename "$0") left|right|fill|extend-left|extend-right|connected" >&2; exit 1
+    echo "usage: $(basename "$0") left|right|fill|extend-left|extend-right|connected|arrange" >&2; exit 1
     ;;
 esac
