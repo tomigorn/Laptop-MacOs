@@ -7,7 +7,7 @@
 #   yabai-snap.sh fill    fill the whole display (NOT native fullscreen)
 #   yabai-snap.sh extend-right  grow the window's right edge into the next zone
 #   yabai-snap.sh extend-left   grow the window's left edge into the previous zone
-#   yabai-snap.sh connected     rewrite the "Currently connected" block in zones.conf
+#   yabai-snap.sh connected     write the "Currently connected" block to connected.txt
 #   yabai-snap.sh arrange       place the screens as the matching "arrange" line says
 #
 # Each monitor's zones are defined in ~/.config/yabai/zones.conf, matched by
@@ -22,6 +22,7 @@ export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbi
 YABAI="$(command -v yabai)"
 JQ="$(command -v jq)"
 ZONES_FILE="${YABAI_ZONES_FILE:-$HOME/.config/yabai/zones.conf}"
+CONNECTED_DIR="$(dirname "$ZONES_FILE")"
 FILL_GRID="1:1:0:0:1:1"
 
 displays="$("$YABAI" -m query --displays 2>/dev/null || true)"
@@ -115,8 +116,8 @@ register_displays() {
 
 # --- "Currently connected" report -------------------------------------------
 # zones.conf grows into "every monitor I've ever plugged in", so the interesting
-# question when you open it is which of those lines are live *right now*. The
-# block below answers that, in the file itself, and is refreshed on demand.
+# question when you open it is which of those lines are live *right now*.
+# connected.txt (next to zones.conf, local) answers that, refreshed on demand.
 
 # "<name> <location>" for a display UUID; "- -" if it isn't in zones.conf yet.
 monitor_entry() {
@@ -133,8 +134,7 @@ layout_sizes() {
     END { print (got ? s : d) }' "$ZONES_FILE"
 }
 
-# The whole comment block, on stdout. Line 1 and the last line are the sentinels
-# update_connected_block() matches on — keep them in sync if you reword them.
+# The whole comment block, on stdout.
 connected_block() {
   local idx uuid w h focus name loc sizes entry mark model
   local fmt='# %s %-3s %-36s %-7s %-19s %-13s %-12s %s\n'
@@ -162,27 +162,13 @@ connected_block() {
   echo "# --- end currently connected ------------------------------------------------"
 }
 
-# Replace the block in zones.conf (or insert it above the monitor list the first
-# time). Written via a temp file and copied back, so the config is never left
-# half-written and the original file/symlink and its permissions survive.
+# Write the block to connected.txt next to zones.conf, so zones.conf (in the
+# repo) doesn't change on every refresh. Temp file + mv: never half-written.
 update_connected_block() {
-  [ -w "$ZONES_FILE" ] || return 0
-  local blk tmp
-  blk="$(mktemp "${TMPDIR:-/tmp}/yabai-block.XXXXXX")" || return 0
-  tmp="$(mktemp "${TMPDIR:-/tmp}/yabai-zones.XXXXXX")" || { rm -f "$blk"; return 0; }
-  connected_block > "$blk"
-
-  awk -v blk="$blk" '
-    function emit(   l) { while ((getline l < blk) > 0) print l; close(blk); done=1 }
-    /^# --- Currently connected/     { emit(); skip=1; next }          # replace in place
-    skip                             { if (/^# --- end currently connected/) skip=0; next }
-    !done && /^# --- Monitors/       { emit(); print ""; print; next }  # first run
-    { print }
-    END { if (!done) emit() }                                          # no anchor: append
-  ' "$ZONES_FILE" > "$tmp"
-
-  [ -s "$tmp" ] && cat "$tmp" > "$ZONES_FILE"   # never truncate on a failed awk
-  rm -f "$blk" "$tmp"
+  local tmp
+  [ -w "$CONNECTED_DIR" ] || return 0
+  tmp="$(mktemp "$CONNECTED_DIR/.connected.XXXXXX")" || return 0
+  if connected_block > "$tmp"; then mv -f "$tmp" "$CONNECTED_DIR/connected.txt"; else rm -f "$tmp"; fi
 }
 
 # --- Screen arrangement -------------------------------------------------------

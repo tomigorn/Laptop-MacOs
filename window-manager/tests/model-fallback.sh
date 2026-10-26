@@ -148,5 +148,17 @@ run left
 check "8 own layout snaps without ioreg" [ "$(grep -c ioreg "$FIXTURE_LOG")" = 0 ]
 check "8 snap left uses own layout" grep -q -- "--grid 1:100:0:0:50:1" "$FIXTURE_LOG"
 
+# 9. the connected block goes to connected.txt next to zones.conf, never into zones.conf
+setup "$(hp_disp)"
+zones <<EOF
+monitor $HP  HP  home
+layout HP 40 60
+EOF
+before="$(cat "$YABAI_ZONES_FILE")"
+run connected
+check "9 zones.conf unchanged" [ "$(cat "$YABAI_ZONES_FILE")" = "$before" ]
+check "9 connected.txt written" grep -q "Currently connected" "$(dirname "$YABAI_ZONES_FILE")/connected.txt"
+check "9 connected.txt lists HP" grep -q "$HP" "$(dirname "$YABAI_ZONES_FILE")/connected.txt"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi
