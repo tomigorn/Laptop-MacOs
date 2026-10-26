@@ -16,7 +16,7 @@ set -euo pipefail
 cmd="${1:-}"
 
 # launchd (skhd) gives a minimal PATH; make the Homebrew bins findable.
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 YABAI="$(command -v yabai)"
 JQ="$(command -v jq)"
@@ -49,17 +49,66 @@ fi
 disp_json() { echo "$displays" | "$JQ" "map(select(.index==$1))[0]"; }
 snap()      { "$YABAI" -m window "$wid" --grid "$1"; }
 
+# --- Monitor model fallback -------------------------------------------------
+# Shared desks give every monitor a new UUID, so a "model <Product-Name> <name>"
+# line picks the layout by monitor model when the UUID has none.
+
+# "<w> <h> <Product-Name>" per external display (the built-in has no ProductName).
+display_models() {
+  ioreg -lw0 2>/dev/null | awk '
+    function val(re,   s) { if (!match($0, re)) return ""; s = substr($0, RSTART, RLENGTH); sub(/^[^=]*=/, "", s); gsub(/"/, "", s); return s }
+    /"DisplayAttributes"/ {
+      p = val("\"ProductName\"=\"[^\"]*\""); w = val("\"NativeFormatHorizontalPixels\"=[0-9]+"); h = val("\"NativeFormatVerticalPixels\"=[0-9]+")
+      if (p == "" || w == "" || h == "") next
+      gsub(/ /, "-", p); print w, h, p
+    }'
+}
+
+# ioreg takes ~170ms: read it at most once per run, and only when needed.
+MODELS="" MODELS_READ=""
+load_models() {
+  [ -z "$MODELS_READ" ] || return 0
+  MODELS="$(display_models || true)"; MODELS_READ=1
+}
+
+# Product name of the display with frame $1 x $2: the ioreg entries within 2% of
+# its aspect ratio, if they all agree; empty otherwise. Needs load_models first.
+model_for_display() {
+  printf '%s\n' "$MODELS" | awk -v fw="$1" -v fh="$2" '
+    NF >= 3 && $2 > 0 && fh > 0 { r = ($1 / $2) / (fw / fh)
+      if (r > 0.98 && r < 1.02) { if (m != "" && m != $3) bad = 1; m = $3 } }
+    END { if (!bad) print m }'
+}
+
+model_rule() { awk -v m="$1" '$1=="model" && $2==m && m!="" {print $3; exit}' "$ZONES_FILE"; }
+has_layout() { awk -v n="$1" '$1=="layout" && $2==n {f=1; exit} END {exit !f}' "$ZONES_FILE"; }
+
+# Set RES_NAME for display UUID $1 with frame $2 x $3: the UUID's monitor name if
+# it has a layout line, else the name of its model rule, else "default".
+# Sets a variable instead of echoing so the ioreg cache survives (no subshell).
+resolve_name() {
+  RES_NAME="$(awk -v u="$1" '$1=="monitor" && $2==u {print $3; exit}' "$ZONES_FILE")"
+  has_layout "$RES_NAME" && return 0
+  load_models
+  RES_NAME="$(model_rule "$(model_for_display "$2" "$3")")"
+  [ -n "$RES_NAME" ] || RES_NAME="default"
+}
+
 # Append a "monitor" line for any connected display not yet in zones.conf,
-# so the file fills itself in as monitors are plugged in.
+# so the file fills itself in as monitors are plugged in. Displays covered by a
+# model rule are left out, so shared desks don't pile up lines.
 register_displays() {
   [ -w "$ZONES_FILE" ] || return 0
-  local uuid w
-  while read -r uuid w; do
+  local uuid w h model
+  while read -r uuid w h; do
     [ -n "$uuid" ] || continue
     grep -q "$uuid" "$ZONES_FILE" 2>/dev/null && continue
-    printf 'monitor %s  mon-%s  unknown    # %spt, first seen %s\n' \
-      "$uuid" "${uuid:0:8}" "$w" "$(date +%F)" >> "$ZONES_FILE"
-  done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor)"')
+    load_models
+    model="$(model_for_display "$w" "$h")"
+    [ -n "$(model_rule "$model")" ] && continue
+    printf 'monitor %s  mon-%s  unknown    # %spt, %sfirst seen %s\n' \
+      "$uuid" "${uuid:0:8}" "$w" "${model:+$model, }" "$(date +%F)" >> "$ZONES_FILE"
+  done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor) \(.frame.h|floor)"')
 }
 
 # --- "Currently connected" report -------------------------------------------
@@ -85,24 +134,27 @@ layout_sizes() {
 # The whole comment block, on stdout. Line 1 and the last line are the sentinels
 # update_connected_block() matches on — keep them in sync if you reword them.
 connected_block() {
-  local idx uuid w focus name loc sizes entry mark
-  local fmt='# %s %-3s %-36s %-7s %-19s %-13s %s\n'
+  local idx uuid w h focus name loc sizes entry mark model
+  local fmt='# %s %-3s %-36s %-7s %-19s %-13s %-12s %s\n'
   echo "# --- Currently connected (auto-generated — do not edit) ---------------------"
   echo "#   Last refreshed $(date '+%F %H:%M'). Regenerate with:  ./yabai-snap.sh connected"
   echo "#   (also runs automatically when you open this folder from Spotlight)"
   echo "#"
   # shellcheck disable=SC2059
-  printf "$fmt" ' ' 'idx' 'uuid' 'width' 'name' 'location' 'layout'
-  while read -r idx uuid w focus; do
+  printf "$fmt" ' ' 'idx' 'uuid' 'width' 'name' 'location' 'layout' 'model'
+  load_models
+  while read -r idx uuid w h focus; do
     [ -n "$uuid" ] || continue
     entry="$(monitor_entry "$uuid")"
     name="${entry%% *}"
     loc="${entry##* }"
-    sizes="$(layout_sizes "$name")"
+    resolve_name "$uuid" "$w" "$h"
+    sizes="$(layout_sizes "$RES_NAME")"
+    model="$(model_for_display "$w" "$h")"
     if [ "$focus" = "true" ]; then mark='*'; else mark=' '; fi
     # shellcheck disable=SC2059
-    printf "$fmt" "$mark" "$idx" "$uuid" "${w}pt" "$name" "$loc" "$sizes"
-  done < <(echo "$displays" | "$JQ" -r '.[] | "\(.index) \(.uuid) \(.frame.w|floor) \(.["has-focus"])"')
+    printf "$fmt" "$mark" "$idx" "$uuid" "${w}pt" "$name" "$loc" "$sizes" "${model:--}"
+  done < <(echo "$displays" | "$JQ" -r '.[] | "\(.index) \(.uuid) \(.frame.w|floor) \(.frame.h|floor) \(.["has-focus"])"')
   echo "#"
   echo "#   * = display with keyboard focus.  name/location \"-\" = not named below yet."
   echo "# --- end currently connected ------------------------------------------------"
@@ -131,15 +183,10 @@ update_connected_block() {
   rm -f "$blk" "$tmp"
 }
 
-# Echo display $1's zones as grid specs (ROWS:COLS:X:Y:W:H), left -> right.
-# Resolve UUID -> monitor name -> layout percentages (else the "default" layout).
-# COLS is fixed at 100 so percentages map straight to columns.
-profile_for_display() {
-  local uuid name
-  uuid="$(disp_json "$1" | "$JQ" -r '.uuid')"
-  name="$(awk -v u="$uuid" '$1=="monitor" && $2==u {print $3; exit}' "$ZONES_FILE")"
-  [ -n "$name" ] || name="default"
-  awk -v n="$name" '
+# Echo the zones of layout $1 as grid specs (ROWS:COLS:X:Y:W:H), left -> right,
+# else the "default" layout. COLS is fixed at 100 so percentages map to columns.
+profile_for_name() {
+  awk -v n="$1" '
     $1=="layout" && $2==n         { for (i=3;i<=NF;i++) sel[++s]=$i; got=1 }
     $1=="layout" && $2=="default" { for (i=3;i<=NF;i++) def[++d]=$i }
     END { x=0
@@ -151,8 +198,10 @@ profile_for_display() {
 # Load display $1's zones into the ZONES array (bash 3.2-safe; falls back 50/50).
 read_zones() {
   ZONES=()
-  local line
-  while IFS= read -r line; do ZONES+=("$line"); done < <(profile_for_display "$1")
+  local line dj
+  dj="$(disp_json "$1")"
+  resolve_name "$(echo "$dj" | "$JQ" -r '.uuid')" "$(echo "$dj" | "$JQ" '.frame.w')" "$(echo "$dj" | "$JQ" '.frame.h')"
+  while IFS= read -r line; do ZONES+=("$line"); done < <(profile_for_name "$RES_NAME")
   [ "${#ZONES[@]}" -gt 0 ] || ZONES=("1:2:0:0:1:1" "1:2:1:0:1:1")
 }
 
