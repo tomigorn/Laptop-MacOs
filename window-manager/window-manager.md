@@ -73,8 +73,11 @@ This is the only file you normally edit. Two kinds of lines:
 
 ```
 monitor <uuid> <name> <location>     # a physical screen (auto-added; edit name+location)
+model   <Product-Name> <name>        # any screen of that model uses <name>'s layout (shared desks)
 layout  <name> <size> <size> ...     # zone sizes for that monitor, % left→right, sum 100
 ```
+
+Lookup: UUID's name (if it has a `layout` line) → `model` rule → `layout default`.
 
 Examples for the sizes on a `layout` line:
 
@@ -110,6 +113,18 @@ Because each physical screen has its own UUID line, your home Dell-27 and Dell-2
 get separate layouts, and office screens stay distinct from home — no
 cross-location confusion.
 
+## Shared desks (open office)
+
+Every desk is a new UUID, so match the monitor model instead:
+
+```
+model HP-E34m-G4  Work-HP-Ultrawide
+```
+
+- Product name from the `model` column of the connected block, or the comment of a registered line (spaces written as `-`).
+- Screens covered by a `model` rule are not registered, so desks don't pile up lines.
+- Model comes from `ioreg`, matched to the display by aspect ratio. Two connected screens with the same aspect ratio but different models: no match, `default` is used.
+
 ## Which monitors are connected right now?
 
 `zones.conf` accumulates every monitor ever plugged in, so the top of the file
@@ -121,9 +136,9 @@ laptop screen included:
 #   Last refreshed 2026-08-18 09:45. Regenerate with:  ./yabai-snap.sh connected
 #   (also runs automatically when you open this folder from Spotlight)
 #
-#   idx uuid                                 width   name                location      layout
-#   1   37D8832A-2D66-02CA-B9F7-8F30A301B230 1470pt  MacBook             laptop        50 50
-# * 2   269F4E09-0D04-41E9-A7A4-CE591643DAE0 3440pt  HP                  home          40 60
+#   idx uuid                                 width   name                location      layout       model
+#   1   37D8832A-2D66-02CA-B9F7-8F30A301B230 1470pt  MacBook             laptop        50 50        -
+# * 2   269F4E09-0D04-41E9-A7A4-CE591643DAE0 3440pt  HP                  home          40 60        HP-E34m-G4
 #
 #   * = display with keyboard focus.  name/location "-" = not named below yet.
 # --- end currently connected ------------------------------------------------
@@ -148,8 +163,7 @@ skips the focused-window guard that makes the snap commands no-op.
 - `yabai-snap.sh`:
   - captures the focused window by **id** (focus doesn't reliably follow a
     window across displays, so it never re-queries "the focused window"),
-  - resolves the window's display **UUID → name → layout** from `zones.conf`,
-    auto-registering any unknown connected monitors,
+  - resolves the window's display **UUID → name → layout** from `zones.conf`, falling back to a `model` rule (via `ioreg`), auto-registering any unknown connected monitors without one,
   - figures out which zone the window currently occupies (by position **and**
     width, so a filled window matches nothing),
   - snaps to the next/previous zone, crossing displays only at the real edge,
@@ -171,6 +185,7 @@ window-manager/
 ├── AppIcon.icns                # config launcher's icon (white tiling glyph on blue)
 ├── RestartIcon.icns            # restart launcher's icon (white refresh glyph on blue)
 ├── window-manager.md           # this file
+├── tests/model-fallback.sh     # tests for the model fallback (stubs yabai + ioreg)
 └── config/
     ├── yabairc                 # → ~/.config/yabai/yabairc
     ├── yabai-snap.sh           # → ~/.config/yabai/yabai-snap.sh
@@ -235,7 +250,7 @@ instead of erroring out.
 | Windows don't move | Grant **yabai** Accessibility; `yabai --restart-service`. Check `/tmp/yabai_$USER.err.log`. |
 | A specific window won't snap | Likely a window with no Accessibility handle (e.g. **Steam**, some overlays/dialogs, a **fullscreen YouTube/video window**) — yabai can't move it without the scripting addition. Exit the video's fullscreen, or launch **yabai window manager - restart** to have yabai re-acquire it. See [Known limitations](#known-limitations). |
 | Window-manager just "bugged out" | Launch **yabai window manager - restart** from Spotlight (or `yabai --restart-service && skhd --restart-service`). |
-| Ratios look wrong on a monitor | Check its `monitor` line is named and has a matching `layout` line in `zones.conf`. |
+| Ratios look wrong on a monitor | Check its `monitor` line is named and has a matching `layout` line in `zones.conf`, or a `model` rule for its model. |
 | Service won't start | `tail /tmp/{yabai,skhd}_$USER.err.log` |
 
 ## Uninstall

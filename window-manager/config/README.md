@@ -39,9 +39,9 @@ the file carries an auto-generated block naming the ones that are actually live:
 #   Last refreshed 2026-08-18 09:45. Regenerate with:  ./yabai-snap.sh connected
 #   (also runs automatically when you open this folder from Spotlight)
 #
-#   idx uuid                                 width   name                location      layout
-#   1   37D8832A-2D66-02CA-B9F7-8F30A301B230 1470pt  MacBook             laptop        50 50
-# * 2   269F4E09-0D04-41E9-A7A4-CE591643DAE0 3440pt  HP                  home          40 60
+#   idx uuid                                 width   name                location      layout       model
+#   1   37D8832A-2D66-02CA-B9F7-8F30A301B230 1470pt  MacBook             laptop        50 50        -
+# * 2   269F4E09-0D04-41E9-A7A4-CE591643DAE0 3440pt  HP                  home          40 60        HP-E34m-G4
 #
 #   * = display with keyboard focus.  name/location "-" = not named below yet.
 # --- end currently connected ------------------------------------------------
@@ -65,10 +65,11 @@ Only the lines between the two `# ---` markers are rewritten; everything else in
 
 ## Change window sizes — `zones.conf`
 
-Two kinds of lines:
+Three kinds of lines:
 
 ```
 monitor <uuid> <name> <location>     # a physical screen (auto-added; you edit name+location)
+model   <Product-Name> <name>        # any screen of that model uses <name>'s layout (shared desks)
 layout  <name> <size> <size> ...     # zone sizes for that monitor: % left→right, summing to 100
 ```
 
@@ -99,6 +100,14 @@ automatically:
 
 The "currently connected" block at the top of `zones.conf` tells you which UUIDs
 you're looking at — the new ones show up there with `-` for name and location.
+
+## Shared desks (open office)
+
+Every desk is a new UUID, so match the model instead: `model HP-E34m-G4 Work-HP-Ultrawide`.
+
+- Lookup: UUID's name (if it has a `layout`) → `model` rule → `default`.
+- Product name: `model` column of the connected block, spaces as `-`.
+- Screens covered by a rule are not registered.
 
 ## Change the keyboard shortcuts — `keys.conf`
 
