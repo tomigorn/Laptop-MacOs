@@ -2,10 +2,8 @@
 # yabai + skhd window-manager setup for a new Mac. Safe to re-run.
 #
 #   1. Installs yabai, skhd, jq, displayplacer from Homebrew (only what's missing)
-#   2. Symlinks the configs into ~/.config (yabairc, yabai-snap.sh, keys.conf)
-#   3. Seeds ~/.config/yabai/zones.conf from the example (only if absent — the
-#      live file is machine-specific and the script appends to it)
-#   4. Starts / restarts the yabai + skhd LaunchAgents
+#   2. Symlinks the configs into ~/.config (yabairc, yabai-snap.sh, keys.conf, zones.conf)
+#   3. Starts / restarts the yabai + skhd LaunchAgents
 #
 # Flags:
 #   --skip-services   don't start/restart services (useful for testing)
@@ -31,7 +29,7 @@ SKIP_SERVICES=0
 for a in "$@"; do
     case "$a" in
         --skip-services) SKIP_SERVICES=1 ;;
-        -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
         *) die "unknown flag: $a" ;;
     esac
 done
@@ -78,19 +76,11 @@ link "$CONFIG_SRC/yabairc"        "$CONFIG_HOME/yabai/yabairc"
 link "$CONFIG_SRC/yabai-snap.sh"  "$CONFIG_HOME/yabai/yabai-snap.sh"
 link "$CONFIG_SRC/keys.conf"      "$CONFIG_HOME/yabai/keys.conf"
 link "$CONFIG_SRC/README.md"      "$CONFIG_HOME/yabai/README.md"
+link "$CONFIG_SRC/zones.conf"     "$CONFIG_HOME/yabai/zones.conf"
 # skhd only looks in ~/.config/skhd/skhdrc (or ~/.skhdrc); point it at keys.conf.
 link "$CONFIG_HOME/yabai/keys.conf"  "$CONFIG_HOME/skhd/skhdrc"
 
-# ── 3. zones.conf (machine-local, never overwritten) ─────────────────────────
-step "zones.conf (your monitors + layouts)"
-if [ -e "$CONFIG_HOME/yabai/zones.conf" ]; then
-    skip "zones.conf exists — left untouched"
-else
-    cp "$CONFIG_SRC/zones.conf.example" "$CONFIG_HOME/yabai/zones.conf"
-    ok "created zones.conf from example"
-fi
-
-# ── 4. Services ──────────────────────────────────────────────────────────────
+# ── 3. Services ──────────────────────────────────────────────────────────────
 step "yabai + skhd services"
 if [ "$SKIP_SERVICES" -eq 1 ]; then
     skip "service start skipped (--skip-services)"
