@@ -65,11 +65,12 @@ Only the lines between the two `# ---` markers are rewritten; everything else in
 
 ## Change window sizes — `zones.conf`
 
-Three kinds of lines:
+Four kinds of lines:
 
 ```
 monitor <uuid> <name> <location>     # a physical screen (auto-added; you edit name+location)
-model   <Product-Name> <name>        # any screen of that model uses <name>'s layout (shared desks)
+model   <Product-Name> <name> [<location>]   # any screen of that model uses <name>'s layout (shared desks)
+arrange <location> <top|bottom|center> <name> ...   # screens left→right per workspace
 layout  <name> <size> <size> ...     # zone sizes for that monitor: % left→right, summing to 100
 ```
 
@@ -109,6 +110,13 @@ Every desk is a new UUID, so match the model instead: `model HP-E34m-G4 Work-HP-
 - Product name: `model` column of the connected block, spaces as `-`.
 - Screens covered by a rule are not registered.
 
+## Screen arrangement — `arrange`
+
+`arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook`: screens left→right, bottom aligned, for the workspace `Work5-WEV` (the `location` of the `monitor` lines, or the third field of a `model` rule).
+
+- Applied on plug in/out, or by hand: `~/.config/yabai/yabai-snap.sh arrange`
+- Only used when its names are exactly the connected screens.
+
 ## Change the keyboard shortcuts — `keys.conf`
 
 Lines look like `ctrl + alt - left : … left`. Edit, then reload:
@@ -135,4 +143,4 @@ These files are maintained in the dotfiles repo at
 and full docs live there). If this folder was set up via that repo's
 `install.sh`, the files here are symlinks back to it.
 
-**Exception: `zones.conf`** (sizes, monitors, `model` rules) is a real file here, local to this Mac and not in the repo. The repo only has `zones.conf.example`, the template for a first install.
+**Exception: `zones.conf`** (sizes, monitors, `model` rules, `arrange` lines) is a real file here, local to this Mac and not in the repo. The repo only has `zones.conf.example`, the template for a first install.

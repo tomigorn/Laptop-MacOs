@@ -7,7 +7,7 @@
 # the first time (and never overwrites it after), because the live file is
 # machine-specific and the script appends to it automatically.
 #
-# There are three kinds of lines (everything else is a comment):
+# There are four kinds of lines (everything else is a comment):
 #
 #   monitor <uuid> <name> <location>
 #       One physical monitor. These are ADDED AUTOMATICALLY the first time the
@@ -16,10 +16,15 @@
 #       Leave <uuid> alone — it identifies the exact physical screen, even
 #       between two identical models or the same model at different offices.
 #
-#   model <Product-Name> <name>
+#   model <Product-Name> <name> [<location>]
 #       Shared desks (new UUID every time): any screen of that model uses
 #       <name>'s layout. Product name from the "model" column, spaces as "-".
 #       Screens covered by a model rule are not registered.
+#
+#   arrange <location> <top|bottom|center> <name> <name> ...
+#       Screen arrangement for a workspace: names left->right, aligned on that
+#       edge. Applied on plug in/out when the names are exactly the connected
+#       screens.
 #
 #   layout <name> <size> <size> ...
 #       The snap zones for the monitor with that <name>: percentages, LEFT->RIGHT,
@@ -48,4 +53,7 @@ layout HP       40 60
 layout default  50 50
 
 # --- Models (shared desks) --------------------------------------------------
-# model HP-E34m-G4  HP
+# model HP-E34m-G4  HP  open-office
+
+# --- Arrangements (screens left -> right per workspace) ----------------------
+# arrange home  bottom  Dell MacBook HP

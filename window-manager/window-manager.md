@@ -7,7 +7,7 @@ reboots, sleep/wake, and moving between work locations.
 >
 > | What | Where |
 > |------|-------|
-> | sizes, monitors, `model` rules | `~/.config/yabai/zones.conf` (local only) |
+> | sizes, monitors, `model` rules, `arrange` lines | `~/.config/yabai/zones.conf` (local only) |
 > | logic, keys, yabai settings | `config/` here, symlinked into `~/.config/yabai/` |
 
 - Windows open as normal floating macOS windows.
@@ -30,7 +30,7 @@ Protection on.
 ## Requirements
 
 - macOS (Apple Silicon or Intel), Homebrew.
-- That's it — `install.sh` pulls `yabai`, `skhd`, `jq`.
+- That's it — `install.sh` pulls `yabai`, `skhd`, `jq`, `displayplacer`.
 
 ## Install
 
@@ -125,12 +125,29 @@ cross-location confusion.
 Every desk is a new UUID, so match the monitor model instead:
 
 ```
-model HP-E34m-G4  Work-HP-Ultrawide
+model HP-E34m-G4  Work-HP-Ultrawide  open-office
 ```
+
+The optional third field is the workspace (location) for `arrange` lines.
 
 - Product name from the `model` column of the connected block, or the comment of a registered line (spaces written as `-`).
 - Screens covered by a `model` rule are not registered, so desks don't pile up lines.
 - Model comes from `ioreg`, matched to the display by aspect ratio. Two connected screens with the same aspect ratio but different models: no match, `default` is used.
+
+## Screen arrangement per workspace
+
+```
+arrange <location> <top|bottom|center> <name> <name> ...    # screens left→right, aligned on that edge
+arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
+```
+
+| What | How |
+|------|-----|
+| apply | `yabai-snap.sh arrange`; automatically on plug in/out (`display_added`/`display_removed` signals in `yabairc`) |
+| which line | the first whose location is a connected screen's location and whose names are exactly the connected screens |
+| workspace of a screen | its `monitor` line's location, or the `model` rule's third field |
+| tool | `displayplacer`: only `origin` is changed, resolution/scaling/rotation stay; the main screen stays at (0,0) |
+| skipped | no matching line, already arranged, yabai reports no screens, or a screen listed as `enabled:false` (asleep/locked) |
 
 ## Which monitors are connected right now?
 
@@ -193,6 +210,7 @@ window-manager/
 ├── RestartIcon.icns            # restart launcher's icon (white refresh glyph on blue)
 ├── window-manager.md           # this file
 ├── tests/model-fallback.sh     # tests for the model fallback (stubs yabai + ioreg)
+├── tests/arrange.sh            # tests for arrange (stubs yabai, ioreg, displayplacer)
 └── config/
     ├── yabairc                 # → ~/.config/yabai/yabairc
     ├── yabai-snap.sh           # → ~/.config/yabai/yabai-snap.sh
