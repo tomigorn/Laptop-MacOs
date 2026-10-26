@@ -10,7 +10,7 @@ Global rules apply (`~/.claude/CLAUDE.md`). Only what is special here:
 - Tests: `terminal/tests/concurrent-sessions.fish <host>`, live against a remote host; ask me which host.
 
 ## Config source
-- yabai/skhd: `window-manager/config/` is the source, symlinked into `~/.config/yabai/`. Only `zones.conf` is local.
+- yabai/skhd: `window-manager/config/` is the source, symlinked into `~/.config/yabai/`, `zones.conf` included. Only `connected.txt` is local.
 
 ## Version
 - file: `terminal/SETUP_VERSION` (not `VERSION`: `version` is reserved in fish)

@@ -10,7 +10,8 @@ This folder holds the live config for the keyboard-driven window snapper
 
 | File | What it is | Edit it? |
 |------|------------|----------|
-| `zones.conf`   | **Your monitors + their split sizes**, with a live "currently connected" block at the top | ✅ yes — this is the main one |
+| `zones.conf`   | **Your monitors, split sizes, models, arrangements** | ✅ yes — this is the main one |
+| `connected.txt`| Which monitors are connected right now (generated, local only) | no |
 | `keys.conf`    | Keyboard shortcuts | ✅ to rebind keys |
 | `yabairc`      | yabai settings (float layout) | rarely |
 | `yabai-snap.sh`| The snapping logic | no |
@@ -31,8 +32,7 @@ See `keys.conf` for the full list of options and conventions from other tools.
 
 ## Which monitors are connected right now?
 
-`zones.conf` grows into *every* monitor you have ever plugged in, so the top of
-the file carries an auto-generated block naming the ones that are actually live:
+`zones.conf` grows into *every* monitor you have ever plugged in, so `connected.txt` names the ones that are actually live:
 
 ```
 # --- Currently connected (auto-generated — do not edit) ---------------------
@@ -60,8 +60,7 @@ manager"), so it is current whenever you arrive here to edit. To refresh by hand
 ~/.config/yabai/yabai-snap.sh connected
 ```
 
-Only the lines between the two `# ---` markers are rewritten; everything else in
-`zones.conf` is yours. If yabai isn't running the block is left untouched.
+It never touches `zones.conf`. If yabai isn't running, `connected.txt` is left untouched.
 
 ## Change window sizes — `zones.conf`
 
@@ -99,7 +98,7 @@ automatically:
    `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`.
 3. Rename it (e.g. `Dell27 office-a`) and add a `layout <name> …` line.
 
-The "currently connected" block at the top of `zones.conf` tells you which UUIDs
+`connected.txt` tells you which UUIDs
 you're looking at — the new ones show up there with `-` for name and location.
 
 ## Shared desks (open office)
@@ -107,7 +106,7 @@ you're looking at — the new ones show up there with `-` for name and location.
 Every desk is a new UUID, so match the model instead: `model HP-E34m-G4 Work-HP-Ultrawide`.
 
 - Lookup: UUID's name (if it has a `layout`) → `model` rule → `default`.
-- Product name: `model` column of the connected block, spaces as `-`.
+- Product name: `model` column of `connected.txt`, spaces as `-`.
 - Screens covered by a rule are not registered.
 
 ## Screen arrangement — `arrange`
@@ -141,6 +140,6 @@ Logs: `/tmp/yabai_$USER.err.log`, `/tmp/skhd_$USER.err.log`.
 These files are maintained in the dotfiles repo at
 `~/development/private/Laptop-MacOs/window-manager/` (install/uninstall scripts
 and full docs live there). If this folder was set up via that repo's
-`install.sh`, the files here are symlinks back to it.
+`install.sh`, the files here are symlinks back to it, `zones.conf` included: edits here are repo changes, commit them there.
 
-**Exception: `zones.conf`** (sizes, monitors, `model` rules, `arrange` lines) is a real file here, local to this Mac and not in the repo. The repo only has `zones.conf.example`, the template for a first install.
+Only `connected.txt` is a real local file (generated).

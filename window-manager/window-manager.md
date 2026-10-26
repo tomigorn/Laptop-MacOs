@@ -3,12 +3,13 @@
 Keyboard-driven window snapping with **per-monitor split ratios** that survive
 reboots, sleep/wake, and moving between work locations.
 
-> **The actual settings are not in this repo.** Monitors, model rules and sizes live only on this Mac in `~/.config/yabai/zones.conf` (local, never committed). This repo holds the logic, the keys and `config/zones.conf.example`, a template copied once on first install.
+> **Everything lives in `config/` here, symlinked into `~/.config/yabai/`.** Editing `~/.config/yabai/zones.conf` edits the repo file. Only `connected.txt` is local.
 >
 > | What | Where |
 > |------|-------|
-> | sizes, monitors, `model` rules, `arrange` lines | `~/.config/yabai/zones.conf` (local only) |
-> | logic, keys, yabai settings | `config/` here, symlinked into `~/.config/yabai/` |
+> | sizes, monitors, `model` rules, `arrange` lines | `config/zones.conf` → `~/.config/yabai/zones.conf` |
+> | logic, keys, yabai settings | `config/` → `~/.config/yabai/` |
+> | currently connected screens | `~/.config/yabai/connected.txt` (local, generated) |
 
 - Windows open as normal floating macOS windows.
 - A keyboard shortcut "walks" the focused window left/right through snap zones,
@@ -112,8 +113,7 @@ Monitors are recognised by UUID and **registered automatically**:
 3. Open `zones.conf`, rename them (e.g. `Dell27 office-a`, `Dell24 office-a`)
    and add a `layout <name> …` line for each (or let them ride on `default`).
 
-The "currently connected" block at the top of `zones.conf` tells you which of the
-accumulated UUIDs you are actually looking at; freshly registered screens appear
+`connected.txt` tells you which of the accumulated UUIDs you are actually looking at; freshly registered screens appear
 there with `-` for name and location.
 
 Because each physical screen has its own UUID line, your home Dell-27 and Dell-24
@@ -130,7 +130,7 @@ model HP-E34m-G4  Work-HP-Ultrawide  open-office
 
 The optional third field is the workspace (location) for `arrange` lines.
 
-- Product name from the `model` column of the connected block, or the comment of a registered line (spaces written as `-`).
+- Product name from the `model` column of `connected.txt`, or the comment of a registered line (spaces written as `-`).
 - Screens covered by a `model` rule are not registered, so desks don't pile up lines.
 - Model comes from `ioreg`, matched to the display by aspect ratio. Two connected screens with the same aspect ratio but different models: no match, `default` is used.
 
@@ -151,9 +151,7 @@ arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
 
 ## Which monitors are connected right now?
 
-`zones.conf` accumulates every monitor ever plugged in, so the top of the file
-carries an auto-generated block naming the ones that are live — the built-in
-laptop screen included:
+`zones.conf` accumulates every monitor ever plugged in, so `~/.config/yabai/connected.txt` (local, not in the repo) names the ones that are live — the built-in laptop screen included:
 
 ```
 # --- Currently connected (auto-generated — do not edit) ---------------------
@@ -170,9 +168,7 @@ laptop screen included:
 
 `yabai-snap.sh connected` regenerates it (and prints the same table to stdout).
 `launcher.sh` runs it before opening the folder, so the **yabai window manager**
-Spotlight app always leaves you looking at current information. Only the lines
-between the two `# ---` markers are rewritten, via a temp file copied back over
-the original — a failed run leaves `zones.conf` untouched rather than truncated.
+Spotlight app always leaves you looking at current information. It never touches `zones.conf`, so the repo doesn't change on every refresh.
 If yabai isn't running, the command says so and changes nothing.
 
 Unlike the other subcommands, `connected` doesn't need a focused window, so it
@@ -191,15 +187,14 @@ skips the focused-window guard that makes the snap commands no-op.
   - figures out which zone the window currently occupies (by position **and**
     width, so a filled window matches nothing),
   - snaps to the next/previous zone, crossing displays only at the real edge,
-  - and, as `yabai-snap.sh connected`, rewrites the "currently connected" block
-    at the top of `zones.conf` (see above).
+  - and, as `yabai-snap.sh connected`, writes `connected.txt` (see above).
 
 ## Files
 
 ```
 window-manager/
 ├── install.sh                  # install / re-run
-├── uninstall.sh                # remove (keeps zones.conf unless --purge-zones)
+├── uninstall.sh                # remove (zones.conf stays in the repo)
 ├── build-launcher.sh           # builds both Spotlight launcher apps
 ├── launcher.sh                 # "yabai window manager" executable (opens config in VS Code)
 ├── Info.plist                  # "yabai window manager" bundle metadata
@@ -216,12 +211,11 @@ window-manager/
     ├── yabai-snap.sh           # → ~/.config/yabai/yabai-snap.sh
     ├── keys.conf               # → ~/.config/yabai/keys.conf (skhd reads it via ~/.config/skhd/skhdrc)
     ├── README.md               # → ~/.config/yabai/README.md  (how-to next to the live files)
-    └── zones.conf.example      # copied to ~/.config/yabai/zones.conf if absent
+    └── zones.conf              # → ~/.config/yabai/zones.conf (monitors, layouts, models, arrangements)
 ```
 
 `install.sh` symlinks the config files into `~/.config` (backing up any existing
-real files), copies `zones.conf.example` to the live, machine-local
-`zones.conf` only if it doesn't exist yet, and builds the Spotlight launcher.
+real files) and builds the Spotlight launcher.
 
 ## Spotlight launchers
 
@@ -281,7 +275,6 @@ instead of erroring out.
 ## Uninstall
 
 ```sh
-./uninstall.sh                 # stop services, remove symlinks (keeps zones.conf)
-./uninstall.sh --purge-zones   # also delete your monitor list
-./uninstall.sh --uninstall     # also brew-uninstall yabai + skhd
+./uninstall.sh                 # stop services, remove symlinks (zones.conf stays in the repo)
+./uninstall.sh --uninstall     # also brew-uninstall yabai, skhd, displayplacer
 ```
