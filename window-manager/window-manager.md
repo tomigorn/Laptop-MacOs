@@ -3,6 +3,13 @@
 Keyboard-driven window snapping with **per-monitor split ratios** that survive
 reboots, sleep/wake, and moving between work locations.
 
+> **The actual settings are not in this repo.** Monitors, model rules and sizes live only on this Mac in `~/.config/yabai/zones.conf` (local, never committed). This repo holds the logic, the keys and `config/zones.conf.example`, a template copied once on first install.
+>
+> | What | Where |
+> |------|-------|
+> | sizes, monitors, `model` rules | `~/.config/yabai/zones.conf` (local only) |
+> | logic, keys, yabai settings | `config/` here, symlinked into `~/.config/yabai/` |
+
 - Windows open as normal floating macOS windows.
 - A keyboard shortcut "walks" the focused window left/right through snap zones,
   crossing to the next display at the edge.

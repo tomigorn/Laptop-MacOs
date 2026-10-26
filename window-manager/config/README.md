@@ -134,3 +134,5 @@ These files are maintained in the dotfiles repo at
 `~/development/private/Laptop-MacOs/window-manager/` (install/uninstall scripts
 and full docs live there). If this folder was set up via that repo's
 `install.sh`, the files here are symlinks back to it.
+
+**Exception: `zones.conf`** (sizes, monitors, `model` rules) is a real file here, local to this Mac and not in the repo. The repo only has `zones.conf.example`, the template for a first install.
