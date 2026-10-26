@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # yabai + skhd window-manager setup for a new Mac. Safe to re-run.
 #
-#   1. Installs yabai, skhd, jq from Homebrew (only what's missing)
+#   1. Installs yabai, skhd, jq, displayplacer from Homebrew (only what's missing)
 #   2. Symlinks the configs into ~/.config (yabairc, yabai-snap.sh, keys.conf)
 #   3. Seeds ~/.config/yabai/zones.conf from the example (only if absent — the
 #      live file is machine-specific and the script appends to it)
@@ -55,12 +55,12 @@ link() {  # $1 = source, $2 = destination
 }
 
 # ── 1. Homebrew packages ─────────────────────────────────────────────────────
-step "Homebrew packages: yabai, skhd, jq"
+step "Homebrew packages: yabai, skhd, jq, displayplacer"
 command -v brew >/dev/null || die "Homebrew not found — install from https://brew.sh first"
 missing=()
-for p in yabai skhd jq; do command -v "$p" >/dev/null 2>&1 || missing+=("$p"); done
+for p in yabai skhd jq displayplacer; do command -v "$p" >/dev/null 2>&1 || missing+=("$p"); done
 if [ "${#missing[@]}" -eq 0 ]; then
-    skip "yabai, skhd, jq all present"
+    skip "yabai, skhd, jq, displayplacer all present"
 else
     for p in "${missing[@]}"; do
         case "$p" in

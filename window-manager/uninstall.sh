@@ -6,7 +6,7 @@
 #
 # Flags:
 #   --purge-zones   also delete ~/.config/yabai/zones.conf (your monitor list)
-#   --uninstall     also `brew uninstall` yabai, skhd (jq is left alone)
+#   --uninstall     also `brew uninstall` yabai, skhd, displayplacer (jq is left alone)
 set -euo pipefail
 
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -54,7 +54,7 @@ fi
 
 if [ "$UNINSTALL" -eq 1 ]; then
     step "Uninstall packages"
-    brew uninstall yabai skhd 2>/dev/null && ok "removed yabai + skhd" || warn "brew uninstall skipped"
+    brew uninstall yabai skhd displayplacer 2>/dev/null && ok "removed yabai, skhd, displayplacer" || warn "brew uninstall skipped"
 fi
 
 step "Done"
