@@ -274,8 +274,7 @@ the whole family anyway so one config works from anywhere.
 
 `itet-ifa-s52` was added on 2026-09-10. `:22` is open from `root-itet`, but the
 host offers `publickey,password` and rejects all three ETH keys, so the block
-sets `PubkeyAuthentication no` and forces password auth (the same shape as
-`opennebula`). Its `User` is inherited from the family rule and is **unverified**
+sets `PubkeyAuthentication no` and forces password auth. Its `User` is inherited from the family rule and is **unverified**
 on that box. Once a key is installed there, delete the block — the family rule
 already gives the right answer.
 
