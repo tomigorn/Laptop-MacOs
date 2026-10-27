@@ -77,12 +77,13 @@ Change the keys (or modifier) in [`config/keys.conf`](config/keys.conf), then
 
 ## Changing sizes — `~/.config/yabai/zones.conf`
 
-This is the only file you normally edit. Two kinds of lines:
+This is the only file you normally edit. Main lines:
 
 ```
 monitor <uuid> <name> <location>     # a physical screen (auto-added; edit name+location)
 model   <Product-Name> <name>        # any screen of that model uses <name>'s layout (shared desks)
 layout  <name> <size> <size> ...     # zone sizes for that monitor, % left→right, sum 100
+bottom  <pt>                         # gap kept free at the bottom of every screen for the Dock (default 59)
 ```
 
 Lookup: UUID's name (if it has a `layout` line) → `model` rule → `layout default`.
@@ -187,6 +188,7 @@ skips the focused-window guard that makes the snap commands no-op.
   - figures out which zone the window currently occupies (by position **and**
     width, so a filled window matches nothing),
   - snaps to the next/previous zone, crossing displays only at the real edge,
+  - then sets the window's bottom edge to the screen bottom minus `bottom` (yabai often misses the Dock),
   - and, as `yabai-snap.sh connected`, writes `connected.txt` (see above).
 
 ## Files
@@ -206,6 +208,7 @@ window-manager/
 ├── window-manager.md           # this file
 ├── tests/model-fallback.sh     # tests for the model fallback (stubs yabai + ioreg)
 ├── tests/arrange.sh            # tests for arrange (stubs yabai, ioreg, displayplacer)
+├── tests/bottom.sh             # tests for the fixed bottom gap (stubs yabai)
 └── config/
     ├── yabairc                 # → ~/.config/yabai/yabairc
     ├── yabai-snap.sh           # → ~/.config/yabai/yabai-snap.sh

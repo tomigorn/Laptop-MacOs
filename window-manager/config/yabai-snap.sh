@@ -49,7 +49,16 @@ if [ "$cmd" != "connected" ] && [ "$cmd" != "arrange" ]; then
 fi
 
 disp_json() { echo "$displays" | "$JQ" "map(select(.index==$1))[0]"; }
-snap()      { "$YABAI" -m window "$wid" --grid "$1"; }
+# yabai misses the Dock often, so the bottom gap is fixed: "bottom <pt>" in zones.conf, default 59.
+BOTTOM="$(awk '$1=="bottom" { b=$2 } END { print (b=="" ? 59 : b) }' "$ZONES_FILE" 2>/dev/null || echo 59)"
+snap() {
+  local w dj
+  "$YABAI" -m window "$wid" --grid "$1"
+  w="$("$YABAI" -m query --windows --window "$wid")"
+  dj="$(disp_json "$(echo "$w" | "$JQ" '.display')")"
+  "$YABAI" -m window "$wid" --resize "abs:$(echo "$w $dj" | "$JQ" -rs --argjson b "$BOTTOM" \
+    '"\(.[0].frame.w|floor):\(.[1].frame.y + .[1].frame.h - $b - .[0].frame.y|floor)"')"
+}
 
 # --- Monitor model fallback -------------------------------------------------
 # Shared desks give every monitor a new UUID, so a "model <Product-Name> <name>"

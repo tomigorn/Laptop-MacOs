@@ -10,7 +10,7 @@ This folder holds the live config for the keyboard-driven window snapper
 
 | File | What it is | Edit it? |
 |------|------------|----------|
-| `zones.conf`   | **Your monitors, split sizes, models, arrangements** | ✅ yes — this is the main one |
+| `zones.conf`   | **Your monitors, split sizes, models, arrangements, Dock gap (`bottom`)** | ✅ yes — this is the main one |
 | `connected.txt`| Which monitors are connected right now (generated, local only) | no |
 | `keys.conf`    | Keyboard shortcuts | ✅ to rebind keys |
 | `yabairc`      | yabai settings (float layout) | rarely |
