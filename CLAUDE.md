@@ -17,3 +17,9 @@ Global rules apply (`~/.claude/CLAUDE.md`). Only what is special here:
 - tag: `terminal-X.Y.Z`, annotated (`terminal setup X.Y.Z`)
 - bumps: only changes under `terminal/`
 - extra steps: open a new fish shell, the greeting shows the version (also on every `xxhc` connect)
+
+## Version (window-manager)
+- file: `window-manager/VERSION`
+- tag: `window-manager-X.Y.Z`, annotated (`window manager X.Y.Z`)
+- bumps: only changes under `window-manager/`
+- extra steps: none

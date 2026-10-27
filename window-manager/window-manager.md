@@ -206,6 +206,7 @@ window-manager/
 ├── AppIcon.icns                # config launcher's icon (white tiling glyph on blue)
 ├── RestartIcon.icns            # restart launcher's icon (white refresh glyph on blue)
 ├── window-manager.md           # this file
+├── VERSION                     # window manager version (tag window-manager-X.Y.Z)
 ├── tests/model-fallback.sh     # tests for the model fallback (stubs yabai + ioreg)
 ├── tests/arrange.sh            # tests for arrange (stubs yabai, ioreg, displayplacer)
 ├── tests/bottom.sh             # tests for the fixed bottom gap (stubs yabai)
