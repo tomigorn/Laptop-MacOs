@@ -220,3 +220,11 @@ returns nothing, which looks broken but is expected.
       └── work-example-1-repo/
 ```
 
+### Secret scan before push
+[gitleaks](https://github.com/gitleaks/gitleaks) scans the commits about to be pushed.
+
+```fish
+brew install gitleaks
+gitleaks git --log-opts="origin/main..HEAD"
+```
+
