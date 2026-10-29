@@ -151,8 +151,7 @@ setup for multiple git accounts to automatically use a certain user when cloning
     path = ~/.gitconfig-work
 ```
 
-A commit made outside those two trees therefore fails until you set an identity
-explicitly, rather than silently picking the wrong one.
+A commit made outside those two trees therefore fails on purpose, rather than silently picking the wrong identity: move the repo into one of them, don't set `user.name`/`user.email`.
 
 Each included file sets five things, and all five switch together:
 
