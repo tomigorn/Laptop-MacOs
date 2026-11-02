@@ -84,6 +84,7 @@ monitor <uuid> <name> <location>     # a physical screen (auto-added; edit name+
 model   <Product-Name> <name>        # any screen of that model uses <name>'s layout (shared desks)
 layout  <name> <size> <size> ...     # zone sizes for that monitor, % left→right, sum 100
 bottom  <pt>                         # gap kept free at the bottom of every screen for the Dock (default 59)
+* monitor …                          # leading "* " = connected right now (set automatically)
 ```
 
 Lookup: UUID's name (if it has a `layout` line) → `model` rule → `layout default`.
@@ -133,6 +134,7 @@ The optional third field is the workspace (location) for `arrange` lines.
 
 - Product name from the `model` column of `connected.txt`, or the comment of a registered line (spaces written as `-`).
 - Screens covered by a `model` rule are not registered, so desks don't pile up lines.
+- One rule can serve every desk with that model, fixed ones too: `arrange` takes the location from any connected screen, so `arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook` matches as long as the Dell is at `Work5-WEV`.
 - Model comes from `ioreg`, matched to the display by aspect ratio. Two connected screens with the same aspect ratio but different models: no match, `default` is used.
 
 ## Screen arrangement per workspace

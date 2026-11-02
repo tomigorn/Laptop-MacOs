@@ -71,6 +71,7 @@ monitor <uuid> <name> <location>     # a physical screen (auto-added; you edit n
 model   <Product-Name> <name> [<location>]   # any screen of that model uses <name>'s layout (shared desks)
 arrange <location> <top|bottom|center> <name> ...   # screens left→right per workspace
 layout  <name> <size> <size> ...     # zone sizes for that monitor: % left→right, summing to 100
+* monitor …                          # leading "* " = connected right now (set automatically)
 ```
 
 Edit the numbers on a `layout` line and **save — no restart needed** (the script
@@ -108,12 +109,13 @@ Every desk is a new UUID, so match the model instead: `model HP-E34m-G4 Work-HP-
 - Lookup: UUID's name (if it has a `layout`) → `model` rule → `default`.
 - Product name: `model` column of `connected.txt`, spaces as `-`.
 - Screens covered by a rule are not registered.
+- One rule can serve every desk with that model, fixed ones too: `arrange` takes the location from any connected screen, so `arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook` matches as long as the Dell is at `Work5-WEV`.
 
 ## Screen arrangement — `arrange`
 
 `arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook`: screens left→right, bottom aligned, for the workspace `Work5-WEV` (the `location` of the `monitor` lines, or the third field of a `model` rule).
 
-- Applied on plug in/out, or by hand: `~/.config/yabai/yabai-snap.sh arrange`
+- Applied on plug in/out and on yabai start/restart (restart app), or by hand: `~/.config/yabai/yabai-snap.sh arrange`
 - Only used when its names are exactly the connected screens.
 
 ## Change the keyboard shortcuts — `keys.conf`
