@@ -118,8 +118,8 @@ register_displays() {
     load_models
     model="$(model_for_display "$w" "$h")"
     [ -n "$(model_rule "$model")" ] && continue
-    new+="$(printf 'monitor %s  mon-%s  unknown    # %spt, %sfirst seen %s' \
-      "$uuid" "${uuid:0:8}" "$w" "${model:+$model, }" "$(date +%F)")"$'\n'
+    new+="$(printf 'monitor %s  %-22s%-25s# %spt, %sfirst seen %s' \
+      "$uuid" "mon-${uuid:0:8}" unknown "$w" "${model:+$model, }" "$(date +%F)")"$'\n'
   done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor) \(.frame.h|floor)"')
   [ -n "$new" ] || return 0
   tmp="$(mktemp)" || return 0
@@ -133,7 +133,8 @@ register_displays() {
 }
 
 # Mark the lines of connected screens with "* ": their monitor line, or the model
-# rule used by a screen without one. Rewritten only when a mark changes.
+# rule used by a screen without one. The others get "  ", so the columns stay
+# aligned. Rewritten only when a mark changes.
 mark_connected() {
   [ -w "$ZONES_FILE" ] || return 0
   local uuid w h model on_uuids=" " on_models=" " tmp
@@ -147,9 +148,9 @@ mark_connected() {
   done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor) \(.frame.h|floor)"')
   tmp="$(mktemp)" || return 0
   if ON_UUIDS="$on_uuids" ON_MODELS="$on_models" awk '
-      { line = $0; sub(/^\* +/, "", line); split(line, f, " ") }
-      f[1]=="monitor" { print (index(ENVIRON["ON_UUIDS"], " " f[2] " ") ? "* " : "") line; next }
-      f[1]=="model"   { print (index(ENVIRON["ON_MODELS"], " " f[2] " ") ? "* " : "") line; next }
+      { line = $0; sub(/^[* ]+/, "", line); split(line, f, " ") }
+      f[1]=="monitor" { print (index(ENVIRON["ON_UUIDS"], " " f[2] " ") ? "* " : "  ") line; next }
+      f[1]=="model"   { print (index(ENVIRON["ON_MODELS"], " " f[2] " ") ? "* " : "  ") line; next }
       { print }' "$ZONES_FILE" > "$tmp" && ! cmp -s "$tmp" "$ZONES_FILE"; then
     cat "$tmp" > "$ZONES_FILE"
   fi

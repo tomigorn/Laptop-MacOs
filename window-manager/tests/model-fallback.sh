@@ -64,7 +64,7 @@ check() {  # check <name> <condition...>
   if "$@"; then echo "PASS  $name"; else echo "FAIL  $name"; fails=$((fails + 1)); fi
 }
 matches() { [[ "$1" =~ $2 ]]; }
-monitor_lines() { grep -cE "^(\* )?monitor $1" "$YABAI_ZONES_FILE"; }
+monitor_lines() { grep -cE "^(\* |  )?monitor $1" "$YABAI_ZONES_FILE"; }
 
 # 1. UUID named with its own layout wins over a model rule
 setup "$(hp_disp)"
@@ -104,7 +104,7 @@ setup "$(hp_disp)"
 zones < /dev/null
 run connected
 check "4 no rule uses default" matches "$(row "$HP")" ' mon-AAAAAAAA +unknown +50 50 +HP-E34m-G4$'
-check "4 registered with product name" grep -q "^\* monitor $HP  mon-AAAAAAAA  unknown    # 3440pt, HP-E34m-G4, first seen [0-9-]*$" "$YABAI_ZONES_FILE"
+check "4 registered with product name" grep -q "^\* monitor $HP  mon-AAAAAAAA          unknown                  # 3440pt, HP-E34m-G4, first seen [0-9-]*$" "$YABAI_ZONES_FILE"
 check "4 laptop not registered again" [ "$(monitor_lines "$LAPTOP")" = 1 ]
 
 # 5. two externals, different models and aspect ratios -> each its own rule
@@ -185,7 +185,7 @@ zones <<EOF
 EOF
 run connected
 check "12 connected laptop marked" grep -q "^\* monitor $LAPTOP  MacBook  laptop$" "$YABAI_ZONES_FILE"
-check "12 disconnected HP unmarked" grep -q "^monitor $HP  HP  home$" "$YABAI_ZONES_FILE"
+check "12 disconnected HP unmarked" grep -q "^  monitor $HP  HP  home$" "$YABAI_ZONES_FILE"
 
 # 13. a marked line is still read as a monitor line
 setup "$(hp_disp)"
@@ -206,7 +206,7 @@ layout Shared 30 70
 EOF
 run connected
 check "14 used model rule marked" grep -q "^\* model HP-E34m-G4 Shared home$" "$YABAI_ZONES_FILE"
-check "14 unused model rule unmarked" grep -q "^model DELL-U2723QE Square$" "$YABAI_ZONES_FILE"
+check "14 unused model rule unmarked" grep -q "^  model DELL-U2723QE Square$" "$YABAI_ZONES_FILE"
 check "14 marked rule still applies" matches "$(row "$HP")" ' - +- +30 70 +HP-E34m-G4$'
 check "14 marked rule still blocks registering" [ "$(monitor_lines "$HP")" = 0 ]
 

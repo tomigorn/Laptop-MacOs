@@ -172,7 +172,7 @@ arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
 Spotlight app always leaves you looking at current information.
 If yabai isn't running, the command says so and changes nothing.
 
-`zones.conf` also marks them: `* ` in front of the `monitor` line of each connected screen, or of the `model` rule a screen without its own line uses. Every run of `yabai-snap.sh` (any shortcut, plug in/out) updates the marks; the file is only rewritten when a mark changes. Because `zones.conf` is in the repo, git shows it as modified after a plug in/out.
+`zones.conf` also marks them: `* ` in front of the `monitor` line of each connected screen, or of the `model` rule a screen without its own line uses; the other lines start with two spaces, so the columns stay aligned. Every run of `yabai-snap.sh` (any shortcut, plug in/out) updates the marks; the file is only rewritten when a mark changes. Because `zones.conf` is in the repo, git shows it as modified after a plug in/out.
 
 Unlike the other subcommands, `connected` doesn't need a focused window, so it
 skips the focused-window guard that makes the snap commands no-op.
