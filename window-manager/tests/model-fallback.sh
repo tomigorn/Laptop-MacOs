@@ -64,7 +64,7 @@ check() {  # check <name> <condition...>
   if "$@"; then echo "PASS  $name"; else echo "FAIL  $name"; fails=$((fails + 1)); fi
 }
 matches() { [[ "$1" =~ $2 ]]; }
-monitor_lines() { grep -c "^monitor $1" "$YABAI_ZONES_FILE"; }
+monitor_lines() { grep -cE "^(\* )?monitor $1" "$YABAI_ZONES_FILE"; }
 
 # 1. UUID named with its own layout wins over a model rule
 setup "$(hp_disp)"
@@ -104,7 +104,7 @@ setup "$(hp_disp)"
 zones < /dev/null
 run connected
 check "4 no rule uses default" matches "$(row "$HP")" ' mon-AAAAAAAA +unknown +50 50 +HP-E34m-G4$'
-check "4 registered with product name" grep -q "^monitor $HP  mon-AAAAAAAA  unknown    # 3440pt, HP-E34m-G4, first seen [0-9-]*$" "$YABAI_ZONES_FILE"
+check "4 registered with product name" grep -q "^\* monitor $HP  mon-AAAAAAAA  unknown    # 3440pt, HP-E34m-G4, first seen [0-9-]*$" "$YABAI_ZONES_FILE"
 check "4 laptop not registered again" [ "$(monitor_lines "$LAPTOP")" = 1 ]
 
 # 5. two externals, different models and aspect ratios -> each its own rule
@@ -154,9 +154,10 @@ zones <<EOF
 monitor $HP  HP  home
 layout HP 40 60
 EOF
+run connected
 before="$(cat "$YABAI_ZONES_FILE")"
 run connected
-check "9 zones.conf unchanged" [ "$(cat "$YABAI_ZONES_FILE")" = "$before" ]
+check "9 zones.conf unchanged once marks are current" [ "$(cat "$YABAI_ZONES_FILE")" = "$before" ]
 check "9 connected.txt written" grep -q "Currently connected" "$(dirname "$YABAI_ZONES_FILE")/connected.txt"
 check "9 connected.txt lists HP" grep -q "$HP" "$(dirname "$YABAI_ZONES_FILE")/connected.txt"
 
@@ -165,7 +166,7 @@ setup "$(hp_disp)"
 zones < /dev/null
 echo "arrange home bottom MacBook" >> "$YABAI_ZONES_FILE"
 run connected
-check "10 registered after the last monitor line" [ "$(grep -A1 "^monitor $LAPTOP" "$YABAI_ZONES_FILE" | sed -n 2p | cut -d' ' -f2)" = "$HP" ]
+check "10 registered after the last monitor line" [ "$(grep -A1 "monitor $LAPTOP" "$YABAI_ZONES_FILE" | sed -n 2p | cut -d" " -f3)" = "$HP" ]
 check "10 file still ends with the arrange line" [ "$(tail -n1 "$YABAI_ZONES_FILE")" = "arrange home bottom MacBook" ]
 
 # 11. registering keeps a symlinked zones.conf a symlink
@@ -176,6 +177,46 @@ run connected
 check "11 zones.conf still a symlink" [ -L "$YABAI_ZONES_FILE" ]
 check "11 registered in the link target" [ "$(monitor_lines "$HP")" = 1 ]
 rm -f "$YABAI_ZONES_FILE" "$WORK/real.conf"
+
+# 12. connected monitor lines get "* ", disconnected ones lose it
+setup
+zones <<EOF
+* monitor $HP  HP  home
+EOF
+run connected
+check "12 connected laptop marked" grep -q "^\* monitor $LAPTOP  MacBook  laptop$" "$YABAI_ZONES_FILE"
+check "12 disconnected HP unmarked" grep -q "^monitor $HP  HP  home$" "$YABAI_ZONES_FILE"
+
+# 13. a marked line is still read as a monitor line
+setup "$(hp_disp)"
+zones <<EOF
+* monitor $HP  HP  home
+layout HP 40 60
+EOF
+run connected
+check "13 marked line keeps its layout" matches "$(row "$HP")" ' HP +home +40 60 +HP-E34m-G4$'
+check "13 not registered again" [ "$(grep -c "$HP" "$YABAI_ZONES_FILE")" = 1 ]
+
+# 14. a model line is marked while a screen without its own line uses it
+setup "$(hp_disp)"
+zones <<EOF
+model HP-E34m-G4 Shared home
+* model DELL-U2723QE Square
+layout Shared 30 70
+EOF
+run connected
+check "14 used model rule marked" grep -q "^\* model HP-E34m-G4 Shared home$" "$YABAI_ZONES_FILE"
+check "14 unused model rule unmarked" grep -q "^model DELL-U2723QE Square$" "$YABAI_ZONES_FILE"
+check "14 marked rule still applies" matches "$(row "$HP")" ' - +- +30 70 +HP-E34m-G4$'
+check "14 marked rule still blocks registering" [ "$(monitor_lines "$HP")" = 0 ]
+
+# 15. registering goes after the last monitor line even when it is marked
+setup
+zones < /dev/null
+printf '%s\n' "* monitor $HP  HP  home" >> "$YABAI_ZONES_FILE"
+setup "$(hp_disp)" "$(dell_disp)"
+run connected
+check "15 registered after the marked line" [ "$(grep -A1 "monitor $HP" "$YABAI_ZONES_FILE" | sed -n 2p | cut -d' ' -f3)" = "$DELL" ]
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

@@ -169,8 +169,10 @@ arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
 
 `yabai-snap.sh connected` regenerates it (and prints the same table to stdout).
 `launcher.sh` runs it before opening the folder, so the **yabai window manager**
-Spotlight app always leaves you looking at current information. It never touches `zones.conf`, so the repo doesn't change on every refresh.
+Spotlight app always leaves you looking at current information.
 If yabai isn't running, the command says so and changes nothing.
+
+`zones.conf` also marks them: `* ` in front of the `monitor` line of each connected screen, or of the `model` rule a screen without its own line uses. Every run of `yabai-snap.sh` (any shortcut, plug in/out) updates the marks; the file is only rewritten when a mark changes. Because `zones.conf` is in the repo, git shows it as modified after a plug in/out.
 
 Unlike the other subcommands, `connected` doesn't need a focused window, so it
 skips the focused-window guard that makes the snap commands no-op.

@@ -60,7 +60,7 @@ manager"), so it is current whenever you arrive here to edit. To refresh by hand
 ~/.config/yabai/yabai-snap.sh connected
 ```
 
-It never touches `zones.conf`. If yabai isn't running, `connected.txt` is left untouched.
+In `zones.conf` itself, connected screens are marked with `* ` in front of their `monitor` line (or of the `model` rule they use), updated on every shortcut and plug in/out. If yabai isn't running, both are left untouched.
 
 ## Change window sizes — `zones.conf`
 

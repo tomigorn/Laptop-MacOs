@@ -91,15 +91,15 @@ model_for_display() {
     END { if (!bad) print m }'
 }
 
-model_rule() { awk -v m="$1" '$1=="model" && $2==m && m!="" {print $3; exit}' "$ZONES_FILE"; }
-model_rule_location() { awk -v m="$1" '$1=="model" && $2==m && m!="" {print $4; exit}' "$ZONES_FILE"; }
+model_rule() { awk -v m="$1" '{ sub(/^\* +/, "") } $1=="model" && $2==m && m!="" {print $3; exit}' "$ZONES_FILE"; }
+model_rule_location() { awk -v m="$1" '{ sub(/^\* +/, "") } $1=="model" && $2==m && m!="" {print $4; exit}' "$ZONES_FILE"; }
 has_layout() { awk -v n="$1" '$1=="layout" && $2==n {f=1; exit} END {exit !f}' "$ZONES_FILE"; }
 
 # Set RES_NAME for display UUID $1 with frame $2 x $3: the UUID's monitor name if
 # it has a layout line, else the name of its model rule, else "default".
 # Sets a variable instead of echoing so the ioreg cache survives (no subshell).
 resolve_name() {
-  RES_NAME="$(awk -v u="$1" '$1=="monitor" && $2==u {print $3; exit}' "$ZONES_FILE")"
+  RES_NAME="$(awk -v u="$1" '{ sub(/^\* +/, "") } $1=="monitor" && $2==u {print $3; exit}' "$ZONES_FILE")"
   has_layout "$RES_NAME" && return 0
   load_models
   RES_NAME="$(model_rule "$(model_for_display "$2" "$3")")"
@@ -124,10 +124,34 @@ register_displays() {
   [ -n "$new" ] || return 0
   tmp="$(mktemp)" || return 0
   if NEW="$new" awk '
-      FNR==NR { if ($1=="monitor") last=FNR; next }
+      FNR==NR { sub(/^\* +/, ""); if ($1=="monitor") last=FNR; next }
       { print } FNR==last { printf "%s", ENVIRON["NEW"] }
       END { if (!last) printf "%s", ENVIRON["NEW"] }' "$ZONES_FILE" "$ZONES_FILE" > "$tmp"; then
     cat "$tmp" > "$ZONES_FILE"          # in place, not mv: zones.conf is a symlink into the repo
+  fi
+  rm -f "$tmp"
+}
+
+# Mark the lines of connected screens with "* ": their monitor line, or the model
+# rule used by a screen without one. Rewritten only when a mark changes.
+mark_connected() {
+  [ -w "$ZONES_FILE" ] || return 0
+  local uuid w h model on_uuids=" " on_models=" " tmp
+  while read -r uuid w h; do
+    [ -n "$uuid" ] || continue
+    on_uuids+="$uuid "
+    awk -v u="$uuid" '{ sub(/^\* +/, "") } $1=="monitor" && $2==u {f=1; exit} END {exit !f}' "$ZONES_FILE" && continue
+    load_models
+    model="$(model_for_display "$w" "$h")"
+    [ -z "$model" ] || on_models+="$model "
+  done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor) \(.frame.h|floor)"')
+  tmp="$(mktemp)" || return 0
+  if ON_UUIDS="$on_uuids" ON_MODELS="$on_models" awk '
+      { line = $0; sub(/^\* +/, "", line); split(line, f, " ") }
+      f[1]=="monitor" { print (index(ENVIRON["ON_UUIDS"], " " f[2] " ") ? "* " : "") line; next }
+      f[1]=="model"   { print (index(ENVIRON["ON_MODELS"], " " f[2] " ") ? "* " : "") line; next }
+      { print }' "$ZONES_FILE" > "$tmp" && ! cmp -s "$tmp" "$ZONES_FILE"; then
+    cat "$tmp" > "$ZONES_FILE"
   fi
   rm -f "$tmp"
 }
@@ -140,6 +164,7 @@ register_displays() {
 # "<name> <location>" for a display UUID; "- -" if it isn't in zones.conf yet.
 monitor_entry() {
   awk -v u="$1" '
+    { sub(/^\* +/, "") }
     $1=="monitor" && $2==u { print $3, ($4=="" ? "-" : $4); found=1; exit }
     END { if (!found) print "-", "-" }' "$ZONES_FILE"
 }
@@ -367,6 +392,7 @@ span_grid() {
 }
 
 register_displays
+mark_connected
 
 case "$cmd" in
   fill)
