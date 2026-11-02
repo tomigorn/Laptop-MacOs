@@ -160,5 +160,22 @@ check "9 zones.conf unchanged" [ "$(cat "$YABAI_ZONES_FILE")" = "$before" ]
 check "9 connected.txt written" grep -q "Currently connected" "$(dirname "$YABAI_ZONES_FILE")/connected.txt"
 check "9 connected.txt lists HP" grep -q "$HP" "$(dirname "$YABAI_ZONES_FILE")/connected.txt"
 
+# 10. a new monitor is registered right after the last monitor line, not at the end of the file
+setup "$(hp_disp)"
+zones < /dev/null
+echo "arrange home bottom MacBook" >> "$YABAI_ZONES_FILE"
+run connected
+check "10 registered after the last monitor line" [ "$(grep -A1 "^monitor $LAPTOP" "$YABAI_ZONES_FILE" | sed -n 2p | cut -d' ' -f2)" = "$HP" ]
+check "10 file still ends with the arrange line" [ "$(tail -n1 "$YABAI_ZONES_FILE")" = "arrange home bottom MacBook" ]
+
+# 11. registering keeps a symlinked zones.conf a symlink
+setup "$(hp_disp)"
+zones < /dev/null
+mv "$YABAI_ZONES_FILE" "$WORK/real.conf"; ln -s "$WORK/real.conf" "$YABAI_ZONES_FILE"
+run connected
+check "11 zones.conf still a symlink" [ -L "$YABAI_ZONES_FILE" ]
+check "11 registered in the link target" [ "$(monitor_lines "$HP")" = 1 ]
+rm -f "$YABAI_ZONES_FILE" "$WORK/real.conf"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

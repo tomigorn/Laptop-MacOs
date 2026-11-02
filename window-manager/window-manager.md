@@ -109,7 +109,7 @@ that monitor.
 Monitors are recognised by UUID and **registered automatically**:
 
 1. Plug in the monitor(s).
-2. Press any shortcut once — each new screen is appended to `zones.conf` as
+2. Press any shortcut once — each new screen is added to `zones.conf`, after the last `monitor` line, as
    `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`.
 3. Open `zones.conf`, rename them (e.g. `Dell27 office-a`, `Dell24 office-a`)
    and add a `layout <name> …` line for each (or let them ride on `default`).

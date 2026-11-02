@@ -94,7 +94,7 @@ same model at different offices, never get mixed up) and registered
 automatically:
 
 1. Plug in the monitor(s).
-2. Press any shortcut once → each new screen is appended here as
+2. Press any shortcut once → each new screen is added after the last `monitor` line as
    `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`.
 3. Rename it (e.g. `Dell27 office-a`) and add a `layout <name> …` line.
 

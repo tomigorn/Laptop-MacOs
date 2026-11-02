@@ -106,21 +106,30 @@ resolve_name() {
   [ -n "$RES_NAME" ] || RES_NAME="default"
 }
 
-# Append a "monitor" line for any connected display not yet in zones.conf,
-# so the file fills itself in as monitors are plugged in. Displays covered by a
-# model rule are left out, so shared desks don't pile up lines.
+# Add a "monitor" line after the last one for any connected display not yet in
+# zones.conf, so the file fills itself in as monitors are plugged in. Displays
+# covered by a model rule are left out, so shared desks don't pile up lines.
 register_displays() {
   [ -w "$ZONES_FILE" ] || return 0
-  local uuid w h model
+  local uuid w h model new="" tmp
   while read -r uuid w h; do
     [ -n "$uuid" ] || continue
     grep -q "$uuid" "$ZONES_FILE" 2>/dev/null && continue
     load_models
     model="$(model_for_display "$w" "$h")"
     [ -n "$(model_rule "$model")" ] && continue
-    printf 'monitor %s  mon-%s  unknown    # %spt, %sfirst seen %s\n' \
-      "$uuid" "${uuid:0:8}" "$w" "${model:+$model, }" "$(date +%F)" >> "$ZONES_FILE"
+    new+="$(printf 'monitor %s  mon-%s  unknown    # %spt, %sfirst seen %s' \
+      "$uuid" "${uuid:0:8}" "$w" "${model:+$model, }" "$(date +%F)")"$'\n'
   done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor) \(.frame.h|floor)"')
+  [ -n "$new" ] || return 0
+  tmp="$(mktemp)" || return 0
+  if NEW="$new" awk '
+      FNR==NR { if ($1=="monitor") last=FNR; next }
+      { print } FNR==last { printf "%s", ENVIRON["NEW"] }
+      END { if (!last) printf "%s", ENVIRON["NEW"] }' "$ZONES_FILE" "$ZONES_FILE" > "$tmp"; then
+    cat "$tmp" > "$ZONES_FILE"          # in place, not mv: zones.conf is a symlink into the repo
+  fi
+  rm -f "$tmp"
 }
 
 # --- "Currently connected" report -------------------------------------------
