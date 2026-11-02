@@ -128,7 +128,7 @@ To change the modifier everywhere, swap `ctrl + alt` for e.g. `cmd + alt`.
 
 ## Applying changes / services
 
-- `zones.conf`  → no restart (re-read each keypress).
+- `zones.conf`  → no restart (re-read each keypress); `arrange` lines → `yabai --restart-service` or plug in/out.
 - `keys.conf`   → `skhd --restart-service`
 - `yabairc`     → `yabai --restart-service`
 

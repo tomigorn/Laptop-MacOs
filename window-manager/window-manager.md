@@ -144,7 +144,7 @@ arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
 
 | What | How |
 |------|-----|
-| apply | `yabai-snap.sh arrange`; automatically on plug in/out (`display_added`/`display_removed` signals in `yabairc`) |
+| apply | `yabai-snap.sh arrange`; automatically on yabai start/restart (restart app) and on plug in/out (`display_added`/`display_removed` signals in `yabairc`) |
 | which line | the first whose location is a connected screen's location and whose names are exactly the connected screens |
 | workspace of a screen | its `monitor` line's location, or the `model` rule's third field |
 | tool | `displayplacer`: only `origin` is changed, resolution/scaling/rotation stay; the main screen stays at (0,0) |
