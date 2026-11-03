@@ -551,7 +551,7 @@ install_mode() {
   setup_color
   header "mac-outdated --install"
   require_admin || exit 2
-  echo "  sudo asks for your password for Adobe, App Store and macOS, and may ask again for later steps"
+  echo "  sudo may ask for your password at the start, during brew (some casks), and again for later steps"
   sudo -v || { echo "sudo failed"; exit 2; }
   trap install_abort INT
   local src rc label word

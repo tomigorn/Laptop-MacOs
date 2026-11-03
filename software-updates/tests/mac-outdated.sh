@@ -414,6 +414,7 @@ check "admin 20 min: exit 0" equals "$rc" 0
 check "admin 20 min: sudo -v once, short sudo steps first, macOS last" equals "$(install_calls)" "$expected"
 check "admin 20 min: admin re-checked before each sudo step" equals "$(grep -c '^PrivilegesCLI --status' "$CALLS")" 4
 check "admin 20 min: no password-once promise" lacks "$out" "password once"
+check "admin 20 min: sudo prompts named" contains "$out" "sudo may ask for your password at the start, during brew (some casks), and again for later steps"
 check "admin 20 min: restart required shown" contains "$out" "restart required"
 check "admin 20 min: summary" has "$out" "pipx \\.+ installed"
 check "admin 20 min: header" has "$out" "^mac-outdated --install · [0-9-]+ [0-9:]+"

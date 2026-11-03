@@ -5,7 +5,7 @@ One command for every outdated piece of software on this Mac. Install: `software
 | Command | Admin | Does |
 |---|---|---|
 | `mac-outdated` | no | check all sources, print progress, details and a summary, write the last-check stamp (not when a check failed) |
-| `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update; sudo may ask for your password again for later steps |
+| `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update; sudo may ask for your password at the start, during brew (some casks), and again for later steps |
 | `mac-outdated --help` | no | usage |
 
 Exit: `0` nothing outdated / all installed, `1` something outdated / a check or step failed, `2` usage error or admin precondition not met, `130` interrupted.
@@ -61,7 +61,7 @@ mac-outdated · 2026-11-03 11:20
 
 Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, VS Code, macOS last (sudo, longest). A failing source does not stop the others; a summary follows.
 
-`brew upgrade --greedy` also replaces running apps (e.g. Ghostty): quit them first or restart them after.
+`brew upgrade --greedy` runs each cask's own uninstall/quit steps: it may quit running apps and show macOS Automation/App Management prompts, and pkg casks (e.g. XQuartz) call sudo themselves. Quit Discord, BetterDisplay, Hiddenbar, UTM, XQuartz and apps launched from Ghostty before running.
 
 ## Admin rules
 
