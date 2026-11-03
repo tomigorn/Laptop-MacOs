@@ -36,11 +36,11 @@ mac-outdated · 2026-11-03 11:20
   next: mac-outdated --install
 ```
 
-- One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped, `!` check failed).
-- A source that could not be checked (`brew outdated`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding. Adobe is only listed with admin, so check mode shows `checked during --install`.
+- One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped, `!` check failed). Adobe is only listed with admin, so check mode shows `checked during --install`.
+- A source that could not be checked (`brew outdated`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding.
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
-- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (…)`) and a summary.
+- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: click Privileges and rerun)`) and a summary.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 
 ## Sources
@@ -56,9 +56,11 @@ mac-outdated · 2026-11-03 11:20
 | VS Code extensions | count only | `code --update-extensions` |
 | Sparkle apps | appcast from `SUFeedURL` (beta channel skipped) | none: open the app |
 | Apps without an updater | cask with the same app name | none: `brew install --cask --adopt <token>` |
-| Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion) | listed once | none: update on launch |
+| Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion, iStat Menus) | listed once | none: update on launch |
 
 Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, VS Code, macOS last (sudo, longest). A failing source does not stop the others; a summary follows.
+
+`brew upgrade --greedy` also replaces running apps (e.g. Ghostty): quit them first or restart them after.
 
 ## Admin rules
 
@@ -79,4 +81,4 @@ New fish shells show `software not checked for N days: mac-outdated` when the la
 | `software-updates/mac-outdated` | the script (bash 5) |
 | `software-updates/install.sh` | symlink into `~/.local/bin` |
 | `software-updates/tests/mac-outdated.sh` | offline tests, every tool stubbed |
-| `~/.local/state/mac-outdated/last-check` | epoch of the last check run |
+| `~/.local/state/mac-outdated/last-check` | epoch of the last check without a failed source |
