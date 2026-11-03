@@ -15,4 +15,4 @@ Reproducible blueprint for configuring a Mac to my preferences. One folder per t
 | Backdrop carousel | [backdrop-carousel/](backdrop-carousel/) | sync script for a Shortcut. Setup: `backdrop-carousel/setup.sh` |
 | Git multi-account | [multiple-git-accounts/](multiple-git-accounts/) | templates; explained in [macos-settings.md](macos-settings/macos-settings.md) |
 
-Tests: `./test-all.sh`
+Tests: `tests/test-all.sh`

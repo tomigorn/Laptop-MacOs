@@ -1,9 +1,9 @@
 #!/opt/homebrew/bin/bash
 # Runs every test in */tests/ (except the live concurrent-sessions.fish), then syntax-checks and shellchecks every script.
-#   ./test-all.sh
+#   tests/test-all.sh
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 1
 
 pass=0; fail=0; skipped=0; failed=()
