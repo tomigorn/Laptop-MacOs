@@ -71,7 +71,7 @@ check "stale local photo removed" test ! -e "$LOCAL/old.jpg"
 
 # 3. server unreachable
 fresh
-out="$(CURL_FAIL=1 /bin/zsh "$SYNC" 2>/dev/null)"; rc=$?
+out="$(CURL_FAIL=1 /bin/zsh "$SYNC" 2>&1)"; rc=$?
 check "server error: exit 1" test "$rc" -eq 1
 check "server error: message" eq "$out" "ERROR: Failed to fetch photo list from server"
 

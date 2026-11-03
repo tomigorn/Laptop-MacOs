@@ -10,7 +10,9 @@ BRAVE_PREFS="$HOME/Library/Application Support/BraveSoftware/Brave-Browser/Defau
 
 mkdir -p "$LOCAL_DIR"
 
-remote_photos=$(curl -sf "$REMOTE_URL/" | python3 -c "import sys,json; [print(p['name']) for p in json.load(sys.stdin)]") || { echo "ERROR: Failed to fetch photo list from server"; exit 1; }
+fail_fetch() { echo "ERROR: Failed to fetch photo list from server"; exit 1; }
+photo_json=$(curl -sf "$REMOTE_URL/") || fail_fetch
+remote_photos=$(echo "$photo_json" | python3 -c "import sys,json; [print(p['name']) for p in json.load(sys.stdin)]" 2>/dev/null) || fail_fetch
 
 for name in $remote_photos; do
     if [ ! -f "$LOCAL_DIR/$name" ]; then
