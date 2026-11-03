@@ -141,10 +141,10 @@ if test -f $CURRENT_DIR/bin/fastfetch
         echo ""
     end
 
-    # clearc = clear + greeting. Shows fastfetch + version but not the stale
+    # clear-greet = clear + greeting. Shows fastfetch + version but not the stale
     # "Connected in Xs" line — that timer is only meaningful at connect time.
     # Plain `clear` is left alone for a fully blank screen.
-    function clearc --description "clear the screen, then show the greeting"
+    function clear-greet --description "clear the screen, then show the greeting"
         command clear
         fastfetch
         _xxhc_version_line

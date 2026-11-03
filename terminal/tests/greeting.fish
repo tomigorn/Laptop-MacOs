@@ -1,9 +1,9 @@
 #!/opt/homebrew/bin/fish
-# Characterizes fish_greeting and clearc against stubbed fastfetch/clear.
+# Characterizes fish_greeting and clear-greet against stubbed fastfetch/clear.
 #   terminal/tests/greeting.fish
 set -l here (cd (dirname (status -f)); and pwd)
 set -g GREETING_SRC $here/../.config/fish/functions/fish_greeting.fish
-set -g CLEARC_SRC $here/../.config/fish/functions/clearc.fish
+set -g CLEAR_GREET_SRC $here/../.config/fish/functions/clear-greet.fish
 set -g REAL_VERSION_FILE $here/../SETUP_VERSION
 
 set -g WORK (mktemp -d)
@@ -29,14 +29,14 @@ function not_has_setup
     string match -q "*FASTFETCH*" -- $argv; and not string match -q "*Terminal Setup*" -- $argv
 end
 function has_desc
-    functions -v clearc | string match -q "*clear the screen, then show the greeting*"
+    functions -v clear-greet | string match -q "*clear the screen, then show the greeting*"
 end
 function plain
     cat | string replace -ra '\e\[[0-9;?]*[A-Za-z]' ''
 end
 
 # fixture tree: functions copied next to a SETUP_VERSION three levels up
-cp $GREETING_SRC $CLEARC_SRC $WORK/terminal/.config/fish/functions/
+cp $GREETING_SRC $CLEAR_GREET_SRC $WORK/terminal/.config/fish/functions/
 set -l fdir $WORK/terminal/.config/fish/functions
 
 # 1. version line from SETUP_VERSION, trimmed
@@ -62,11 +62,11 @@ set -l real (string trim < $REAL_VERSION_FILE)
 set out (fish_greeting | plain | string collect)
 check "greeting shows repo SETUP_VERSION ($real)" string match -q "*— v$real  *" -- $out
 
-# 5. clearc: clear, then greeting
-source $CLEARC_SRC
-set out (clearc | plain | string collect)
-check "clearc clears first" string match -q "CLEARED*" -- $out
-check "clearc then shows greeting" string match -q "*CLEARED*FASTFETCH*Terminal Setup*" -- $out
-check "clearc has a description" has_desc
+# 5. clear-greet: clear, then greeting
+source $CLEAR_GREET_SRC
+set out (clear-greet | plain | string collect)
+check "clear-greet clears first" string match -q "CLEARED*" -- $out
+check "clear-greet then shows greeting" string match -q "*CLEARED*FASTFETCH*Terminal Setup*" -- $out
+check "clear-greet has a description" has_desc
 
 test $fails -eq 0
