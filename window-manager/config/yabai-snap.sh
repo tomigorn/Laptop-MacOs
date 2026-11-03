@@ -22,6 +22,7 @@ export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbi
 YABAI="$(command -v yabai)"
 JQ="$(command -v jq)"
 ZONES_FILE="${YABAI_ZONES_FILE:-$HOME/.config/yabai/zones.conf}"
+ZONES_REAL="$(readlink -f "$ZONES_FILE" 2>/dev/null || echo "$ZONES_FILE")"
 CONNECTED_DIR="$(dirname "$ZONES_FILE")"
 FILL_GRID="1:1:0:0:1:1"
 
@@ -106,6 +107,9 @@ resolve_name() {
   [ -n "$RES_NAME" ] || RES_NAME="default"
 }
 
+# Rename over the link target: runs fire concurrently, none may read a half-written zones.conf.
+save_zones() { chmod "$(stat -f %Lp "$ZONES_REAL")" "$1" && mv -f "$1" "$ZONES_REAL"; }
+
 # Add a "monitor" line after the last one for any connected display not yet in
 # zones.conf, so the file fills itself in as monitors are plugged in. Displays
 # covered by a model rule are left out, so shared desks don't pile up lines.
@@ -122,12 +126,12 @@ register_displays() {
       "$uuid" "mon-${uuid:0:8}" unknown "$w" "${model:+$model, }" "$(date +%F)")"$'\n'
   done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor) \(.frame.h|floor)"')
   [ -n "$new" ] || return 0
-  tmp="$(mktemp)" || return 0
+  tmp="$(mktemp "$ZONES_REAL.XXXXXX")" || return 0
   if NEW="$new" awk '
       FNR==NR { sub(/^\* +/, ""); if ($1=="monitor") last=FNR; next }
       { print } FNR==last { printf "%s", ENVIRON["NEW"] }
       END { if (!last) printf "%s", ENVIRON["NEW"] }' "$ZONES_FILE" "$ZONES_FILE" > "$tmp"; then
-    cat "$tmp" > "$ZONES_FILE"          # in place, not mv: zones.conf is a symlink into the repo
+    save_zones "$tmp"
   fi
   rm -f "$tmp"
 }
@@ -146,13 +150,13 @@ mark_connected() {
     model="$(model_for_display "$w" "$h")"
     [ -z "$model" ] || on_models+="$model "
   done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor) \(.frame.h|floor)"')
-  tmp="$(mktemp)" || return 0
+  tmp="$(mktemp "$ZONES_REAL.XXXXXX")" || return 0
   if ON_UUIDS="$on_uuids" ON_MODELS="$on_models" awk '
       { line = $0; sub(/^[* ]+/, "", line); split(line, f, " ") }
       f[1]=="monitor" { print (index(ENVIRON["ON_UUIDS"], " " f[2] " ") ? "* " : "  ") line; next }
       f[1]=="model"   { print (index(ENVIRON["ON_MODELS"], " " f[2] " ") ? "* " : "  ") line; next }
       { print }' "$ZONES_FILE" > "$tmp" && ! cmp -s "$tmp" "$ZONES_FILE"; then
-    cat "$tmp" > "$ZONES_FILE"
+    save_zones "$tmp"
   fi
   rm -f "$tmp"
 }
@@ -340,7 +344,7 @@ read_zones() {
   dj="$(disp_json "$1")"
   resolve_name "$(echo "$dj" | "$JQ" -r '.uuid')" "$(echo "$dj" | "$JQ" '.frame.w')" "$(echo "$dj" | "$JQ" '.frame.h')"
   while IFS= read -r line; do ZONES+=("$line"); done < <(profile_for_name "$RES_NAME")
-  [ "${#ZONES[@]}" -gt 0 ] || ZONES=("1:2:0:0:1:1" "1:2:1:0:1:1")
+  [ "${#ZONES[@]}" -gt 0 ] || ZONES=("1:100:0:0:50:1" "1:100:50:0:50:1")
 }
 
 # Index of the zone the window currently fills, or -1 if it matches none (e.g.

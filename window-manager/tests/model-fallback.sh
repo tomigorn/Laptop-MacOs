@@ -218,5 +218,37 @@ setup "$(hp_disp)" "$(dell_disp)"
 run connected
 check "15 registered after the marked line" [ "$(grep -A1 "monitor $HP" "$YABAI_ZONES_FILE" | sed -n 2p | cut -d' ' -f3)" = "$DELL" ]
 
+# 16. no layout lines at all: zones fall back to 50 50 and still cross displays
+setup
+printf '%s\n' "monitor $LAPTOP  MacBook  laptop" > "$YABAI_ZONES_FILE"
+echo '{"id":42,"display":1,"frame":{"x":735,"y":0,"w":735,"h":956}}' > "$FIXTURE_WINDOW"
+run left
+check "16 fallback snaps to the left half" grep -q -- "--grid 1:100:0:0:50:1" "$FIXTURE_LOG"
+: > "$FIXTURE_LOG"
+echo '{"id":42,"display":1,"frame":{"x":0,"y":0,"w":735,"h":956}}' > "$FIXTURE_WINDOW"
+run left
+check "16 fallback left zone crosses west" grep -q -- "--display west" "$FIXTURE_LOG"
+
+# 17. concurrent runs never empty zones.conf (several fire at once on yabai start)
+lost=0
+for round in 1 2 3 4 5 6 7 8 9 10; do
+  setup "$(hp_disp)" "$(dell_disp)"
+  zones <<EOF
+* monitor $HP  HP  home
+layout HP 40 60
+EOF
+  for i in 1 2 3 4 5 6 7 8; do "$SNAP" connected >/dev/null 2>&1 & done
+  wait
+  grep -q "^layout MacBook 50 50$" "$YABAI_ZONES_FILE" || lost=$((lost + 1))
+done
+check "17 concurrent runs keep the layouts" [ "$lost" = 0 ]
+
+# 18. rewriting keeps the file mode
+setup "$(hp_disp)"
+zones < /dev/null
+chmod 644 "$YABAI_ZONES_FILE"
+run connected
+check "18 mode kept" [ "$(stat -f %Lp "$YABAI_ZONES_FILE")" = 644 ]
+
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi
