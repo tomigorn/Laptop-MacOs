@@ -417,6 +417,21 @@ check "admin: time read from PrivilegesCLI --status" contains "$(calls)" 'Privil
 cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
 run --install
 check "no restart update: no restart line" lacks "$out" "restart required"
+check "no macOS update: up to date" has "$out" "macOS \\.+ up to date"
+check "no macOS update: no install" lacks "$(calls)" "softwareupdate --install"
+check "no macOS update: no admin check for it" equals "$(grep -c '^PrivilegesCLI --status' "$CALLS")" 3
+check "no macOS update: total" has "$out" "total 6 installed · 1 up to date"
+echo 3 > "$FIX/privileges-expire-after"
+run --install
+rm -f "$FIX/privileges-expire-after"
+check "admin gone, no macOS update: exit 0" equals "$rc" 0
+check "admin gone, no macOS update: up to date" has "$out" "macOS \\.+ up to date"
+touch "$FIX/fail-softwareupdate-list"
+run --install
+rm -f "$FIX/fail-softwareupdate-list"
+check "macOS list failing: exit 1" equals "$rc" 1
+check "macOS list failing: failed" has "$out" "macOS \\.+ failed \\(exit 1\\)"
+check "macOS list failing: no install" lacks "$(calls)" "softwareupdate --install"
 cp "$FIXTURES/softwareupdate-list.txt" "$FIX/softwareupdate-list.txt"
 
 # a prompt without a newline shows while the tool waits for an answer
@@ -478,6 +493,7 @@ check "tool exit 3: total" has "$out" "total 6 installed · 1 failed"
 touch "$FIX/fail-softwareupdate"
 run --install
 check "macOS failing: exit 1" equals "$rc" 1
+check "macOS failing: no restart line" lacks "$out" "restart required"
 check "macOS failing: Adobe still runs" contains "$(calls)" "RemoteUpdateManager --action=install"
 rm -f "$FIX/fail-softwareupdate"
 

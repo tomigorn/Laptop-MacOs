@@ -16,7 +16,7 @@ fi
 STAMP="$HOME/.local/state/mac-outdated/last-check"
 MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
-STEP_STATUS=""  # set by an install step instead of its exit code: missing, expired, "expires N"
+STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N"
 
 SOURCES=(brew msupdate adobe mas macos pipx vscode sparkle unmanaged)
 INSTALL_ORDER=(adobe mas brew msupdate pipx vscode macos)
@@ -446,11 +446,12 @@ still_admin() {  # before each sudo step; unknown time passes, the start already
 # ── install_<src>: the tool's exit code; a step that does not run sets STEP_STATUS and returns 0 ──
 install_macos() {  # runs on the terminal, not through a pipe: softwareupdate may ask for the owner password
   command -v softwareupdate >/dev/null || { STEP_STATUS=missing; return 0; }
-  still_admin || return 0
   local list rc
-  list=$(softwareupdate --list 2>&1)
+  list=$(softwareupdate --list 2>&1) || { rc=$?; printf '%s\n' "$list" | indent; return "$rc"; }
+  grep -q 'No new software available' <<< "$list" && { STEP_STATUS=uptodate; return 0; }
+  still_admin || return 0
   sudo softwareupdate --install --all; rc=$?
-  grep -q 'Action: restart' <<< "$list" && echo "    restart required: restart the Mac when it suits you"
+  [ "$rc" -eq 0 ] && grep -q 'Action: restart' <<< "$list" && echo "    restart required: restart the Mac when it suits you"
   return "$rc"
 }
 install_adobe() {
@@ -513,7 +514,7 @@ install_mode() {
   sudo -v || { echo "sudo failed"; exit 2; }
   local src rc failed=0 label word
   local -A result
-  local -i installed=0 nfailed=0 skipped=0
+  local -i installed=0 nfailed=0 skipped=0 uptodate=0
   for src in "${INSTALL_ORDER[@]}"; do
     label=${LABELS[$src]}
     printf '\n%s\n' "$(c 1 "── $label")"
@@ -525,6 +526,7 @@ install_mode() {
       wait "$!"
     fi
     case $STEP_STATUS:$rc in
+      uptodate:*) result[$src]="up to date"; uptodate+=1; word=$(c 32 "up to date") ;;
       missing:*) result[$src]="skipped ($src not installed)"; skipped+=1; word=$(c 33 "${result[$src]}") ;;
       expired:*) result[$src]="skipped (admin expired: click Privileges and rerun)"; skipped+=1; failed=1; word=$(c 33 "${result[$src]}") ;;
       expires*) result[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; skipped+=1; failed=1; word=$(c 33 "${result[$src]}") ;;
@@ -538,7 +540,7 @@ install_mode() {
   section "Summary" ""
   for src in "${INSTALL_ORDER[@]}"; do
     case ${result[$src]} in
-      installed) word=$(c 32 installed) ;;
+      installed|"up to date") word=$(c 32 "${result[$src]}") ;;
       skipped*) word=$(c 33 "${result[$src]}") ;;
       *) word=$(c 31 "${result[$src]}") ;;
     esac
@@ -547,6 +549,7 @@ install_mode() {
   printf '  %s\n' "$THIN"
   local parts=()
   [ "$installed" -eq 0 ] || parts+=("$installed installed")
+  [ "$uptodate" -eq 0 ] || parts+=("$uptodate up to date")
   [ "$nfailed" -eq 0 ] || parts+=("$nfailed failed")
   [ "$skipped" -eq 0 ] || parts+=("$skipped skipped")
   local joined=${parts[0]-} i

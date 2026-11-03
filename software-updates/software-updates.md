@@ -40,7 +40,7 @@ mac-outdated · 2026-11-03 11:20
 - A source that could not be checked (`brew outdated`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding.
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
-- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
+- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 
 ## Sources
@@ -51,7 +51,7 @@ mac-outdated · 2026-11-03 11:20
 | Microsoft AutoUpdate | `msupdate --list` | `msupdate --install` |
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
 | App Store | `mas outdated --json` (note if `mas` is missing) | `sudo mas upgrade` (mas needs root to update apps) |
-| macOS | `softwareupdate --list` | `sudo softwareupdate --install --all`, never restarts |
+| macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all`, never restarts; `restart required` only after a successful install |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped) | `pipx upgrade-all` |
 | VS Code extensions | count only | `code --update-extensions` |
 | Sparkle apps | appcast from `SUFeedURL` (beta channel skipped) | none: open the app |
