@@ -74,7 +74,7 @@ chmod +x ~/.xxh/ssh-wrapper.sh
 symlink "$SCRIPT_DIR/.xxh/scp-wrapper.sh"               ~/.xxh/scp-wrapper.sh
 chmod +x ~/.xxh/scp-wrapper.sh
 
-# Stale links from earlier versions: clearc was renamed, ssh-why moved to ssh/setup.sh
+# Stale links from earlier versions: clearc was renamed, ssh-why moved to ssh/install.sh
 [ -L ~/.config/fish/functions/clearc.fish ] && rm ~/.config/fish/functions/clearc.fish
 old_sshwhy=~/.config/fish/functions/ssh-why.fish
 if [ -L "$old_sshwhy" ] && [[ "$(readlink "$old_sshwhy")" == "$SCRIPT_DIR"/* ]]; then

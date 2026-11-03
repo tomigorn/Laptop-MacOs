@@ -120,7 +120,7 @@ set out (xxhc armhost 2>&1 | plain | string collect)
 xxhc armhost >/dev/null 2>&1
 check "xxhc: missing home -> exit 1" test $status -eq 1
 check "xxhc: arm64 maps to aarch64 home" has $out "xxh home for aarch64 is missing or incomplete at $HOME/.xxh-homes/aarch64"
-check "xxhc: points at setup.sh" has $out "Run terminal/setup.sh to build it."
+check "xxhc: points at install.sh" has $out "Run terminal/install.sh to build it."
 set -gx STUB_PROBE '1000.0\namd64'
 set out (xxhc amdhost 2>&1 | plain | string collect)
 check "xxhc: amd64 maps to x86_64 home" has $out "xxh home for x86_64 is missing"

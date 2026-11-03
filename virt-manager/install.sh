@@ -4,7 +4,7 @@
 #   1. Installs libvirt + virt-manager from Homebrew (homebrew/core)
 #   2. Starts the libvirt service (LaunchAgent)
 #   3. Verifies the fish XDG_DATA_DIRS line that lets virt-manager find its
-#      GSettings schemas (set up by terminal/setup.sh; warns if missing)
+#      GSettings schemas (set up by terminal/install.sh; warns if missing)
 #   4. Builds ~/Applications/Virt-Manager.app for Spotlight / Launchpad / dock
 set -euo pipefail
 
@@ -53,7 +53,7 @@ if [[ -f "$FISH_CONFIG" ]] && grep -qF "$NEEDLE" "$FISH_CONFIG"; then
     skip "XDG_DATA_DIRS line in $FISH_CONFIG"
 else
     warn "Fish config does not export XDG_DATA_DIRS=/opt/homebrew/share."
-    warn "Run terminal/setup.sh (which symlinks the repo's config.fish into ~/.config/fish/),"
+    warn "Run terminal/install.sh (which symlinks the repo's config.fish into ~/.config/fish/),"
     warn "or add this line yourself:"
     info "  set -gx --path XDG_DATA_DIRS /opt/homebrew/share \$XDG_DATA_DIRS"
 fi

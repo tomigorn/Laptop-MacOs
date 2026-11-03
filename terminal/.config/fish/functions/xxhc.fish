@@ -176,7 +176,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         set_color normal
     end
 
-    # Each arch has its own pre-built xxh home (see setup.sh step 8) with that
+    # Each arch has its own pre-built xxh home (see install.sh step 8) with that
     # arch's binaries already staged. Pointing `+lh` at the matching home means
     # concurrent connects to different-arch hosts never share a build dir — no
     # race — and there's no per-connect binary copy.
@@ -184,7 +184,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
     if not test -f $lxh/.xxh/shells/xxh-shell-fish/build/fish-portable/bin/fish
         set_color --bold red
         echo "  xxhc: xxh home for $arch is missing or incomplete at $lxh"
-        echo "  Run terminal/setup.sh to build it."
+        echo "  Run terminal/install.sh to build it."
         set_color normal
         _xxhc_release_master $target $cm_path $cm_users $sid
         return 1

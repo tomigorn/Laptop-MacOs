@@ -114,7 +114,7 @@ for s in "${srcs[@]}"; do
     tar_args+=( -C "$(dirname -- "$s")" "$(basename -- "$s")" )
 done
 
-# -h (dereference) is REQUIRED, not an optimisation: setup.sh symlinks
+# -h (dereference) is REQUIRED, not an optimisation: install.sh symlinks
 # xxh-config.fish and starship.toml in the build dir back into this repo, and
 # scp -r copies their *contents*. Without -h tar would ship the symlinks
 # themselves, which dangle on the remote and leave the session with no config.

@@ -128,7 +128,7 @@ The script:
 3. `brew services start libvirt` (if not already running)
 4. Smoke-tests `virsh --connect qemu:///session uri`
 5. Warns if fish doesn't export `XDG_DATA_DIRS=/opt/homebrew/share`
-   (run [`terminal/setup.sh`](../terminal/setup.sh) to set that up via symlink)
+   (run [`terminal/install.sh`](../terminal/install.sh) to set that up via symlink)
 6. Runs `build.sh` to produce `~/Applications/Virt-Manager.app`
 
 Safe to re-run — every step is idempotent.
