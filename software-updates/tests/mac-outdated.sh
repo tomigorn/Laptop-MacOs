@@ -34,7 +34,13 @@ case "$1" in
     if [ "$4" = --installed ]; then cat "$FIX/brew-info-installed.json"; exit 0; fi
     [ -f "$FIX/brew-info-$4.json" ] || { echo "Error: Cask $4 is unavailable" >&2; exit 1; }
     cat "$FIX/brew-info-$4.json" ;;
-  upgrade) [ -f "$FIX/fail-brew" ] && exit 1; exit 0 ;;
+  upgrade)
+    if [ -f "$FIX/prompt-brew" ]; then
+      printf "Proceed? "; i=0
+      while [ ! -f "$FIX/go" ] && [ "$i" -lt 60 ]; do sleep 0.1; i=$((i + 1)); done; echo
+    fi
+    printf "==> Upgrading 1 outdated package\n50%%\r100%%\n"
+    [ -f "$FIX/fail-brew" ] && exit 1; exit 0 ;;
 esac'
 stub msupdate '
 case "$1" in
@@ -341,8 +347,30 @@ check "admin 20 min: header" has "$out" "^mac-outdated --install · [0-9-]+ [0-9
 check "admin 20 min: subheader per source" contains "$out" "── brew"
 check "admin 20 min: summary section" contains "$out" "Summary"
 check "admin 20 min: summary total" has "$out" "total 7 installed"
-check "admin 20 min: tool output indented" has "$out" "^ +Restart is required to complete installation"
+check "admin 20 min: tool output indented" has "$out" "^ +==> Upgrading 1 outdated package"
+check "admin 20 min: carriage return becomes a new indented line" has "$out" "^ +100%"
+check "admin 20 min: no carriage returns in install output" no_match "$(cat "$WORK/out")" $'\r'
+check "admin 20 min: softwareupdate runs on the terminal, not through a pipe" grep -q '^Restart is required to complete installation' "$WORK/out"
+check "admin 20 min: restart need read from softwareupdate --list before installing" equals "$(grep -E '^softwareupdate --(list|install)' "$CALLS" | cut -d' ' -f2)" "--list
+--install"
 check "admin: time read from PrivilegesCLI --status" contains "$(calls)" 'PrivilegesCLI --status'
+
+cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
+run --install
+check "no restart update: no restart line" lacks "$out" "restart required"
+cp "$FIXTURES/softwareupdate-list.txt" "$FIX/softwareupdate-list.txt"
+
+# a prompt without a newline shows while the tool waits for an answer
+touch "$FIX/prompt-brew"
+: > "$CALLS"
+"$SCRIPT" --install > "$WORK/out" 2>&1 < /dev/null &
+pid=$!
+seen=0
+for _ in $(seq 40); do grep -q 'Proceed?' "$WORK/out" && { seen=1; break; }; sleep 0.1; done
+touch "$FIX/go"
+wait "$pid"
+check "prompt without newline shows while waiting" equals "$seen" 1
+rm -f "$FIX/prompt-brew" "$FIX/go"
 
 admin_setup admin 10
 run --install

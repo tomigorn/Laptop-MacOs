@@ -39,7 +39,7 @@ mac-outdated · 2026-11-03 11:20
 - One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped). Adobe is only listed with admin, so check mode shows `checked during --install`.
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
-- `--install` prints a `── <source>` block with the indented tool output per step, a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (…)`) and a summary.
+- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (…)`) and a summary.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 
 ## Sources
