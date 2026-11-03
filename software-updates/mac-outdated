@@ -67,7 +67,7 @@ row() {  # row <name> <installed> <latest> <name width> <version width> [tag]
   printf '    %s %s  →  %s%s\n' "$(printf '%-*s' "$4" "$1")" "$(c 2 "$(printf '%-*s' "$5" "$2")")" "$(c 32 "$3")" "${6:+  $(c 33 "$6")}"
 }
 summary_row() {  # summary_row <label> <count> <hint>
-  printf '  %-26s%4s   %s\n' "$1" "$2" "$(c 2 "$3")"
+  printf '  %-26s%s%s   %s\n' "$1" "$(printf '%*s' $((4 - ${#2})) '')" "$2" "$(c 2 "$3")"
 }
 
 older() {  # older <installed> <latest>: installed is strictly newer than latest, brew _N revisions ignored
