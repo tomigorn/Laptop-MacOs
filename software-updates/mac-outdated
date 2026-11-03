@@ -21,6 +21,14 @@ MANUAL_SOURCES=" sparkle unmanaged "
 SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian Docker Steam zoom.us Element "Autodesk Fusion")
 MANAGED_IDS=('com.apple.*' 'com.microsoft.*' 'com.adobe.*' 'com.jamf*' '*ethz*' 'corp.sap.privileges' 'nl.root3.support')
 BREW_APPS=""
+declare -A HINTS=(
+  [brew]="mac-outdated --install" [msupdate]="mac-outdated --install" [adobe]="mac-outdated --install" [mas]="mac-outdated --install"
+  [macos]="mac-outdated --install" [pipx]="mac-outdated --install" [vscode]="mac-outdated --install"
+  [sparkle]="open the app" [unmanaged]="brew install --cask --adopt …"
+)
+RULE=$(printf '═%.0s' {1..58})
+THIN=$(printf '─%.0s' {1..32})
+COLOR=0
 
 usage() {
   cat <<'EOF'
@@ -34,8 +42,40 @@ EOF
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 item() { printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "${5:-}"; }
-note() { printf '%s||||%s\n' "$1" "$2"; }
-progress() { [ -t 2 ] || return 0; printf '\r\033[Kchecking %s...' "$1" >&2; }
+# note <src> <text> [short result] [kind: ? unknown, – skipped] [summary hint]: without a short result the note gets a section
+note() { printf '%s|%s|%s||%s|%s\n' "$1" "${3:-}" "${4:-}" "$2" "${5:-}"; }
+
+setup_color() {
+  COLOR=0
+  if [ "${MAC_OUTDATED_COLOR:-}" = always ]; then COLOR=1
+  elif [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then COLOR=1
+  fi
+}
+c() {  # c <sgr code> <text>: bold 1, dim 2, red 31, green 32, yellow 33
+  if [ "$COLOR" -eq 1 ]; then printf '\033[%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi
+}
+header() { printf '%s · %s\n\n' "$(c 1 "$1")" "$(date '+%Y-%m-%d %H:%M')"; }
+section() {  # section <title> <detail>
+  printf '\n%s\n %s%s\n%s\n' "$RULE" "$(c 1 "$1")" "${2:+ · $2}" "$RULE"
+}
+progress_start() {  # progress_start <label>: dots to a fixed column, the result follows on the same line
+  local dots=$((29 - ${#1}))
+  [ "$dots" -ge 2 ] || dots=2
+  printf '  %s %s ' "$1" "$(printf '.%.0s' $(seq "$dots"))"
+}
+row() {  # row <name> <installed> <latest> <name width> <version width> [tag]
+  printf '    %s %s  →  %s%s\n' "$(printf '%-*s' "$4" "$1")" "$(c 2 "$(printf '%-*s' "$5" "$2")")" "$(c 32 "$3")" "${6:+  $(c 33 "$6")}"
+}
+summary_row() {  # summary_row <label> <count> <hint>
+  printf '  %-26s%4s   %s\n' "$1" "$2" "$(c 2 "$3")"
+}
+
+older() {  # older <installed> <latest>: installed is strictly newer than latest, brew _N revisions ignored
+  local i=$1 l=$2
+  [[ $i =~ ^(.*)_[0-9]+$ ]] && i=${BASH_REMATCH[1]}
+  [[ $l =~ ^(.*)_[0-9]+$ ]] && l=${BASH_REMATCH[1]}
+  [ "$i" != "$l" ] && newer "$l" "$i"
+}
 
 plist_get() { plutil -extract "$2" raw -o - "$1" 2>/dev/null; }
 app_version() { plist_get "$1/Contents/Info.plist" CFBundleShortVersionString; }
@@ -87,12 +127,12 @@ code_cmd() {
 
 # ── check_<src>: print src|name|installed|latest|note lines ──────────────────
 check_brew() {
-  command -v brew >/dev/null || { note brew "brew not installed"; return; }
+  command -v brew >/dev/null || { note brew "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
   brew update --quiet >/dev/null 2>&1 || note brew "brew update failed, the list may be stale"
   local json
   json=$(brew outdated --greedy --json=v2 2>/dev/null) || { note brew "brew outdated failed"; return; }
-  jq -r '(.formulae + .casks)[] | select(.pinned | not)
-    | "brew|\(.name)|\(.installed_versions | if type == "array" then last else . end)|\(.current_version)|"' <<< "$json" \
+  jq -r '(.formulae | map(. + {kind: "formula"})) + (.casks | map(. + {kind: "cask"})) | .[] | select(.pinned | not)
+    | "brew|\(.name)|\(.installed_versions | if type == "array" then last else . end)|\(.current_version)|\(.kind)"' <<< "$json" \
     || note brew "could not read brew outdated output"
 }
 
@@ -112,7 +152,7 @@ parse_msupdate() {
     END { flush() }'
 }
 check_msupdate() {
-  [ -x "$MSUPDATE" ] || { note msupdate "Microsoft AutoUpdate not installed"; return; }
+  [ -x "$MSUPDATE" ] || { note msupdate "Microsoft AutoUpdate not installed" "skipped (msupdate not installed)" – "install Microsoft AutoUpdate"; return; }
   local out name version app inst
   out=$("$MSUPDATE" --list 2>&1) || { note msupdate "msupdate --list failed"; return; }
   while IFS='|' read -r name version; do
@@ -124,11 +164,11 @@ check_msupdate() {
 }
 
 check_adobe() {
-  [ -x "$RUM" ] || { note adobe "RemoteUpdateManager not installed"; return; }
+  [ -x "$RUM" ] || { note adobe "RemoteUpdateManager not installed" "skipped (RemoteUpdateManager not installed)" – "install RemoteUpdateManager"; return; }
   local out rc
   out=$("$RUM" --action=list 2>&1); rc=$?
   if grep -q "not launched with Admin" <<< "$out"; then
-    note adobe "Adobe: listing needs admin, mac-outdated --install updates Adobe apps"; return
+    note adobe "listing needs admin, mac-outdated --install updates Adobe apps" "needs admin to list" "?" "listing needs admin"; return
   fi
   awk '
     /^\*+/ { on = 0 }
@@ -141,14 +181,14 @@ check_adobe() {
 }
 
 check_mas() {
-  command -v mas >/dev/null || { note mas "mas not installed: brew install mas"; return; }
+  command -v mas >/dev/null || { note mas "mas not installed: brew install mas" "skipped (mas not installed)" – "brew install mas"; return; }
   local out
   out=$(mas outdated 2>&1) || { note mas "mas outdated failed"; return; }
   sed -nE 's/^[0-9]+[[:space:]]+(.*[^[:space:]])[[:space:]]+\((.+) -> (.+)\)[[:space:]]*$/mas|\1|\2|\3|/p' <<< "$out"
 }
 
 check_macos() {
-  command -v softwareupdate >/dev/null || { note macos "softwareupdate not found"; return; }
+  command -v softwareupdate >/dev/null || { note macos "softwareupdate not found" "skipped (softwareupdate not found)" – "softwareupdate missing"; return; }
   local out current
   out=$(softwareupdate --list 2>&1) || { note macos "softwareupdate --list failed"; return; }
   current=$(sw_vers -productVersion 2>/dev/null)
@@ -162,7 +202,7 @@ check_macos() {
 }
 
 check_pipx() {
-  command -v pipx >/dev/null || { note pipx "pipx not installed"; return; }
+  command -v pipx >/dev/null || { note pipx "pipx not installed" "skipped (pipx not installed)" – "brew install pipx"; return; }
   local json venv pkg inst latest
   json=$(pipx list --json 2>/dev/null) || { note pipx "pipx list failed"; return; }
   while IFS=$'\t' read -r venv pkg inst; do
@@ -175,9 +215,9 @@ check_pipx() {
 
 check_vscode() {
   local code n
-  code=$(code_cmd) || { note vscode "VS Code CLI not found"; return; }
+  code=$(code_cmd) || { note vscode "VS Code CLI not found" "skipped (code not found)" – "install the code CLI"; return; }
   n=$("$code" --list-extensions --show-versions 2>/dev/null | grep -c '@')
-  note vscode "$n extensions installed, mac-outdated --install updates them"
+  note vscode "$n extensions installed, mac-outdated --install updates them" "$n installed"
 }
 
 appcast_latest() {  # prints "S <newest shortVersionString>" and "V <newest version>" lines, beta channels skipped
@@ -247,39 +287,103 @@ self_updating_installed() {
   for s in "${SELF_UPDATING[@]}"; do find_app "$s" >/dev/null && found+=("$s"); done
   [ "${#found[@]}" -gt 0 ] || return 0
   local IFS=,
-  printf '\nupdates itself on launch: %s\n' "${found[*]}" | sed 's/,/, /g'
+  printf '\n%s\n' "$(c 2 "updates itself on launch: $(sed 's/,/, /g' <<< "${found[*]}")")"
 }
 
 # ── check mode ───────────────────────────────────────────────────────────────
+declare -A N_ITEMS N_NOTES SHORT KIND SHINT
+
+analyze() {  # analyze <src> <lines>: fills the counters and the short result of the first note that has one
+  local src=$1 s name inst latest extra hint
+  N_ITEMS[$src]=0 N_NOTES[$src]=0 SHORT[$src]="" KIND[$src]="" SHINT[$src]=""
+  while IFS='|' read -r s name inst latest extra hint; do
+    [ -n "$s" ] || continue
+    if [ -n "$latest" ]; then N_ITEMS[$src]=$((N_ITEMS[$src] + 1)); continue; fi
+    N_NOTES[$src]=$((N_NOTES[$src] + 1))
+    if [ -n "$name" ] && [ -z "${SHORT[$src]}" ]; then SHORT[$src]=$name KIND[$src]=$inst SHINT[$src]=$hint; fi
+  done <<< "$2"
+}
+result_text() {  # result_text <src>: the coloured short result for the progress line
+  local src=$1
+  if [ "${N_ITEMS[$src]}" -gt 0 ]; then printf '%s outdated' "${N_ITEMS[$src]}"
+  elif [ -n "${SHORT[$src]}" ]; then
+    if [ -n "${KIND[$src]}" ]; then c 33 "${SHORT[$src]}"; else printf '%s' "${SHORT[$src]}"; fi
+  elif [ "${N_NOTES[$src]}" -gt 0 ]; then c 33 "${N_NOTES[$src]} note$([ "${N_NOTES[$src]}" -gt 1 ] && echo s)"
+  else c 32 "up to date"
+  fi
+}
+
+detail_section() {  # detail_section <src> <lines>
+  local src=$1 block=$2 s name inst latest extra hint n=0 nw=24 vw=1 tag group
+  while IFS='|' read -r s name inst latest extra hint; do
+    [ -n "$latest" ] || continue
+    [ "${#name}" -le "$nw" ] || nw=${#name}
+    [ "${#inst}" -le "$vw" ] || vw=${#inst}
+  done <<< "$block"
+  if [ "${N_ITEMS[$src]}" -gt 0 ]; then n="${N_ITEMS[$src]} outdated"; else n="${N_NOTES[$src]} note"; fi
+  section "${LABELS[$src]}" "$n"
+  local groups=("")
+  [ "$src" = brew ] && groups=(formula cask)
+  for group in "${groups[@]}"; do
+    if [ -n "$group" ] && grep -q "|$group\$" <<< "$block"; then
+      case $group in formula) printf '  formulae\n' ;; cask) printf '  casks\n' ;; esac
+    fi
+    while IFS='|' read -r s name inst latest extra hint; do
+      [ -n "$latest" ] || continue
+      [ "$src" != brew ] || [ "$extra" = "$group" ] || continue
+      tag=""
+      case $src in
+        brew) older "$inst" "$latest" && tag="(downgrade)" ;;
+        macos) [ -z "$extra" ] || tag="($extra)" ;;
+      esac
+      row "$name" "$inst" "$latest" "$nw" "$vw" "$tag"
+      case $src in sparkle|unmanaged) [ -z "$extra" ] || printf '      %s\n' "$(c 2 "$extra")" ;; esac
+    done <<< "$block"
+  done
+  while IFS='|' read -r s name inst latest extra hint; do
+    [ -z "$latest" ] && [ -n "$s" ] && printf '  %s\n' "$(c 33 "$extra")"
+  done <<< "$block"
+}
+
 check_mode() {
   command -v jq >/dev/null || { echo "jq not found: brew install jq" >&2; exit 2; }
   load_brew_apps
-  local lines="" src
+  setup_color
+  header "mac-outdated"
+  local src lines=() block
+  declare -A LINES
   for src in "${SOURCES[@]}"; do
-    progress "${LABELS[$src]}"
-    lines+=$("check_$src")$'\n'
+    progress_start "${LABELS[$src]}"
+    block=$("check_$src")
+    LINES[$src]=$block
+    analyze "$src" "$block"
+    printf '%s\n' "$(result_text "$src")"
   done
-  [ -t 2 ] && printf '\r\033[K' >&2
 
-  local block name inst latest extra outdated=0 manual=0 installable=0
+  local outdated=0 manual=0 installable=0 n
   for src in "${SOURCES[@]}"; do
-    block=$(grep "^$src|" <<< "$lines") || continue
-    printf '\n%s\n' "${LABELS[$src]}"
-    while IFS='|' read -r _ name inst latest extra; do
-      if [ -n "$latest" ]; then
-        printf '  %-32s %s -> %s%s\n' "$name" "$inst" "$latest" "${extra:+  ($extra)}"
-        outdated=$((outdated + 1))
-        if [[ $MANUAL_SOURCES == *" $src "* ]]; then manual=$((manual + 1)); else installable=$((installable + 1)); fi
-      else
-        printf '  note: %s\n' "$extra"
-      fi
-    done <<< "$block"
+    n=${N_ITEMS[$src]}
+    outdated=$((outdated + n))
+    if [[ $MANUAL_SOURCES == *" $src "* ]]; then manual=$((manual + n)); else installable=$((installable + n)); fi
+    if [ "$n" -gt 0 ] || { [ "${N_NOTES[$src]}" -gt 0 ] && [ -z "${SHORT[$src]}" ]; }; then
+      detail_section "$src" "${LINES[$src]}"
+    fi
   done
   self_updating_installed
 
-  echo
-  echo "$outdated outdated, $manual need a manual step"
-  [ "$installable" -gt 0 ] && echo "run: mac-outdated --install"
+  section "Summary" ""
+  for src in "${SOURCES[@]}"; do
+    if [ "${N_ITEMS[$src]}" -gt 0 ]; then summary_row "${LABELS[$src]}" "${N_ITEMS[$src]}" "${HINTS[$src]}"
+    elif [ "${KIND[$src]}" = "?" ] || [ "${KIND[$src]}" = "–" ]; then summary_row "${LABELS[$src]}" "${KIND[$src]}" "${SHINT[$src]}"
+    fi
+  done
+  if [ "$outdated" -gt 0 ]; then
+    printf '  %s\n' "$THIN"
+    summary_row total "$outdated" "$installable via --install · $manual by hand"
+  else
+    printf '  %s\n' "$(c 32 "everything up to date")"
+  fi
+  [ "$installable" -gt 0 ] && printf '\n  %s\n' "$(c 1 "next: mac-outdated --install")"
   mkdir -p "$(dirname "$STAMP")" && date +%s > "$STAMP"
   [ "$outdated" -eq 0 ]
 }
@@ -348,22 +452,45 @@ install_vscode() {
 }
 
 install_mode() {
+  setup_color
+  header "mac-outdated --install"
   require_admin || exit 2
-  echo "sudo asks for your password once, for the macOS and Adobe updates"
+  echo "  sudo asks for your password once, for the macOS and Adobe updates"
   sudo -v || { echo "sudo failed"; exit 2; }
-  local src rc failed=0
-  declare -A result
+  local src rc failed=0 label word
+  local -A result
+  local -i installed=0 nfailed=0 skipped=0
   for src in "${INSTALL_ORDER[@]}"; do
-    printf '\n== %s\n' "${LABELS[$src]}"
-    "install_$src"; rc=$?
+    label=${LABELS[$src]}
+    printf '\n%s\n' "$(c 1 "── $label")"
+    "install_$src" 2>&1 | tr '\r' '\n' | sed 's/^/    /'
+    rc=${PIPESTATUS[0]}
     case $rc in
-      0) result[$src]=ok ;;
-      "$SKIPPED") result[$src]=skipped ;;
-      *) result[$src]=failed; failed=1 ;;
+      0) result[$src]=installed; installed+=1; word=$(c 32 installed) ;;
+      "$SKIPPED") result[$src]="skipped ($src not installed)"; skipped+=1; word=$(c 33 "${result[$src]}") ;;
+      *) result[$src]="failed (exit $rc)"; nfailed+=1; failed=1; word=$(c 31 "failed (exit $rc)") ;;
     esac
+    progress_start "$label"
+    printf '%s\n' "$word"
   done
-  echo
-  for src in "${INSTALL_ORDER[@]}"; do printf '  %-10s %s\n' "$src" "${result[$src]}"; done
+
+  section "Summary" ""
+  for src in "${INSTALL_ORDER[@]}"; do
+    case ${result[$src]} in
+      installed) word=$(c 32 installed) ;;
+      skipped*) word=$(c 33 "${result[$src]}") ;;
+      *) word=$(c 31 "${result[$src]}") ;;
+    esac
+    printf '  %-26s%s\n' "${LABELS[$src]}" "$word"
+  done
+  printf '  %s\n' "$THIN"
+  local parts=()
+  [ "$installed" -eq 0 ] || parts+=("$installed installed")
+  [ "$nfailed" -eq 0 ] || parts+=("$nfailed failed")
+  [ "$skipped" -eq 0 ] || parts+=("$skipped skipped")
+  local joined=${parts[0]-} i
+  for i in "${parts[@]:1}"; do joined+=" · $i"; done
+  printf '  %-26s%s\n' total "$joined"
   exit "$failed"
 }
 

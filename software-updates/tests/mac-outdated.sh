@@ -164,6 +164,7 @@ check() {  # check <name> <condition...>
 contains() { [[ "$1" == *"$2"* ]]; }
 lacks() { [[ "$1" != *"$2"* ]]; }
 equals() { [ "$1" = "$2" ]; }
+has() { grep -qE "$2" <<< "$1"; }
 no_match() { ! grep -qE "$2" <<< "$1"; }
 only_allowed_sudo() {
   local bad
@@ -175,28 +176,28 @@ only_allowed_sudo() {
 fixtures_outdated
 run
 check "check: something outdated -> exit 1" equals "$rc" 1
-check "brew: formula, last installed version" contains "$out" "aom 3.15.2 -> 3.15.3"
-check "brew: formula" contains "$out" "bash 5.3.15 -> 5.3.20"
-check "brew: cask" contains "$out" "ghostty 1.3.1 -> 1.4.0"
+check "brew: formula, last installed version" contains "$out" "aom 3.15.2 → 3.15.3"
+check "brew: formula" contains "$out" "bash 5.3.15 → 5.3.20"
+check "brew: cask" contains "$out" "ghostty 1.3.1 → 1.4.0"
 check "brew: pinned formula skipped" lacks "$out" "node@20"
 check "brew: update first" equals "$(grep -E '^brew (update|outdated)' "$CALLS" | head -1 | cut -d' ' -f1-2)" "brew update"
-check "msupdate: Word with installed app version" contains "$out" "Microsoft Word 16.114.3 -> 16.115.26110212"
-check "msupdate: Excel without app" contains "$out" "Microsoft Excel ? -> 16.115.26110212"
-check "adobe: product update" contains "$out" "PHSP ? -> 27.1"
-check "adobe: second product" contains "$out" "AEFT ? -> 26.0.1"
-check "adobe: Acrobat update" contains "$out" "AcrobatDC ? -> update"
-check "mas: app update" contains "$out" "Xcode 27.2 -> 27.3"
-check "mas: second app" contains "$out" "Telegram 13.1.0 -> 13.2.0"
-check "macOS: update with restart note" contains "$out" "macOS Golden Gate 27.2.1 27.2 -> 27.2.1 (restart required)"
-check "macOS: other update" contains "$out" "Command Line Tools for Xcode ? -> 27.2"
-check "pipx: outdated package" contains "$out" "xxh-xxh 0.8.14 -> 0.8.15"
-check "pipx: lookup failure is a note" contains "$out" "note: example-tool: latest version lookup failed"
-check "vscode: extension count note" contains "$out" "note: 3 extensions installed, mac-outdated --install updates them"
-check "sparkle: outdated app, newest non-beta" contains "$out" "Fork 2.70.2 -> 2.71.1 (open Fork to update)"
+check "msupdate: Word with installed app version" contains "$out" "Microsoft Word 16.114.3 → 16.115.26110212"
+check "msupdate: Excel without app" contains "$out" "Microsoft Excel ? → 16.115.26110212"
+check "adobe: product update" contains "$out" "PHSP ? → 27.1"
+check "adobe: second product" contains "$out" "AEFT ? → 26.0.1"
+check "adobe: Acrobat update" contains "$out" "AcrobatDC ? → update"
+check "mas: app update" contains "$out" "Xcode 27.2 → 27.3"
+check "mas: second app" contains "$out" "Telegram 13.1.0 → 13.2.0"
+check "macOS: update with restart note" contains "$out" "macOS Golden Gate 27.2.1 27.2 → 27.2.1 (restart required)"
+check "macOS: other update" contains "$out" "Command Line Tools for Xcode ? → 27.2"
+check "pipx: outdated package" contains "$out" "xxh-xxh 0.8.14 → 0.8.15"
+check "pipx: lookup failure is a note" contains "$out" "example-tool: latest version lookup failed"
+check "vscode: extension count on the progress line" has "$out" "VS Code extensions \.+ 3 installed"
+check "sparkle: outdated app, newest non-beta" contains "$out" "Fork 2.70.2 → 2.71.1"
 check "sparkle: current app not listed" lacks "$out" "Current "
-check "sparkle: unreachable appcast is a note" contains "$out" "note: Broken: appcast not reachable"
+check "sparkle: unreachable appcast is a note" contains "$out" "Broken: appcast not reachable"
 check "sparkle: brew-managed app skipped" lacks "$out" "open Ghostty"
-check "unmanaged: cask with same app" contains "$out" "KeePassXC 2.7.9 -> 2.8.0 (brew install --cask --adopt keepassxc)"
+check "unmanaged: cask with same app" contains "$out" "KeePassXC 2.7.9 → 2.8.0"
 check "unmanaged: Microsoft app excluded" lacks "$out" "adopt microsoft-word"
 check "unmanaged: self-updater excluded" lacks "$out" "adopt google-chrome"
 check "unmanaged: App Store app excluded" lacks "$out" "adopt telegram"
@@ -204,8 +205,24 @@ check "unmanaged: Jamf app excluded" lacks "$out" "adopt eth-self-service"
 check "unmanaged: no cask, no line" lacks "$out" "NoCask"
 check "self-updating listed once" equals "$(grep -c 'updates itself on launch' <<< "$out")" 1
 check "self-updating names the app" contains "$out" "Google Chrome"
-check "summary counts" contains "$out" "16 outdated, 2 need a manual step"
-check "summary install hint" contains "$out" "run: mac-outdated --install"
+check "sparkle: open hint under the item" contains "$out" "open Fork to update"
+check "unmanaged: adopt hint under the item" contains "$out" "brew install --cask --adopt keepassxc"
+check "brew: formulae group" has "$out" "^ formulae$"
+check "brew: casks group" has "$out" "^ casks$"
+check "brew: cask listed after casks header" has "$(sed -n '/^ casks$/,$p' <<< "$out")" "ghostty 1.3.1"
+check "progress: one line per source" equals "$(grep -cE '^ (brew|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|VS Code extensions|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 9
+check "progress: brew outdated count" has "$out" "brew \.+ 4 outdated"
+check "progress: msupdate outdated count" has "$out" "Microsoft AutoUpdate \.+ 2 outdated"
+check "progress: sparkle count" has "$out" "Sparkle apps \.+ 1 outdated"
+check "progress: no carriage returns" no_match "$(cat "$WORK/out")" $'\r'
+check "progress: no escape sequences without colour" no_match "$(cat "$WORK/out")" $'\033'
+check "sections: brew" contains "$out" "brew · 4 outdated"
+check "sections: up-to-date source has none" lacks "$out" "Sparkle apps · 2"
+check "summary: header" contains "$out" "Summary"
+check "summary: total split" has "$out" "total 16 14 via --install · 2 by hand"
+check "summary: brew row" has "$out" "brew 4 mac-outdated --install"
+check "summary: sparkle row" has "$out" "Sparkle apps 1 open the app"
+check "summary: install hint" contains "$out" "next: mac-outdated --install"
 check "check runs no install command" equals "$(install_calls | grep -v '^brew update')" ""
 check "stamp written" grep -qE '^[0-9]{10}$' "$HOME/.local/state/mac-outdated/last-check"
 stamp_age=$(( $(date +%s) - $(cat "$HOME/.local/state/mac-outdated/last-check" 2>/dev/null || echo 0) ))
@@ -214,26 +231,49 @@ check "stamp is now" test "$stamp_age" -le 5
 # msupdate "Name (version)" layout
 printf 'Updates available:\n\tMicrosoft Outlook (16.115.26110212)\n' > "$FIX/msupdate-list.txt"
 run
-check "msupdate: name (version) layout" contains "$out" "Microsoft Outlook ? -> 16.115.26110212"
+check "msupdate: name (version) layout" contains "$out" "Microsoft Outlook ? → 16.115.26110212"
 
 # Adobe without admin
 cp "$FIX/rum-noadmin.txt" "$FIX/rum-list.txt"
 run
-check "adobe: needs admin is a note" contains "$out" "note: Adobe: listing needs admin, mac-outdated --install updates Adobe apps"
+check "adobe: needs admin on the progress line" has "$out" "Adobe \.+ needs admin to list"
+check "adobe: needs admin in the summary" has "$out" "Adobe \? listing needs admin"
 
 # brew update failing
 touch "$FIX/fail-brew-update"
 run
-check "brew: update failure is a note" contains "$out" "note: brew update failed"
-check "brew: still lists outdated" contains "$out" "bash 5.3.15 -> 5.3.20"
+check "brew: update failure is a note" contains "$out" "brew update failed"
+check "brew: still lists outdated" contains "$out" "bash 5.3.15 → 5.3.20"
+
+# downgrade marker
+jq '.formulae[0].current_version = "3.0.0" | .formulae[0].installed_versions = ["3.15.2_1"]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
+run
+check "downgrade: marked" has "$out" "aom 3.15.2_1 → 3.0.0 \\(downgrade\\)"
+check "downgrade: upgrade not marked" lacks "$out" "bash 5.3.15 → 5.3.20 (downgrade)"
+jq '.formulae[0].current_version = "3.15.2" | .formulae[0].installed_versions = ["3.15.2_1"]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
+run
+check "downgrade: revision only is not one" lacks "$out" "(downgrade)"
+jq '.formulae[0].current_version = "1.9.3b" | .formulae[0].installed_versions = ["1.9.3"]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
+run
+check "downgrade: 1.9.3 -> 1.9.3b is not one" lacks "$out" "(downgrade)"
+cp "$FIXTURES/brew-outdated.json" "$FIX/brew-outdated.json"
+
+# colours
+MAC_OUTDATED_COLOR=always run
+check "colour: forced escape sequence" grep -q $'\033\\[' "$WORK/out"
+check "colour: green up to date" grep -q $'\033\\[32m' "$WORK/out"
+NO_COLOR=1 run
+check "colour: NO_COLOR none" no_match "$(cat "$WORK/out")" $'\033'
 
 # ── check mode: nothing outdated ─────────────────────────────────────────────
 fixtures_current
 rm -f "$HOME/.local/state/mac-outdated/last-check"
 run
 check "nothing outdated -> exit 0" equals "$rc" 0
-check "nothing outdated: summary" contains "$out" "0 outdated, 0 need a manual step"
-check "nothing outdated: no install hint" lacks "$out" "run: mac-outdated --install"
+check "nothing outdated: up to date" contains "$out" "everything up to date"
+check "nothing outdated: progress" has "$out" "Microsoft AutoUpdate \\.+ up to date"
+check "nothing outdated: no total" lacks "$out" "total"
+check "nothing outdated: no install hint" lacks "$out" "next:"
 check "nothing outdated: stamp written" test -f "$HOME/.local/state/mac-outdated/last-check"
 
 # ── check mode: missing tools ────────────────────────────────────────────────
@@ -244,14 +284,14 @@ ln -sf "$BIN/curl" "$BIN/sw_vers" "$WORK/empty/"
 PATH="$WORK/empty:/usr/bin:/bin" MAC_OUTDATED_MSUPDATE="$WORK/none/msupdate" MAC_OUTDATED_RUM="$WORK/none/rum" run
 PATH=$SAVED_PATH
 check "missing tools: no crash" equals "$rc" 1
-check "missing brew: note" contains "$out" "note: brew not installed"
-check "missing mas: note" contains "$out" "note: mas not installed: brew install mas"
-check "missing msupdate: note" contains "$out" "note: Microsoft AutoUpdate not installed"
-check "missing RemoteUpdateManager: note" contains "$out" "note: RemoteUpdateManager not installed"
-check "missing softwareupdate: note" contains "$out" "note: softwareupdate not found"
-check "missing pipx: note" contains "$out" "note: pipx not installed"
-check "missing code: note" contains "$out" "note: VS Code CLI not found"
-check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 -> 2.71.1"
+check "missing brew: note" contains "$out" "skipped (brew not installed)"
+check "missing mas: note" contains "$out" "skipped (mas not installed)"
+check "missing msupdate: note" contains "$out" "skipped (msupdate not installed)"
+check "missing RemoteUpdateManager: note" contains "$out" "skipped (RemoteUpdateManager not installed)"
+check "missing softwareupdate: note" contains "$out" "skipped (softwareupdate not found)"
+check "missing pipx: note" contains "$out" "skipped (pipx not installed)"
+check "missing code: note" contains "$out" "skipped (code not found)"
+check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 → 2.71.1"
 
 # ── usage ────────────────────────────────────────────────────────────────────
 run --help
@@ -284,7 +324,12 @@ code --update-extensions"
 check "admin 20 min: exit 0" equals "$rc" 0
 check "admin 20 min: sudo -v once, sudo sources first" equals "$(install_calls)" "$expected"
 check "admin 20 min: restart required shown" contains "$out" "restart required"
-check "admin 20 min: summary" contains "$out" "pipx ok"
+check "admin 20 min: summary" has "$out" "pipx \\.+ installed"
+check "admin 20 min: header" has "$out" "^mac-outdated --install · [0-9-]+ [0-9:]+"
+check "admin 20 min: subheader per source" contains "$out" "── brew"
+check "admin 20 min: summary section" contains "$out" "Summary"
+check "admin 20 min: summary total" has "$out" "total 7 installed"
+check "admin 20 min: tool output indented" has "$out" "^ +Restart is required to complete installation"
 check "admin: time read from PrivilegesCLI --status" contains "$(calls)" 'PrivilegesCLI --status'
 
 admin_setup admin 10
@@ -318,8 +363,9 @@ touch "$FIX/fail-brew"
 run --install
 check "brew failing: exit 1" equals "$rc" 1
 check "brew failing: later sources still run" contains "$(calls)" "code --update-extensions"
-check "brew failing: summary" contains "$out" "brew failed"
-check "brew failing: others ok" contains "$out" "msupdate ok"
+check "brew failing: step line" has "$out" "brew \\.+ failed \\(exit 1\\)"
+check "brew failing: others installed" has "$out" "Microsoft AutoUpdate \\.+ installed"
+check "brew failing: total" has "$out" "total 6 installed · 1 failed"
 rm -f "$FIX/fail-brew"
 
 touch "$FIX/fail-softwareupdate"
@@ -333,7 +379,7 @@ mkdir -p "$WORK/nomas"
 for f in "$BIN"/*; do [ "$(basename "$f")" = mas ] || ln -sf "$f" "$WORK/nomas/"; done
 PATH="$WORK/nomas:/usr/bin:/bin" run --install
 check "mas missing: install exit 0" equals "$rc" 0
-check "mas missing: skipped" contains "$out" "mas skipped"
+check "mas missing: skipped" has "$out" "App Store \\.+ skipped \\(mas not installed\\)"
 
 # ── safety, over every run above ─────────────────────────────────────────────
 all="$(cat "$ALLCALLS")"

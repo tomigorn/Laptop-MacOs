@@ -4,11 +4,42 @@ One command for every outdated piece of software on this Mac. Install: `software
 
 | Command | Admin | Does |
 |---|---|---|
-| `mac-outdated` | no | check all sources, print one list, write the last-check stamp |
+| `mac-outdated` | no | check all sources, print progress, details and a summary, write the last-check stamp |
 | `mac-outdated --install` | yes, >= 15 min left | `sudo -v` once, install every available update |
 | `mac-outdated --help` | no | usage |
 
 Exit: `0` nothing outdated / all installed, `1` something outdated / something failed, `2` usage error or admin precondition not met.
+
+## Output
+
+```
+mac-outdated · 2026-11-03 11:20
+
+  brew ......................... 33 outdated
+  Microsoft AutoUpdate ......... up to date
+  Adobe ........................ needs admin to list
+  App Store .................... skipped (mas not installed)
+
+══════════════════════════════════════════════════════════
+ brew · 33 outdated
+══════════════════════════════════════════════════════════
+  formulae
+    openssl@3                3.6.3     →  3.5.9  (downgrade)
+
+══════════════════════════════════════════════════════════
+ Summary
+══════════════════════════════════════════════════════════
+  brew                        33   mac-outdated --install
+  Adobe                        ?   listing needs admin
+  ────────────────────────────────
+  total                       33   33 via --install · 0 by hand
+
+  next: mac-outdated --install
+```
+
+- One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped).
+- `--install` prints a `── <source>` block with the indented tool output per step, a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (…)`) and a summary.
+- Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 
 ## Sources
 
