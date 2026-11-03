@@ -72,10 +72,10 @@ progress_start() {  # progress_start <label>: dots to a fixed column, the result
   printf '  %s %s ' "$1" "$(printf '.%.0s' $(seq "$dots"))"
 }
 row() {  # row <name> <installed> <latest> <name width> <version width> [tag]
-  printf '    %s %s  →  %s%s\n' "$(printf '%-*s' "$4" "$1")" "$(c 2 "$(printf '%-*s' "$5" "$2")")" "$(c 32 "$3")" "${6:+  $(c 33 "$6")}"
+  printf '    %s %s  →  %s%s\n' "$(c 33 "$(printf '%-*s' "$4" "$1")")" "$(c 2 "$(printf '%-*s' "$5" "$2")")" "$(c 33 "$3")" "${6:+  $(c 33 "$6")}"
 }
-summary_row() {  # summary_row <label> <count> <hint>
-  printf '  %-26s%s%s   %s\n' "$1" "$(printf '%*s' $((4 - ${#2})) '')" "$2" "$(c 2 "$3")"
+summary_row() {  # summary_row <label> <count> <hint> [count colour, default yellow]
+  printf '  %-26s%s%s   %s\n' "$1" "$(printf '%*s' $((4 - ${#2})) '')" "$(c "${4:-33}" "$2")" "$(c 2 "$3")"
 }
 
 older() {  # older <installed> <latest>: installed is strictly newer than latest, brew _N revisions ignored
@@ -319,11 +319,11 @@ analyze() {  # analyze <src> <lines>: fills the counters and the short result of
 }
 result_text() {  # result_text <src>: the coloured short result for the progress line
   local src=$1
-  if [ "${N_ITEMS[$src]}" -gt 0 ]; then printf '%s outdated' "${N_ITEMS[$src]}"
+  if [ "${N_ITEMS[$src]}" -gt 0 ]; then c 33 "${N_ITEMS[$src]} outdated"
   elif [ -n "${SHORT[$src]}" ]; then
     case ${KIND[$src]} in
       "!") c 31 "${SHORT[$src]}" ;;
-      "") printf '%s' "${SHORT[$src]}" ;;
+      "") c 2 "${SHORT[$src]}" ;;
       *) c 33 "${SHORT[$src]}" ;;
     esac
   elif [ "${N_NOTES[$src]}" -gt 0 ]; then c 33 "${N_NOTES[$src]} note$([ "${N_NOTES[$src]}" -gt 1 ] && echo s)"
@@ -355,11 +355,11 @@ detail_section() {  # detail_section <src> <lines>
         macos) [ -z "$extra" ] || tag="($extra)" ;;
       esac
       row "$name" "$inst" "$latest" "$nw" "$vw" "$tag"
-      case $src in sparkle|unmanaged) [ -z "$extra" ] || printf '      %s\n' "$(c 2 "$extra")" ;; esac
+      case $src in sparkle|unmanaged) [ -z "$extra" ] || printf '      %s\n' "$(c 33 "$extra")" ;; esac
     done <<< "$block"
   done
   while IFS='|' read -r s name inst latest extra hint; do
-    [ -z "$latest" ] && [ -n "$s" ] && printf '  %s\n' "$(c 33 "$extra")"
+    [ -z "$latest" ] && [ -n "$s" ] && printf '  %s\n' "$(c 2 "$extra")"
   done <<< "$block"
 }
 
@@ -393,7 +393,7 @@ check_mode() {
   section "Summary" ""
   for src in "${SOURCES[@]}"; do
     if [ "${N_ITEMS[$src]}" -gt 0 ]; then summary_row "${LABELS[$src]}" "${N_ITEMS[$src]}" "${HINTS[$src]}"
-    elif [ "${KIND[$src]}" = "?" ] || [ "${KIND[$src]}" = "–" ] || [ "${KIND[$src]}" = "!" ]; then summary_row "${LABELS[$src]}" "${KIND[$src]}" "${SHINT[$src]}"
+    elif [ "${KIND[$src]}" = "?" ] || [ "${KIND[$src]}" = "–" ] || [ "${KIND[$src]}" = "!" ]; then summary_row "${LABELS[$src]}" "${KIND[$src]}" "${SHINT[$src]}" "$([ "${KIND[$src]}" = "!" ] && echo 31 || echo 33)"
     fi
   done
   if [ "$outdated" -gt 0 ] || [ "$nfailed" -gt 0 ]; then
@@ -401,7 +401,7 @@ check_mode() {
     [ "$outdated" -eq 0 ] || rest="$installable via --install · $manual by hand"
     [ "$nfailed" -eq 0 ] || rest+="${rest:+ · }$nfailed check$([ "$nfailed" -gt 1 ] && echo s) failed"
     printf '  %s\n' "$THIN"
-    summary_row total "$outdated" "$rest"
+    summary_row total "$outdated" "$rest" "$([ "$outdated" -gt 0 ] && echo 33 || echo 31)"
   else
     printf '  %s\n' "$(c 32 "everything up to date")"
   fi
@@ -521,7 +521,7 @@ install_summary() {
       "up to date") n_up=$((n_up + 1)); word=$(c 32 "$r") ;;
       skipped*) n_skip=$((n_skip + 1)); word=$(c 33 "$r") ;;
       interrupted) n_int=$((n_int + 1)); word=$(c 31 "$r") ;;
-      "not run") n_not=$((n_not + 1)); word=$(c 2 "$r") ;;
+      "not run") n_not=$((n_not + 1)); word=$(c 31 "$r") ;;
       *) n_fail=$((n_fail + 1)); word=$(c 31 "$r") ;;
     esac
     printf '  %-26s%s\n' "${LABELS[$src]}" "$word"

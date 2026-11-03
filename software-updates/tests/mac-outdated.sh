@@ -301,7 +301,16 @@ cp "$FIXTURES/brew-outdated.json" "$FIX/brew-outdated.json"
 # colours
 MAC_OUTDATED_COLOR=always run
 check "colour: forced escape sequence" grep -q $'\033\\[' "$WORK/out"
-check "colour: green up to date" grep -q $'\033\\[32m' "$WORK/out"
+check "colour: outdated count yellow" grep -q $'\033\\[33m4 outdated' "$WORK/out"
+check "colour: outdated name yellow" grep -q $'\033\\[33mghostty' "$WORK/out"
+check "colour: new version yellow" grep -q $'\033\\[33m1\\.4\\.0' "$WORK/out"
+check "colour: new version not green" no_match "$(cat "$WORK/out")" $'\033\\[32m[0-9]'
+check "colour: old version dim" grep -q $'\033\\[2m1\\.3\\.1' "$WORK/out"
+check "colour: informational dim" grep -q $'\033\\[2mchecked during --install' "$WORK/out"
+check "colour: open hint yellow" grep -q $'\033\\[33mopen Fork to update' "$WORK/out"
+check "colour: adopt hint yellow" grep -q $'\033\\[33mbrew install --cask --adopt keepassxc' "$WORK/out"
+check "colour: note dim" grep -q $'\033\\[2mbrew update failed' "$WORK/out"
+check "colour: summary count yellow" grep -qE $'brew +\033\\[33m4\033' "$WORK/out"
 NO_COLOR=1 run
 check "colour: NO_COLOR none" no_match "$(cat "$WORK/out")" $'\033'
 
@@ -315,6 +324,9 @@ check "nothing outdated: progress" has "$out" "Microsoft AutoUpdate \\.+ up to d
 check "nothing outdated: no total" lacks "$out" "total"
 check "nothing outdated: no install hint" lacks "$out" "next:"
 check "nothing outdated: stamp written" test -f "$HOME/.local/state/mac-outdated/last-check"
+MAC_OUTDATED_COLOR=always run
+check "colour: up to date green" grep -q $'\033\\[32mup to date' "$WORK/out"
+check "colour: everything up to date green" grep -q $'\033\\[32meverything up to date' "$WORK/out"
 
 # ── check mode: failed checks ────────────────────────────────────────────────
 touch "$FIX/fail-brew-outdated"
