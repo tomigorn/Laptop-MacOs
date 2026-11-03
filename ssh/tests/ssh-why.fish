@@ -30,6 +30,12 @@ printf '%s\n' \
     "  IdentityFile $HOME/.ssh/id_inner" \
     'Match host inner.example.com' \
     '  Port 2200' \
+    'Match originalhost inner' \
+    '  Compression yes' \
+    'Match exec "true"' \
+    '  ServerAliveInterval 7' \
+    'Match exec "false"' \
+    '  ServerAliveInterval 9' \
     'Host loopa' \
     '  ProxyJump loopb' \
     'Host loopb' \
@@ -93,7 +99,10 @@ check "chain: target hop second" has $out "hop 2/2  inner  (target)"
 check "chain: target resolved" has $out "jane"$AT"inner.example.com:2200"
 check "chain: via jump" has $out "via"
 check "chain: Host block reported" has $out "Host  inner"
-check "chain: Match block reported" has $out "Match inner.example.com"
+check "chain: Match host reported (resolved HostName)" has $out 'Match host "inner.example.com"'
+check "chain: Match originalhost reported" has $out 'Match originalhost "inner"'
+check "chain: Match exec that matched reported" has $out 'Match exec "true"'
+check "chain: Match exec that did not match omitted" lacks $out 'exec "false"'
 check "chain: order jump before target" string match -rq 'hop 1/2.*hop 2/2' -- (string replace -a \n ' ' -- $out)
 
 # loop

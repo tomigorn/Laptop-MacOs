@@ -105,6 +105,7 @@ function _ssh_why_hop --description "internal: report one hop of an ssh-why chai
     printf '       blocks that applied:\n'
     awk -v home="$HOME" '
         # Host blocks that matched
+        { sub(/\r$/,"") }
         /^debug1: .*: Applying options for / {
             line=$0
             sub(/^debug1: /,"",line)
@@ -114,23 +115,16 @@ function _ssh_why_hop --description "internal: report one hop of an ssh-why chai
             gsub(home,"~",file)
             printf "         %-46s Host  %s\n", file ":" b[1], b[2]
         }
-        # Match blocks that matched (only reported at debug3).
-        # The negative form is "... : not matched \'host ...\'", so exclude it
-        # explicitly -- "matched" is a substring of "not matched".
-        /: matched .host / && !/not matched/ {
+        # Match criteria ssh itself reports as matched (debug3); "not matched" is excluded
+        /: matched \x27/ {
             line=$0
             sub(/^debug3: /,"",line)
             split(line, a, " line ")
-            file=a[1]
             split(a[2], b, ": matched ")
+            crit=b[2]; gsub(/^\x27|\x27 *$/,"",crit)
+            file=a[1]
             gsub(home,"~",file)
-            printf "         %-46s Match %s\n", file ":" b[1], prevpat
-        }
-        /^debug2: checking match for / {
-            prevpat=$0
-            sub(/^debug2: checking match for .host /,"",prevpat)
-            sub(/. host .*$/,"",prevpat)
-            gsub(/^"|"$/,"",prevpat)
+            printf "         %-46s Match %s\n", file ":" b[1], crit
         }
     ' $log
 
