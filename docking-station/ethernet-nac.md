@@ -4,7 +4,7 @@ How wired networking through docking stations is authenticated on the ETH ITET
 network, why "MAC pass-through / spoofing" is **not** the right approach on this
 MacBook, and how the dock MACs are registered in NAC.
 
-Companion to [`macbook-air-m5-dock-guide.md`](./macbook-air-m5-dock-guide.md)
+Companion to [`docking-station-guide.md`](./docking-station-guide.md)
 (that one covers display/Thunderbolt/USB-C hardware; this one covers network
 identity).
 

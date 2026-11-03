@@ -1,5 +1,5 @@
 #!/bin/sh
-# dock-net-diag.sh — capture wired-dock networking state while the internet is down.
+# net-diag.sh — capture wired-dock networking state while the internet is down.
 #
 # WHY: when the USB-C dock ethernet (en6) becomes the primary network service,
 # the Mac (and therefore Claude Code, which needs the internet) goes offline, so
@@ -8,15 +8,15 @@
 # to Wi-Fi and have Claude read the output file.
 #
 # USAGE (fish or any shell):
-#     sh dock-net-diag.sh
+#     sh net-diag.sh
 # It prints the output path at the end. No sudo required.
 
-IFACE="${1:-en6}"                       # dock ethernet interface (override: sh dock-net-diag.sh en7)
+IFACE="${1:-en6}"                       # dock ethernet interface (override: sh net-diag.sh en7)
 OUT="$HOME/dock-net-diag-$(date +%Y%m%d-%H%M%S).txt"
 exec 3>&1 4>&2                          # keep the real terminal on fd 3/4
 exec > "$OUT" 2>&1                      # everything below goes to the file
 
-echo "###### dock-net-diag ($IFACE) ######"
+echo "###### net-diag ($IFACE) ######"
 date
 echo
 
