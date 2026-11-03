@@ -68,6 +68,7 @@ Run it as your own user, never with sudo: `--install` asks for the password itse
 - No sudo keep-alive, no `sudo -S`, no stored password, no restart.
 - The tests' path overrides (`MAC_OUTDATED_RUM`, `…_MSUPDATE`, `…_PRIVILEGESCLI`, `…_APP_DIRS`) count only with `MAC_OUTDATED_TEST=1`, so nothing from the environment picks what runs under sudo.
 - Before each sudo step (Adobe, App Store, macOS) `PrivilegesCLI --status` is checked again: admin gone -> that step `skipped (admin expired: click Privileges and rerun)`, the others go on, exit 1.
+- Admin means `PrivilegesCLI --status` says `has administrator privileges` (or `Administrator privileges have been assigned`); any other text, e.g. `Standard user privileges have been assigned by your administrator`, is not admin.
 - Not admin -> exit 2. Less than 15 min left (`expire in N minutes` from `PrivilegesCLI --status`) -> exit 2. Time unknown -> asks `Continue anyway? [y/N]`.
 
 ## Greeting

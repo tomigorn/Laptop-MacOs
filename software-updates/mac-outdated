@@ -412,11 +412,12 @@ check_mode() {
 admin_minutes_left() {  # parses "Administrator privileges expire in N minute(s)" from the status text
   [[ $1 =~ expire\ in\ ([0-9]+)\ minute ]] && echo "${BASH_REMATCH[1]}"
 }
+is_admin_status() { [[ $1 == *"has administrator privileges"* || $1 == *"Administrator privileges have been assigned"* ]]; }
 require_admin() {
   local status left answer
   [ -x "$PRIVILEGESCLI" ] || { echo "Privileges app not found: $PRIVILEGESCLI"; return 1; }
   status=$("$PRIVILEGESCLI" --status 2>&1)
-  if [[ $status != *administrator* ]]; then
+  if ! is_admin_status "$status"; then
     echo "Click Privileges (lock icon in the menu bar), then rerun mac-outdated --install"
     return 1
   fi
@@ -434,7 +435,7 @@ require_admin() {
   fi
 }
 
-still_admin() { [[ $("$PRIVILEGESCLI" --status 2>&1) == *administrator* ]]; }
+still_admin() { is_admin_status "$("$PRIVILEGESCLI" --status 2>&1)"; }
 
 # ── install_<src>: 0 ok, 1 failed, $SKIPPED tool missing, $EXPIRED admin ran out ──
 install_macos() {  # runs on the terminal, not through a pipe: softwareupdate may ask for the owner password

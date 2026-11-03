@@ -371,6 +371,17 @@ check "not admin: exit 2" equals "$rc" 2
 check "not admin: message" contains "$out" "Click Privileges (lock icon in the menu bar), then rerun mac-outdated --install"
 check "not admin: nothing run" equals "$(install_calls)" ""
 
+printf 'User jane has standard user privileges\nStandard user privileges have been assigned by your administrator\n' > "$FIX/privileges-status.txt"
+run --install
+check "standard assigned by administrator: exit 2" equals "$rc" 2
+check "standard assigned by administrator: nothing run" equals "$(install_calls)" ""
+check "standard assigned by administrator: not admin" contains "$out" "Click Privileges (lock icon in the menu bar)"
+
+printf 'Administrator privileges have been assigned\n' > "$FIX/privileges-status.txt"
+run_input y --install
+check "managed admin wording: counts as admin" equals "$rc" 0
+check "managed admin wording: asks for unknown time" contains "$out" "admin time left unknown"
+
 admin_setup admin 20
 run --install
 expected="sudo -v
