@@ -31,7 +31,7 @@ Install order: macOS, Adobe (sudo), then brew, Microsoft, App Store, pipx, VS Co
 
 - Never asks for or changes admin rights itself: elevation is your click in Privileges (menu bar lock icon).
 - No sudo keep-alive, no `sudo -S`, no stored password, no restart.
-- Not admin -> exit 2. Less than 15 min left (`ExpirationInterval` from the managed Privileges plist minus time since the grant in the unified log) -> exit 2. Time unknown -> asks `Continue anyway? [y/N]`.
+- Not admin -> exit 2. Less than 15 min left (`expire in N minutes` from `PrivilegesCLI --status`) -> exit 2. Time unknown -> asks `Continue anyway? [y/N]`.
 
 ## Greeting
 

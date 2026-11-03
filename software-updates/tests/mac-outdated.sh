@@ -19,8 +19,6 @@ export FIX CALLS ALLCALLS
 export MAC_OUTDATED_PRIVILEGESCLI="$BIN/PrivilegesCLI"
 export MAC_OUTDATED_MSUPDATE="$BIN/msupdate"
 export MAC_OUTDATED_RUM="$BIN/RemoteUpdateManager"
-export MAC_OUTDATED_PRIVILEGES_PLIST="$WORK/privileges.plist"
-export MAC_OUTDATED_LOG="$BIN/log"
 export MAC_OUTDATED_APP_DIRS="$APPS"
 
 # stub <name> <body>: every call is logged as "<name> <args>"; a file $FIX/fail-<name> makes install actions fail
@@ -85,7 +83,6 @@ exec "$(dirname "$0")/$n" "$@"
 EOF
 chmod +x "$BIN/sudo"
 stub PrivilegesCLI '[ "$1" = --status ] && cat "$FIX/privileges-status.txt"; exit 0'
-stub log '[ -f "$FIX/privileges-log.ndjson" ] && cat "$FIX/privileges-log.ndjson"; exit 0'
 
 # make_app <name> <bundle id> <version> [feed] [sparkle|mas]
 make_app() {
@@ -141,20 +138,16 @@ fixtures_current() {
   printf 'xxh-xxh (0.8.14)\n' > "$FIX/pip-index-xxh-xxh.txt"
   printf 'example-tool (0.1.0)\n' > "$FIX/pip-index-example-tool.txt"
 }
-ts() { date -r "$1" '+%Y-%m-%d %H:%M:%S.000000%z'; }
-# admin_setup <status: admin|standard> <minutes since grant, or "none"> [interval]
+# admin_setup <status: admin|standard> <minutes left, "none" = no expiry line>
 admin_setup() {
   cp "$FIX/privileges-status-$1.txt" "$FIX/privileges-status.txt"
-  if [ "$2" = none ]; then rm -f "$FIX/privileges-log.ndjson"
-  else
-    local now
-    now=$(date +%s)
-    sed -e "s/@BEFORE@/$(ts $((now - $2 * 60 - 300)))/" -e "s/@GRANT@/$(ts $((now - $2 * 60)))/" \
-        -e "s/@AFTER@/$(ts "$now")/" "$FIXTURES/privileges-log.ndjson" > "$FIX/privileges-log.ndjson"
+  if [ "$1" = admin ]; then
+    case $2 in
+      none) sed -i '' '/expire in/d' "$FIX/privileges-status.txt" ;;
+      1) sed -i '' 's/expire in 19 minutes/expire in 1 minute/' "$FIX/privileges-status.txt" ;;
+      *) sed -i '' "s/expire in 19 minutes/expire in $2 minutes/" "$FIX/privileges-status.txt" ;;
+    esac
   fi
-  if [ -n "${3:-}" ]; then
-    printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>ExpirationInterval</key><integer>%s</integer></dict></plist>\n' "$3" > "$MAC_OUTDATED_PRIVILEGES_PLIST"
-  else rm -f "$MAC_OUTDATED_PRIVILEGES_PLIST"; fi
 }
 
 out="" rc=0
@@ -269,13 +262,13 @@ check "unknown option: exit 2" equals "$rc" 2
 
 # ── install ──────────────────────────────────────────────────────────────────
 fixtures_outdated
-admin_setup standard 0 20
+admin_setup standard 0
 run --install
 check "not admin: exit 2" equals "$rc" 2
 check "not admin: message" contains "$out" "Click Privileges (lock icon in the menu bar), then rerun mac-outdated --install"
 check "not admin: nothing run" equals "$(install_calls)" ""
 
-admin_setup admin 0 20
+admin_setup admin 20
 run --install
 expected="sudo -v
 sudo softwareupdate --install --all
@@ -292,15 +285,15 @@ check "admin 20 min: exit 0" equals "$rc" 0
 check "admin 20 min: sudo -v once, sudo sources first" equals "$(install_calls)" "$expected"
 check "admin 20 min: restart required shown" contains "$out" "restart required"
 check "admin 20 min: summary" contains "$out" "pipx ok"
-check "admin: grant read from Privileges processes" contains "$(calls)" 'processImagePath CONTAINS "/Privileges.app/"'
+check "admin: time read from PrivilegesCLI --status" contains "$(calls)" 'PrivilegesCLI --status'
 
-admin_setup admin 10 20
+admin_setup admin 10
 run --install
 check "10 min left: exit 2" equals "$rc" 2
 check "10 min left: message" contains "$out" "only 10 min of admin left, need 15: revert and click Privileges again"
 check "10 min left: nothing run" equals "$(install_calls)" ""
 
-admin_setup admin none 20
+admin_setup admin none
 run_input n --install
 check "unknown time + n: exit 2" equals "$rc" 2
 check "unknown time: message" contains "$out" "admin time left unknown"
@@ -311,12 +304,16 @@ run_input y --install
 check "unknown time + y: exit 0" equals "$rc" 0
 check "unknown time + y: runs" equals "$(install_calls)" "$expected"
 
-admin_setup admin 0
-run_input n --install
-check "no interval: unknown time" contains "$out" "admin time left unknown"
-check "no interval + n: exit 2" equals "$rc" 2
+admin_setup admin 1
+run --install
+check "1 minute left (singular): exit 2" equals "$rc" 2
+check "1 minute left (singular): message" contains "$out" "only 1 min of admin left, need 15: revert and click Privileges again"
 
-admin_setup admin 0 20
+admin_setup admin 15
+run --install
+check "15 min left: exit 0" equals "$rc" 0
+
+admin_setup admin 20
 touch "$FIX/fail-brew"
 run --install
 check "brew failing: exit 1" equals "$rc" 1

@@ -6,8 +6,6 @@ set -uo pipefail
 PRIVILEGESCLI=${MAC_OUTDATED_PRIVILEGESCLI:-/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI}
 MSUPDATE=${MAC_OUTDATED_MSUPDATE:-/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate}
 RUM=${MAC_OUTDATED_RUM:-/usr/local/bin/RemoteUpdateManager}
-PRIVILEGES_PLIST=${MAC_OUTDATED_PRIVILEGES_PLIST:-/Library/Managed Preferences/corp.sap.privileges.plist}
-LOG_CMD=${MAC_OUTDATED_LOG:-/usr/bin/log}
 APP_DIRS=${MAC_OUTDATED_APP_DIRS:-/Applications:$HOME/Applications}
 STAMP="$HOME/.local/state/mac-outdated/last-check"
 MIN_ADMIN_MINUTES=15
@@ -287,27 +285,8 @@ check_mode() {
 }
 
 # ── admin precondition ───────────────────────────────────────────────────────
-expiration_interval() {
-  local v
-  v=$(plist_get "$PRIVILEGES_PLIST" ExpirationInterval)
-  [[ $v =~ ^[0-9]+$ ]] && printf '%s\n' "$v"
-}
-# Newest Privileges grant in the unified log ("SAPCorp: User <name> now has administrator privileges", logged under subsystem com.apple.defaults).
-privileges_grant_epoch() {
-  local ts
-  ts=$("$LOG_CMD" show --last 1h --style ndjson --predicate 'processImagePath CONTAINS "/Privileges.app/"' 2>/dev/null \
-    | jq -R -r 'fromjson? | select(.eventMessage? | type == "string")
-        | select(.eventMessage | test("administrator|admin rights"; "i"))
-        | select(.eventMessage | test("standard|revok|remov|expire"; "i") | not) | .timestamp' 2>/dev/null \
-    | tail -n 1)
-  [ -n "$ts" ] || return 1
-  date -j -f '%Y-%m-%d %H:%M:%S%z' "${ts:0:19}${ts: -5}" +%s 2>/dev/null
-}
-admin_minutes_left() {
-  local interval grant
-  interval=$(expiration_interval) || return 1
-  grant=$(privileges_grant_epoch) || return 1
-  echo $(( interval - ($(date +%s) - grant) / 60 ))
+admin_minutes_left() {  # parses "Administrator privileges expire in N minute(s)" from the status text
+  [[ $1 =~ expire\ in\ ([0-9]+)\ minute ]] && echo "${BASH_REMATCH[1]}"
 }
 require_admin() {
   local status left answer
@@ -317,7 +296,7 @@ require_admin() {
     echo "Click Privileges (lock icon in the menu bar), then rerun mac-outdated --install"
     return 1
   fi
-  if left=$(admin_minutes_left); then
+  if left=$(admin_minutes_left "$status"); then
     if [ "$left" -lt "$MIN_ADMIN_MINUTES" ]; then
       echo "only $left min of admin left, need $MIN_ADMIN_MINUTES: revert and click Privileges again"
       return 1
