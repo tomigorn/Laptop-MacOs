@@ -4,7 +4,7 @@ Reproducible blueprint for configuring a Mac to my preferences. One folder per t
 
 | Topic | Folder | What |
 |---|---|---|
-| macOS settings | [macos-settings/](macos-settings/macos-settings.md) | Finder, System Settings, mouse/trackpad, network drives, file manager, git identities, dock spacer, [shortcuts](macos-settings/keyboard-shortcuts.md) |
+| macOS settings | [macos-settings/](macos-settings/macos-settings.md) | Finder, System Settings, mouse/trackpad, network drives, file manager, dock spacer, [shortcuts](macos-settings/keyboard-shortcuts.md) |
 | Window management | [window-manager/](window-manager/window-manager.md) | yabai + skhd zones and launcher |
 | Terminal | [terminal/](terminal/terminal.md) | fish, starship, atuin, xxh for portable remote shells. Setup: `terminal/install.sh` |
 | SSH | [ssh/](ssh/ssh.md) | ssh config, `ssh-why`, waking the sleeping homelab host. Setup: `ssh/install.sh` |
@@ -13,6 +13,6 @@ Reproducible blueprint for configuring a Mac to my preferences. One folder per t
 | Virtualization | [virt-manager/](virt-manager/virt-manager.md) | virt-manager / libvirt / QEMU, launchable from Spotlight. Setup: `virt-manager/install.sh` |
 | Obsidian | [obsidian/](obsidian/obsidian.md) | CSS snippet for completed tasks |
 | Backdrop carousel | [backdrop-carousel/](backdrop-carousel/) | sync script for a Shortcut. Setup: `backdrop-carousel/install.sh` |
-| Git multi-account | [multiple-git-accounts/](multiple-git-accounts/) | templates; explained in [macos-settings.md](macos-settings/macos-settings.md) |
+| Git multi-account | [multiple-git-accounts/](multiple-git-accounts/multiple-git-accounts.md) | git identity per folder, signing, secret scan |
 
 Tests: `tests/test-all.sh`

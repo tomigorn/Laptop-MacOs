@@ -43,7 +43,7 @@ Therefore `~/.ssh/config` lists its includes **specific → general**, with the
 Everything under `~/.ssh` is now read by ssh itself. Notably, the git signing
 trust lists (`allowed_signers-*`) used to live here and do **not** any more —
 nothing in ssh ever opened them, only git does via `ssh-keygen -Y verify`. They
-are in `~/.config/git/`; see the Git section of [macos-settings.md](../macos-settings/macos-settings.md).
+are in `~/.config/git/`; see [multiple-git-accounts.md](../multiple-git-accounts/multiple-git-accounts.md).
 
 ## Where the keys live
 
@@ -68,7 +68,7 @@ Moving or renaming keys is a local-only operation — `authorized_keys` on the
 remote stores the public key, not the filename — but every reference has to move
 with it. Beyond `config.d/`, key paths appear in `~/.gitconfig-private` and
 `~/.gitconfig-work` (both `user.signingkey` and `core.sshCommand`), and in this
-repo's `macos-settings/macos-settings.md` and `multiple-git-accounts/` templates.
+repo's `multiple-git-accounts/` docs and templates.
 
 To check nothing dangles after such a change:
 
