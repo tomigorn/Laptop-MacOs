@@ -52,3 +52,4 @@ credentials.json
 *.log
 tmp/
 *.tmp
+window-manager/config/zones.conf.*
