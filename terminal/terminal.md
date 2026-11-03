@@ -275,6 +275,8 @@ terminal/
     scp-wrapper.sh                        tar-pipes the upload through zstd/gzip; falls back to scp
     xxh-config.fish                       fish session init on the remote
 
+  SETUP_VERSION                           terminal setup version (shown in the greeting)
+  tests/                                  greeting, xxhc, wrapper tests; concurrent-sessions.fish is live
   ghostty.icns                            Ghostty custom icon (referenced from ~/.config/ghostty/config)
 ```
 
@@ -288,7 +290,7 @@ Set up once by `setup.sh` (or manually), then completely transparent:
 ~/.config/fish/config.fish                              → terminal/.config/fish/config.fish
 ~/.config/fish/functions/fish_greeting.fish             → terminal/.config/fish/functions/fish_greeting.fish
 ~/.config/fish/functions/xxhc.fish                      → terminal/.config/fish/functions/xxhc.fish
-~/.config/fish/functions/clear-greet.fish                → terminal/.config/fish/functions/clear-greet.fish
+~/.config/fish/functions/clear-greet.fish               → terminal/.config/fish/functions/clear-greet.fish
 ~/.xxh/ssh-wrapper.sh                                   → terminal/.xxh/ssh-wrapper.sh
 ~/.xxh/scp-wrapper.sh                                   → terminal/.xxh/scp-wrapper.sh
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/xxh-config.fish → terminal/.xxh/xxh-config.fish
@@ -569,7 +571,7 @@ cp -R ~/.xxh/arch/<arch>/bin           "$build/bin"
 
 `terminal/SETUP_VERSION` holds the terminal-setup version (semver). It's shown in the fish greeting **both** locally on the Mac (under fastfetch) and on every `xxhc` connect (forwarded to the remote greeting via `XXH_SETUP_VERSION`) — so you can tell at a glance which version is live. The local greeting reads `SETUP_VERSION` live, so a bump shows up in any new shell without reloading anything. (The file/var are named `SETUP_VERSION`, not `VERSION` — a bare `version` variable is reserved in fish.)
 
-**Bump it on every change** to the terminal setup, in the same commit (patch = fix, minor = feature, major = breaking). This is enforced by the project `.claude/CLAUDE.md` so it isn't forgotten.
+**Bump it on every change** under `terminal/`, as its own last commit (patch = fix, minor = feature, major = breaking), see `CLAUDE.md`.
 
 ## Updating
 
