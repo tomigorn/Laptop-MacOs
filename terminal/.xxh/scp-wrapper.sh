@@ -30,19 +30,25 @@ say() { printf '  \033[2mtransfer:\033[0m %b\n' "$1" >&2; }
 report_fallback() {
     # Only this path needs to know whether SSH itself will compress, and it is
     # the rare path, so the extra round trip is acceptable here.
-    local negotiated=""
-    if [[ -n "${host:-}" ]]; then
+    local negotiated="" target="${host:-}" a
+    if [[ -z "$target" ]]; then
+        # Fell back before the destination was parsed: take the host from the last remote-looking operand.
+        for a in ${orig[@]+"${orig[@]}"}; do
+            [[ "$a" == -* || "$a" == /* || "$a" == ./* || "$a" != *:* ]] || target="${a%%:*}"
+        done
+    fi
+    if [[ -n "$target" ]]; then
         # ControlMaster=no/ControlPath=none are essential here, not incidental:
         # a mux slave performs no key exchange, so it prints no `compression:`
         # line at all and the answer would always come back blank.
         negotiated=$(ssh -v -o ControlMaster=no -o ControlPath=none \
-            ${ssh_opts[@]+"${ssh_opts[@]}"} "$host" true 2>&1 \
+            ${ssh_opts[@]+"${ssh_opts[@]}"} "$target" true 2>&1 \
             | grep -m1 'client->server cipher' | grep -o 'compression: [^ ]*')
     fi
     case "$negotiated" in
         *zlib*) say '\033[33mscp + SSH compression\033[0m \033[2m(wrapper fell back)\033[0m' ;;
         *none*) say '\033[31mscp, UNCOMPRESSED\033[0m \033[2m(wrapper fell back; server refuses compression)\033[0m' ;;
-        *)      say '\033[33mscp\033[0m \033[2m(wrapper fell back)\033[0m' ;;
+        *)      say '\033[33mscp\033[0m \033[2m(wrapper fell back; compression unknown)\033[0m' ;;
     esac
 }
 

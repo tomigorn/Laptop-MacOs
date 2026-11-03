@@ -94,10 +94,10 @@ fallback_case() {  # name expected-note args...
   check "scp fallback ($name): note" contains "$e" "$note"
 }
 fallback_case "no trailing slash" "transfer: scp + SSH compression (wrapper fell back)" "$WORK/src/file.txt" host5:/d/file
-fallback_case "unmodelled option" "transfer: scp (wrapper fell back)" -P 2222 "$WORK/src/file.txt" host5:/d/
+fallback_case "unmodelled option" "transfer: scp + SSH compression (wrapper fell back)" -P 2222 "$WORK/src/file.txt" host5:/d/
 fallback_case "missing source" "transfer: scp + SSH compression (wrapper fell back)" "$WORK/nope" host5:/d/
-fallback_case "local destination" "transfer: scp (wrapper fell back)" "$WORK/src/file.txt" "$WORK/src/dir/"
-fallback_case "single operand" "transfer: scp (wrapper fell back)" "$WORK/src/file.txt"
+fallback_case "local destination" "transfer: scp (wrapper fell back; compression unknown)" "$WORK/src/file.txt" "$WORK/src/dir/"
+fallback_case "single operand" "transfer: scp (wrapper fell back; compression unknown)" "$WORK/src/file.txt"
 fallback_case "empty remote path" "transfer: scp + SSH compression (wrapper fell back)" "$WORK/src/file.txt" host5:
 
 reset
