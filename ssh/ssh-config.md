@@ -95,9 +95,9 @@ That is why `aliases.config` can set *only* `HostName` and let the family rules 
 ```sshconfig
 # aliases.config
 Host chouffe
-    HostName ee-tik-nsgsrv01.ethz.ch
+    HostName ee-tik-server01.example.org
 
-# tik.config -- matches because the RESOLVED name is ee-tik-nsgsrv01.ethz.ch
+# tik.config -- matches because the RESOLVED name is ee-tik-server01.example.org
 Match host "ee-tik-*"
     User                jdoe4la
     IdentityFile        ~/.ssh/keys/eth/jdoe.4la.ethServers
@@ -106,7 +106,7 @@ Match host "ee-tik-*"
 
 `ssh chouffe` therefore inherits the whole `ee-tik-*` ruleset. It also means an
 alias that resolves *out* of a namespace stops matching it: `pc-10921` resolves to
-`ee-tik-nsgsrv01.ethz.ch`, so it no longer matches `legacy.config`'s `pc-*` rule
+`ee-tik-server01.example.org`, so it no longer matches `legacy.config`'s `pc-*` rule
 and correctly picks up the TIK rules instead.
 
 **`IdentityFile` accumulates.** Unlike almost every other keyword, every

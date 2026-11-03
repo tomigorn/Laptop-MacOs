@@ -97,9 +97,9 @@ profile `ee-tik-dock`):
 
 | MAC | Host ID | Beschreibung | Physical device (verified) |
 |---|---|---|---|
-| `aa:bb:cc:00:00:01` | `itet-its-HP-E34m-G4-001-dock-monitor` | `Room 1.23: HP E34m G4 dock` | **HP E34m G4 monitor dock** (`en5`) |
-| `aa:bb:cc:00:00:02` | `itet-its-100-dock-usbc` | `MacBook jdoe – USB-C dock` | **standalone USB-C dock** (`en7`) |
-| `aa:bb:cc:00:00:03` | `itet-its-lenovo-40as-001-dock-usbc` | `Room 1.23: Lenovo ThinkPad Universal USB-C Dock (40AS)` | **Lenovo ThinkPad Universal USB-C Dock** — model `40AS`, s/n `SERIAL-EXAMPLE` (`en6`) |
+| `aa:bb:cc:00:00:01` | `example-monitor-001-dock-monitor` | `Room 1.23: HP E34m G4 dock` | **HP E34m G4 monitor dock** (`en5`) |
+| `aa:bb:cc:00:00:02` | `example-laptop-100-dock-usbc` | `MacBook jdoe – USB-C dock` | **standalone USB-C dock** (`en7`) |
+| `aa:bb:cc:00:00:03` | `example-dock-usbc-001` | `Room 1.23: Lenovo ThinkPad Universal USB-C Dock (40AS)` | **Lenovo ThinkPad Universal USB-C Dock** — model `40AS`, s/n `SERIAL-EXAMPLE` (`en6`) |
 
 All three MAC↔device assignments are hardware-verified (see the dock→MAC mapping
 section above).
@@ -109,16 +109,16 @@ section above).
 The two entries deliberately use **different bases**, which is fine as long as
 it's intentional:
 
-- **USB-C dock** → named after the **laptop** (`itet-its-100-…`): a personal,
+- **USB-C dock** → named after the **laptop** (`example-laptop-100-…`): a personal,
   portable device that travels with the machine.
 - **Monitor dock** → named after the **monitor + room**
-  (`itet-its-HP-E34m-G4-001`, "Room 1.23"): a fixed desk/location asset.
+  (`example-monitor-001`, "Room 1.23"): a fixed desk/location asset.
 
 Side effect: the wired identity depends on which dock you're at (laptop-identity
 at the USB-C dock, desk-identity at the monitor). Network access is identical
 (both `ee-tik-dock`); only the DNS/log identity differs. If you instead wanted
 **one identity regardless of dock**, name both under the laptop base
-(`itet-its-100-dock-mon` / `itet-its-100-dock-usbc`). Host IDs must be unique per
+(`example-laptop-100-dock-mon` / `example-laptop-100-dock-usbc`). Host IDs must be unique per
 MAC (each maps to a DNS name) and are DNS labels: lowercase, hyphens OK, no
 underscores.
 
