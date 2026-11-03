@@ -89,12 +89,12 @@ echo "sudo $n $*" | tee -a "$CALLS" >> "$ALLCALLS"
 exec "$(dirname "$0")/$n" "$@"
 EOF
 chmod +x "$BIN/sudo"
-# $FIX/privileges-expire-after N: admin for the first N --status calls, standard afterwards
+# $FIX/privileges-expire-after N: admin for the first N --status calls, afterwards $FIX/privileges-status-later.txt or standard
 stub PrivilegesCLI '
 [ "$1" = --status ] || exit 0
 n=$(($(cat "$FIX/privileges-count" 2>/dev/null || echo 0) + 1)); echo "$n" > "$FIX/privileges-count"
 if [ -f "$FIX/privileges-expire-after" ] && [ "$n" -gt "$(cat "$FIX/privileges-expire-after")" ]; then
-  cat "$FIX/privileges-status-standard.txt"
+  cat "$FIX/privileges-status-later.txt" 2>/dev/null || cat "$FIX/privileges-status-standard.txt"
 else
   cat "$FIX/privileges-status.txt"
 fi'
@@ -493,6 +493,25 @@ check "admin expired: non-sudo steps still run" contains "$(calls)" "code --upda
 check "admin expired: App Store step skipped" has "$out" "App Store \\.+ skipped \\(admin expired: click Privileges and rerun\\)"
 check "admin expired: macOS step skipped" has "$out" "macOS \\.+ skipped \\(admin expired: click Privileges and rerun\\)"
 check "admin expired: total" has "$out" "total 5 installed · 2 skipped"
+
+# admin about to run out before the sudo steps: under 2 min left is skipped, 2 min or unknown still runs
+echo 1 > "$FIX/privileges-expire-after"
+printf 'User jane has administrator privileges\nAdministrator privileges expire in 1 minute\n' > "$FIX/privileges-status-later.txt"
+run --install
+check "1 min left before a sudo step: exit 1" equals "$rc" 1
+check "1 min left before a sudo step: Adobe not run" lacks "$(calls)" "RemoteUpdateManager --action=install"
+check "1 min left before a sudo step: macOS not run" lacks "$(calls)" "softwareupdate --install"
+check "1 min left before a sudo step: Adobe skipped" has "$out" "Adobe \\.+ skipped \\(admin expires in 1 min: click Privileges and rerun\\)"
+check "1 min left before a sudo step: brew still runs" contains "$(calls)" "brew upgrade --greedy"
+printf 'User jane has administrator privileges\nAdministrator privileges expire in 2 minutes\n' > "$FIX/privileges-status-later.txt"
+run --install
+check "2 min left before a sudo step: exit 0" equals "$rc" 0
+check "2 min left before a sudo step: macOS runs" contains "$(calls)" "softwareupdate --install"
+printf 'User jane has administrator privileges\n' > "$FIX/privileges-status-later.txt"
+run --install
+check "unknown time before a sudo step: exit 0" equals "$rc" 0
+check "unknown time before a sudo step: Adobe runs" contains "$(calls)" "RemoteUpdateManager --action=install"
+rm -f "$FIX/privileges-expire-after" "$FIX/privileges-status-later.txt"
 
 # a missing tool is skipped, not a failure
 mkdir -p "$WORK/nomas"

@@ -15,7 +15,8 @@ if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; nev
 fi
 STAMP="$HOME/.local/state/mac-outdated/last-check"
 MIN_ADMIN_MINUTES=15
-STEP_STATUS=""  # set by an install step instead of its exit code: missing, expired
+MIN_STEP_ADMIN_MINUTES=2
+STEP_STATUS=""  # set by an install step instead of its exit code: missing, expired, "expires N"
 
 SOURCES=(brew msupdate adobe mas macos pipx vscode sparkle unmanaged)
 INSTALL_ORDER=(adobe mas brew msupdate pipx vscode macos)
@@ -434,12 +435,18 @@ require_admin() {
   fi
 }
 
-still_admin() { is_admin_status "$("$PRIVILEGESCLI" --status 2>&1)"; }
+still_admin() {  # before each sudo step; unknown time passes, the start already checked it
+  local status left
+  status=$("$PRIVILEGESCLI" --status 2>&1)
+  is_admin_status "$status" || { STEP_STATUS=expired; return 1; }
+  left=$(admin_minutes_left "$status") || return 0
+  [ "$left" -ge "$MIN_STEP_ADMIN_MINUTES" ] || { STEP_STATUS="expires $left"; return 1; }
+}
 
 # ── install_<src>: the tool's exit code; a step that does not run sets STEP_STATUS and returns 0 ──
 install_macos() {  # runs on the terminal, not through a pipe: softwareupdate may ask for the owner password
   command -v softwareupdate >/dev/null || { STEP_STATUS=missing; return 0; }
-  still_admin || { STEP_STATUS=expired; return 0; }
+  still_admin || return 0
   local list rc
   list=$(softwareupdate --list 2>&1)
   sudo softwareupdate --install --all; rc=$?
@@ -448,7 +455,7 @@ install_macos() {  # runs on the terminal, not through a pipe: softwareupdate ma
 }
 install_adobe() {
   [ -x "$RUM" ] || { STEP_STATUS=missing; return 0; }
-  still_admin || { STEP_STATUS=expired; return 0; }
+  still_admin || return 0
   sudo "$RUM" --action=install
 }
 install_brew() {
@@ -463,7 +470,7 @@ install_msupdate() {
 install_mas() {
   local mas
   mas=$(command -v mas) || { STEP_STATUS=missing; return 0; }
-  still_admin || { STEP_STATUS=expired; return 0; }
+  still_admin || return 0
   sudo "$mas" upgrade
 }
 install_pipx() {
@@ -520,6 +527,7 @@ install_mode() {
     case $STEP_STATUS:$rc in
       missing:*) result[$src]="skipped ($src not installed)"; skipped+=1; word=$(c 33 "${result[$src]}") ;;
       expired:*) result[$src]="skipped (admin expired: click Privileges and rerun)"; skipped+=1; failed=1; word=$(c 33 "${result[$src]}") ;;
+      expires*) result[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; skipped+=1; failed=1; word=$(c 33 "${result[$src]}") ;;
       :0) result[$src]=installed; installed+=1; word=$(c 32 installed) ;;
       *) result[$src]="failed (exit $rc)"; nfailed+=1; failed=1; word=$(c 31 "failed (exit $rc)") ;;
     esac

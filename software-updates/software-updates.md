@@ -40,7 +40,7 @@ mac-outdated · 2026-11-03 11:20
 - A source that could not be checked (`brew outdated`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding.
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
-- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: click Privileges and rerun)`) and a summary.
+- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 
 ## Sources
@@ -67,7 +67,10 @@ Run it as your own user, never with sudo: `--install` asks for the password itse
 - Never asks for or changes admin rights itself: elevation is your click in Privileges (menu bar lock icon).
 - No sudo keep-alive, no `sudo -S`, no stored password, no restart.
 - The tests' path overrides (`MAC_OUTDATED_RUM`, `…_MSUPDATE`, `…_PRIVILEGESCLI`, `…_APP_DIRS`) count only with `MAC_OUTDATED_TEST=1`, so nothing from the environment picks what runs under sudo.
-- Before each sudo step (Adobe, App Store, macOS) `PrivilegesCLI --status` is checked again: admin gone -> that step `skipped (admin expired: click Privileges and rerun)`, the others go on, exit 1.
+- Before each sudo step (Adobe, App Store, macOS) `PrivilegesCLI --status` is checked again, the others go on, exit 1:
+  - admin gone -> `skipped (admin expired: click Privileges and rerun)`
+  - under 2 min left -> `skipped (admin expires in N min: click Privileges and rerun)`
+  - time unknown -> runs (the start already checked it)
 - Admin means `PrivilegesCLI --status` says `has administrator privileges` (or `Administrator privileges have been assigned`); any other text, e.g. `Standard user privileges have been assigned by your administrator`, is not admin.
 - Not admin -> exit 2. Less than 15 min left (`expire in N minutes` from `PrivilegesCLI --status`) -> exit 2. Time unknown -> asks `Continue anyway? [y/N]`.
 
