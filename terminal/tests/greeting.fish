@@ -14,7 +14,12 @@ mkdir -p $WORK/bin $WORK/terminal/.config/fish/functions
 printf '#!/bin/sh\necho FASTFETCH\n' > $WORK/bin/fastfetch
 printf '#!/bin/sh\necho CLEARED\n' > $WORK/bin/clear
 chmod +x $WORK/bin/fastfetch $WORK/bin/clear
-set -gx PATH $WORK/bin $PATH
+# no real mac-outdated on PATH, a temp HOME for the last-check stamp
+set -gx PATH $WORK/bin (for d in $PATH; test -x $d/mac-outdated; or echo $d; end)
+set -gx HOME $WORK/home
+mkdir -p $WORK/mo $HOME/.local/state/mac-outdated
+printf '#!/bin/sh\nexit 0\n' > $WORK/mo/mac-outdated
+chmod +x $WORK/mo/mac-outdated
 
 set -g fails 0
 function check -a name
@@ -30,6 +35,9 @@ function not_has_setup
 end
 function has_desc
     functions -v clear-greet | string match -q "*clear the screen, then show the greeting*"
+end
+function no_nudge
+    not string match -q "*software not checked*" -- $argv
 end
 function plain
     cat | string replace -ra '\e\[[0-9;?]*[A-Za-z]' ''
@@ -68,5 +76,25 @@ set out (clear-greet | plain | string collect)
 check "clear-greet clears first" string match -q "CLEARED*" -- $out
 check "clear-greet then shows greeting" string match -q "*CLEARED*FASTFETCH*Terminal Setup*" -- $out
 check "clear-greet has a description" has_desc
+
+# 6. software-check nudge: only when mac-outdated is on PATH and the stamp is missing or older than 7 days
+source $GREETING_SRC
+set -l stamp $HOME/.local/state/mac-outdated/last-check
+set -l now (date +%s)
+set -l saved_path $PATH
+set -gx PATH $WORK/mo $PATH
+math $now - 8 \* 86400 > $stamp
+set out (fish_greeting | plain | string collect)
+check "nudge: stamp 8 days old" string match -q "*software not checked for 8 days: mac-outdated*" -- $out
+math $now - 86400 > $stamp
+set out (fish_greeting | plain | string collect)
+check "nudge: none for 1 day" no_nudge $out
+rm $stamp
+set out (fish_greeting | plain | string collect)
+check "nudge: stamp missing" string match -q "*software not checked yet: mac-outdated*" -- $out
+set -gx PATH $saved_path
+math $now - 8 \* 86400 > $stamp
+set out (fish_greeting | plain | string collect)
+check "nudge: none without mac-outdated on PATH" no_nudge $out
 
 test $fails -eq 0

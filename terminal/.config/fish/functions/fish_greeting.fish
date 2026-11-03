@@ -15,4 +15,16 @@ function fish_greeting
             echo ""
         end
     end
+    # Nudge only; the check itself never runs here.
+    if command -q mac-outdated
+        set -l stamp ~/.local/state/mac-outdated/last-check
+        set -l last
+        test -f $stamp; and set last (string trim < $stamp)
+        if not string match -qr '^[0-9]+$' -- "$last"
+            echo "  software not checked yet: mac-outdated"
+        else
+            set -l age (math (date +%s) - $last)
+            test $age -gt 604800; and echo "  software not checked for "(math --scale=0 $age / 86400)" days: mac-outdated"
+        end
+    end
 end
