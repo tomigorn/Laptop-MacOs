@@ -57,6 +57,11 @@ function _xxhc_release_master -a target cm_path cm_users sid \
 end
 
 function xxhc --description "xxh with SSH alias forwarded to remote prompt"
+    if test (count $argv) -eq 0
+        echo "usage: xxhc <host>" >&2
+        return 1
+    end
+
     # ── Connect timer: start it on the very first line ──────────────────────────
     # This must come before ANY work. Everything below — the ControlMaster setup
     # (which dials through ProxyJump on jump-hosted targets), the `-O check`, the

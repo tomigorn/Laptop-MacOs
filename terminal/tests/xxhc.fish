@@ -87,6 +87,15 @@ _xxhc_release_master host1 $cm $users s2
 check "release: last claim stops master" eq (cat $SSH_LOG) "-q -o ControlPath=$cm -O stop host1"
 check "release: claim dir removed" test ! -e $users
 
+# xxhc: no host -> usage, nothing runs
+: > $SSH_LOG
+set out (xxhc 2>&1 | plain | string collect)
+xxhc >/dev/null 2>&1
+check "xxhc: no host -> exit 1" test $status -eq 1
+check "xxhc: no host usage" has $out "usage: xxhc <host>"
+check "xxhc: no host runs nothing" test ! -s $SSH_LOG
+check "xxhc: no host no touch usage" lacks $out "touch"
+
 # xxhc: unreachable host -> arch detection fails, abort before xxh
 : > $SSH_LOG
 set -gx STUB_PROBE ""
