@@ -29,7 +29,7 @@ Therefore `~/.ssh/config` lists its includes **specific → general**, with the
 │   ├── jumphosts.config      every jump host, each with ProxyJump none
 │   ├── exceptions.config     hosts that break their family's rules
 │   ├── aliases.config        short name -> HostName. Nothing else.
-│   ├── s4d.config            root*, id-s4d-*, mtec-*      (patterns)
+│   ├── s4d.config            root*, id-s4d-*, id-cxs-*, mtec-*   (patterns)
 │   ├── tik.config            ee-tik-*                     (patterns)
 │   ├── legacy.config         virt*, cpuvm*, pc-*          (patterns)
 │   ├── itet.config           itet-*                       (patterns)
@@ -134,8 +134,8 @@ otherwise hand a jump host a `ProxyJump` to itself.
 
 The FQDN-completion rules at the **bottom** of `aliases.config` append `.ethz.ch`
 to bare machine names. They must stay last in that file, because `HostName` is
-first-match-wins and the specific aliases above them have to win. The `ee-tik-*` and
-`itet-*` rules carry a `!*.*` negation because `*` matches dots too — without it
+first-match-wins and the specific aliases above them have to win. The `ee-tik-*`,
+`itet-*` and `id-cxs-*` rules carry a `!*.*` negation because `*` matches dots too — without it
 an already-qualified name would be rewritten to `…ethz.ch.ethz.ch`.
 
 ## Debugging
