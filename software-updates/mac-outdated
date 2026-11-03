@@ -49,7 +49,7 @@ EOF
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 item() { printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "${5:-}"; }
-# note <src> <text> [short result] [kind: ? unknown, – skipped] [summary hint]: without a short result the note gets a section
+# note <src> <text> [short result] [kind: ? unknown, – skipped, + by hand] [summary hint]: without a short result the note gets a section
 note() { printf '%s|%s|%s||%s|%s\n' "$1" "${3:-}" "${4:-}" "$2" "${5:-}"; }
 check_failed() { note "$1" "$2" "check failed" "!" "check failed"; }  # check_failed <src> <text>: the source could not be checked
 
@@ -134,11 +134,38 @@ code_cmd() {
 }
 
 # ── check_<src>: print src|name|installed|latest|note lines ──────────────────
+untrusted_taps() {  # reads brew's stderr, prints the taps named after "The following taps are not trusted:"
+  awk '
+    /The following taps are not trusted:/ {
+      on = 1; rest = $0; sub(/.*not trusted:[ \t]*/, "", rest)
+      n = split(rest, t, /[ ,]+/); for (i = 1; i <= n; i++) if (t[i] ~ /^[^\/ ]+\/[^\/ ]+$/) print t[i]
+      next
+    }
+    on {
+      line = $0; sub(/^[ \t]*([-*][ \t]+)?/, "", line); sub(/[ \t]+$/, "", line)
+      if (line ~ /^[^\/ ]+\/[^\/ ]+$/) print line; else on = 0
+    }' | sort -u
+}
+tap_formulae() {  # tap_formulae <tap>: installed formulae of the tap as <tap>/<name>, also when installed under the tap's old name
+  local tap=$1 installed
+  installed=$(brew list --formula --full-name 2>/dev/null)
+  {
+    grep "^$tap/" <<< "$installed"
+    brew tap-info --json "$tap" 2>/dev/null | jq -r '.[0].formula_names[]?' 2>/dev/null \
+      | while IFS= read -r f; do grep -qxE "([^/]+/[^/]+/)?${f##*/}" <<< "$installed" && printf '%s\n' "$f"; done
+  } | sort -u
+}
 check_brew() {
   command -v brew >/dev/null || { note brew "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
-  brew update --quiet >/dev/null 2>&1 || note brew "brew update failed, the list may be stale"
-  local json
-  json=$(brew outdated --greedy --json=v2 2>/dev/null) || { check_failed brew "brew outdated failed"; return; }
+  local json err tap list
+  err=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX")
+  brew update --quiet >/dev/null 2>"$err" || note brew "brew update failed, the list may be stale"
+  json=$(brew outdated --greedy --json=v2 2>>"$err") || { rm -f "$err"; check_failed brew "brew outdated failed"; return; }
+  while IFS= read -r tap; do
+    list=$(tap_formulae "$tap" | tr '\n' ' ')
+    note brew "brew ignores untrusted tap $tap (its formulae get no updates): brew trust --formula ${list% }" "" + "brew trust (see brew section)"
+  done < <(untrusted_taps < "$err")
+  rm -f "$err"
   jq -r '(.formulae | map(. + {kind: "formula"})) + (.casks | map(. + {kind: "cask"})) | .[] | select(.pinned | not)
     | "brew|\(.name)|\(.installed_versions | if type == "array" then last else . end)|\(.current_version)|\(.kind)"' <<< "$json" \
     || check_failed brew "could not read brew outdated output"
@@ -304,14 +331,19 @@ self_updating_installed() {
 }
 
 # ── check mode ───────────────────────────────────────────────────────────────
-declare -A N_ITEMS N_NOTES N_FAILED SHORT KIND SHINT
+declare -A N_ITEMS N_HAND N_NOTES N_FAILED SHORT KIND SHINT HHINT
 
 analyze() {  # analyze <src> <lines>: fills the counters and the short result of the first note that has one
   local src=$1 s name inst latest extra hint
-  N_ITEMS[$src]=0 N_NOTES[$src]=0 N_FAILED[$src]=0 SHORT[$src]="" KIND[$src]="" SHINT[$src]=""
+  N_ITEMS[$src]=0 N_HAND[$src]=0 N_NOTES[$src]=0 N_FAILED[$src]=0 SHORT[$src]="" KIND[$src]="" SHINT[$src]="" HHINT[$src]=""
   while IFS='|' read -r s name inst latest extra hint; do
     [ -n "$s" ] || continue
     if [ -n "$latest" ]; then N_ITEMS[$src]=$((N_ITEMS[$src] + 1)); continue; fi
+    if [ "$inst" = + ]; then
+      N_HAND[$src]=$((N_HAND[$src] + 1))
+      [[ "${HHINT[$src]}" == *"$hint"* ]] || HHINT[$src]+="${HHINT[$src]:+ · }$hint"
+      continue
+    fi
     N_NOTES[$src]=$((N_NOTES[$src] + 1))
     [ "$inst" != "!" ] || N_FAILED[$src]=1
     if [ -n "$name" ] && [ -z "${SHORT[$src]}" ]; then SHORT[$src]=$name KIND[$src]=$inst SHINT[$src]=$hint; fi
@@ -319,7 +351,7 @@ analyze() {  # analyze <src> <lines>: fills the counters and the short result of
 }
 result_text() {  # result_text <src>: the coloured short result for the progress line
   local src=$1
-  if [ "${N_ITEMS[$src]}" -gt 0 ]; then c 33 "${N_ITEMS[$src]} outdated"
+  if [ "${N_ITEMS[$src]}" -gt 0 ] || [ "${N_HAND[$src]}" -gt 0 ]; then c 33 "$(counts_text "$src")"
   elif [ -n "${SHORT[$src]}" ]; then
     case ${KIND[$src]} in
       "!") c 31 "${SHORT[$src]}" ;;
@@ -331,6 +363,12 @@ result_text() {  # result_text <src>: the coloured short result for the progress
   fi
 }
 
+counts_text() {  # counts_text <src>: "N outdated · M by hand"
+  local src=$1 t=""
+  [ "${N_ITEMS[$src]}" -eq 0 ] || t="${N_ITEMS[$src]} outdated"
+  [ "${N_HAND[$src]}" -eq 0 ] || t+="${t:+ · }${N_HAND[$src]} by hand"
+  printf '%s' "$t"
+}
 detail_section() {  # detail_section <src> <lines>
   local src=$1 block=$2 s name inst latest extra hint n=0 nw=24 vw=1 tag group
   while IFS='|' read -r s name inst latest extra hint; do
@@ -338,7 +376,7 @@ detail_section() {  # detail_section <src> <lines>
     [ "${#name}" -le "$nw" ] || nw=${#name}
     [ "${#inst}" -le "$vw" ] || vw=${#inst}
   done <<< "$block"
-  if [ "${N_ITEMS[$src]}" -gt 0 ]; then n="${N_ITEMS[$src]} outdated"; else n="${N_NOTES[$src]} note"; fi
+  if [ "${N_ITEMS[$src]}" -gt 0 ] || [ "${N_HAND[$src]}" -gt 0 ]; then n=$(counts_text "$src"); else n="${N_NOTES[$src]} note"; fi
   section "${LABELS[$src]}" "$n"
   local groups=("")
   [ "$src" = brew ] && groups=(formula cask)
@@ -359,7 +397,7 @@ detail_section() {  # detail_section <src> <lines>
     done <<< "$block"
   done
   while IFS='|' read -r s name inst latest extra hint; do
-    [ -z "$latest" ] && [ -n "$s" ] && printf '  %s\n' "$(c 2 "$extra")"
+    [ -z "$latest" ] && [ -n "$s" ] && printf '  %s\n' "$(c "$([ "$inst" = + ] && echo 33 || echo 2)" "$extra")"
   done <<< "$block"
 }
 
@@ -382,9 +420,10 @@ check_mode() {
   for src in "${SOURCES[@]}"; do
     n=${N_ITEMS[$src]}
     nfailed=$((nfailed + N_FAILED[$src]))
-    outdated=$((outdated + n))
+    outdated=$((outdated + n + N_HAND[$src]))
+    manual=$((manual + N_HAND[$src]))
     if [[ $MANUAL_SOURCES == *" $src "* ]]; then manual=$((manual + n)); else installable=$((installable + n)); fi
-    if [ "$n" -gt 0 ] || { [ "${N_NOTES[$src]}" -gt 0 ] && [ -z "${SHORT[$src]}" ]; }; then
+    if [ "$n" -gt 0 ] || [ "${N_HAND[$src]}" -gt 0 ] || { [ "${N_NOTES[$src]}" -gt 0 ] && [ -z "${SHORT[$src]}" ]; }; then
       detail_section "$src" "${LINES[$src]}"
     fi
   done
@@ -392,6 +431,7 @@ check_mode() {
 
   section "Summary" ""
   for src in "${SOURCES[@]}"; do
+    [ "${N_HAND[$src]}" -eq 0 ] || summary_row "${LABELS[$src]} by hand" "${N_HAND[$src]}" "${HHINT[$src]}"
     if [ "${N_ITEMS[$src]}" -gt 0 ]; then summary_row "${LABELS[$src]}" "${N_ITEMS[$src]}" "${HINTS[$src]}"
     elif [ "${KIND[$src]}" = "?" ] || [ "${KIND[$src]}" = "–" ] || [ "${KIND[$src]}" = "!" ]; then summary_row "${LABELS[$src]}" "${KIND[$src]}" "${SHINT[$src]}" "$([ "${KIND[$src]}" = "!" ] && echo 31 || echo 33)"
     fi

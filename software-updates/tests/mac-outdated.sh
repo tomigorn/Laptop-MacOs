@@ -29,8 +29,10 @@ stub() {
 }
 stub brew '
 case "$1" in
-  update) [ -f "$FIX/fail-brew-update" ] && exit 1; exit 0 ;;
-  outdated) [ -f "$FIX/fail-brew-outdated" ] && { echo "Error: brew outdated failed" >&2; exit 1; }; cat "$FIX/brew-outdated.json" ;;
+  update) [ -f "$FIX/brew-update-stderr.txt" ] && cat "$FIX/brew-update-stderr.txt" >&2; [ -f "$FIX/fail-brew-update" ] && exit 1; exit 0 ;;
+  outdated) [ -f "$FIX/brew-outdated-stderr.txt" ] && cat "$FIX/brew-outdated-stderr.txt" >&2; [ -f "$FIX/fail-brew-outdated" ] && { echo "Error: brew outdated failed" >&2; exit 1; }; cat "$FIX/brew-outdated.json" ;;
+  list) cat "$FIX/brew-list-full.txt" 2>/dev/null ;;
+  tap-info) [ -f "$FIX/brew-tap-info.json" ] || exit 1; cat "$FIX/brew-tap-info.json" ;;
   info)
     if [ "$4" = --installed ]; then cat "$FIX/brew-info-installed.json"; exit 0; fi
     [ -f "$FIX/brew-info-$4.json" ] || { echo "Error: Cask $4 is unavailable" >&2; exit 1; }
@@ -284,6 +286,28 @@ touch "$FIX/fail-brew-update"
 run
 check "brew: update failure is a note" contains "$out" "brew update failed"
 check "brew: still lists outdated" contains "$out" "bash 5.3.15 → 5.3.20"
+
+# untrusted tap: brew ignores its formulae, a by-hand item
+printf 'Warning: The following taps are not trusted:\n  asmvik/formulae\nRun brew trust to trust them.\n' > "$FIX/brew-outdated-stderr.txt"
+printf 'aom\nbash\nkoekeishiya/formulae/skhd\nkoekeishiya/formulae/yabai\nother/tap/foo\n' > "$FIX/brew-list-full.txt"
+printf '[{"name":"asmvik/formulae","formula_names":["asmvik/formulae/krp","asmvik/formulae/skhd","asmvik/formulae/yabai"]}]\n' > "$FIX/brew-tap-info.json"
+run
+check "untrusted tap: note with trust command" contains "$out" "brew ignores untrusted tap asmvik/formulae (its formulae get no updates): brew trust --formula asmvik/formulae/skhd asmvik/formulae/yabai"
+check "untrusted tap: not-installed formula left out" lacks "$out" "asmvik/formulae/krp"
+check "untrusted tap: other taps left out" lacks "$out" "other/tap/foo"
+check "untrusted tap: counted by hand" has "$out" "total 13 10 via --install · 3 by hand"
+check "untrusted tap: summary row" has "$out" "brew by hand 1 brew trust"
+check "untrusted tap: progress" has "$out" "brew \\.+ 4 outdated · 1 by hand"
+MAC_OUTDATED_COLOR=always run
+check "untrusted tap: note yellow" grep -q $'\033\\[33mbrew ignores untrusted tap' "$WORK/out"
+rm -f "$FIX/brew-tap-info.json"
+printf 'asmvik/formulae/yabai\nbash\n' > "$FIX/brew-list-full.txt"
+mv "$FIX/brew-outdated-stderr.txt" "$FIX/brew-update-stderr.txt"
+run
+check "untrusted tap from brew update, no tap-info: full-name prefix" contains "$out" "brew trust --formula asmvik/formulae/yabai"
+rm -f "$FIX/brew-update-stderr.txt" "$FIX/brew-list-full.txt"
+run
+check "no untrusted tap: no note" lacks "$out" "untrusted tap"
 
 # downgrade marker
 jq '.formulae[0].current_version = "3.0.0" | .formulae[0].installed_versions = ["3.15.2_1"]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
