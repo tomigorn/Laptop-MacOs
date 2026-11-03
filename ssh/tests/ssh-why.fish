@@ -1,8 +1,8 @@
 #!/opt/homebrew/bin/fish
 # Characterizes ssh-why in offline mode against a fixture ssh config (never -c/--connect).
-#   terminal/tests/ssh-why.fish
+#   ssh/tests/ssh-why.fish
 set -l here (cd (dirname (status -f)); and pwd)
-set -g SSHWHY_SRC $here/../.config/fish/functions/ssh-why.fish
+set -g SSHWHY_SRC $here/../ssh-why.fish
 
 set -g WORK (mktemp -d)
 function cleanup --on-event fish_exit

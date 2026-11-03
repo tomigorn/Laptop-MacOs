@@ -43,7 +43,7 @@ Therefore `~/.ssh/config` lists its includes **specific → general**, with the
 Everything under `~/.ssh` is now read by ssh itself. Notably, the git signing
 trust lists (`allowed_signers-*`) used to live here and do **not** any more —
 nothing in ssh ever opened them, only git does via `ssh-keygen -Y verify`. They
-are in `~/.config/git/`; see the Git section of the [README](../README.md).
+are in `~/.config/git/`; see the Git section of [macos-settings.md](../macos-settings/macos-settings.md).
 
 ## Where the keys live
 
@@ -68,7 +68,7 @@ Moving or renaming keys is a local-only operation — `authorized_keys` on the
 remote stores the public key, not the filename — but every reference has to move
 with it. Beyond `config.d/`, key paths appear in `~/.gitconfig-private` and
 `~/.gitconfig-work` (both `user.signingkey` and `core.sshCommand`), and in this
-repo's `README.md` and `multiple-git-accounts/` templates.
+repo's `macos-settings/macos-settings.md` and `multiple-git-accounts/` templates.
 
 To check nothing dangles after such a change:
 
@@ -197,8 +197,7 @@ Three things to know:
   performs no key exchange, so it would report no key at all. It costs one login
   per hop; mind fail2ban on hosts that ban repeated failures.
 
-The function lives in `terminal/.config/fish/functions/ssh-why.fish` and is
-symlinked by `terminal/setup.sh`.
+The function lives in `ssh/ssh-why.fish` and is symlinked by `ssh/setup.sh`.
 
 ### Raw ssh
 
