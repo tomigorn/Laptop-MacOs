@@ -5,7 +5,7 @@ One command for every outdated piece of software on this Mac. Install: `software
 | Command | Admin | Does |
 |---|---|---|
 | `mac-outdated` | no | check all sources, print progress, details and a summary, write the last-check stamp |
-| `mac-outdated --install` | yes, >= 15 min left | `sudo -v` once, install every available update |
+| `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update; sudo may ask for your password again for later steps |
 | `mac-outdated --help` | no | usage |
 
 Exit: `0` nothing outdated / all installed, `1` something outdated / something failed, `2` usage error or admin precondition not met.
@@ -57,12 +57,13 @@ mac-outdated · 2026-11-03 11:20
 | Apps without an updater | cask with the same app name | none: `brew install --cask --adopt <token>` |
 | Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion) | listed once | none: update on launch |
 
-Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: macOS, Adobe (sudo), then brew, Microsoft, App Store, pipx, VS Code. A failing source does not stop the others; a summary follows.
+Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, VS Code, macOS last (sudo, longest). A failing source does not stop the others; a summary follows.
 
 ## Admin rules
 
 - Never asks for or changes admin rights itself: elevation is your click in Privileges (menu bar lock icon).
 - No sudo keep-alive, no `sudo -S`, no stored password, no restart.
+- Before each sudo step (Adobe, App Store, macOS) `PrivilegesCLI --status` is checked again: admin gone -> that step `skipped (admin expired: click Privileges and rerun)`, the others go on, exit 1.
 - Not admin -> exit 2. Less than 15 min left (`expire in N minutes` from `PrivilegesCLI --status`) -> exit 2. Time unknown -> asks `Continue anyway? [y/N]`.
 
 ## Greeting

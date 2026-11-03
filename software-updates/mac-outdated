@@ -10,9 +10,10 @@ APP_DIRS=${MAC_OUTDATED_APP_DIRS:-/Applications:$HOME/Applications}
 STAMP="$HOME/.local/state/mac-outdated/last-check"
 MIN_ADMIN_MINUTES=15
 SKIPPED=3
+EXPIRED=4
 
 SOURCES=(brew msupdate adobe mas macos pipx vscode sparkle unmanaged)
-INSTALL_ORDER=(macos adobe brew msupdate mas pipx vscode)
+INSTALL_ORDER=(adobe mas brew msupdate pipx vscode macos)
 declare -A LABELS=(
   [brew]="brew" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
   [pipx]="pipx" [vscode]="VS Code extensions" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
@@ -417,9 +418,12 @@ require_admin() {
   fi
 }
 
-# ── install_<src>: 0 ok, 1 failed, $SKIPPED tool missing ─────────────────────
+still_admin() { [[ $("$PRIVILEGESCLI" --status 2>&1) == *administrator* ]]; }
+
+# ── install_<src>: 0 ok, 1 failed, $SKIPPED tool missing, $EXPIRED admin ran out ──
 install_macos() {  # runs on the terminal, not through a pipe: softwareupdate may ask for the owner password
   command -v softwareupdate >/dev/null || return "$SKIPPED"
+  still_admin || return "$EXPIRED"
   local list rc
   list=$(softwareupdate --list 2>&1)
   sudo softwareupdate --install --all; rc=$?
@@ -428,6 +432,7 @@ install_macos() {  # runs on the terminal, not through a pipe: softwareupdate ma
 }
 install_adobe() {
   [ -x "$RUM" ] || return "$SKIPPED"
+  still_admin || return "$EXPIRED"
   sudo "$RUM" --action=install
 }
 install_brew() {
@@ -442,6 +447,7 @@ install_msupdate() {
 install_mas() {
   local mas
   mas=$(command -v mas) || return "$SKIPPED"
+  still_admin || return "$EXPIRED"
   sudo "$mas" upgrade
 }
 install_pipx() {
@@ -480,7 +486,7 @@ install_mode() {
   setup_color
   header "mac-outdated --install"
   require_admin || exit 2
-  echo "  sudo asks for your password once, for the macOS and Adobe updates"
+  echo "  sudo asks for your password for Adobe, App Store and macOS, and may ask again for later steps"
   sudo -v || { echo "sudo failed"; exit 2; }
   local src rc failed=0 label word
   local -A result
@@ -496,6 +502,7 @@ install_mode() {
     case $rc in
       0) result[$src]=installed; installed+=1; word=$(c 32 installed) ;;
       "$SKIPPED") result[$src]="skipped ($src not installed)"; skipped+=1; word=$(c 33 "${result[$src]}") ;;
+      "$EXPIRED") result[$src]="skipped (admin expired: click Privileges and rerun)"; skipped+=1; failed=1; word=$(c 33 "${result[$src]}") ;;
       *) result[$src]="failed (exit $rc)"; nfailed+=1; failed=1; word=$(c 31 "failed (exit $rc)") ;;
     esac
     progress_start "$label"

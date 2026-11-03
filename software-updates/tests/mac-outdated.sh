@@ -88,7 +88,15 @@ echo "sudo $n $*" | tee -a "$CALLS" >> "$ALLCALLS"
 exec "$(dirname "$0")/$n" "$@"
 EOF
 chmod +x "$BIN/sudo"
-stub PrivilegesCLI '[ "$1" = --status ] && cat "$FIX/privileges-status.txt"; exit 0'
+# $FIX/privileges-expire-after N: admin for the first N --status calls, standard afterwards
+stub PrivilegesCLI '
+[ "$1" = --status ] || exit 0
+n=$(($(cat "$FIX/privileges-count" 2>/dev/null || echo 0) + 1)); echo "$n" > "$FIX/privileges-count"
+if [ -f "$FIX/privileges-expire-after" ] && [ "$n" -gt "$(cat "$FIX/privileges-expire-after")" ]; then
+  cat "$FIX/privileges-status-standard.txt"
+else
+  cat "$FIX/privileges-status.txt"
+fi'
 
 # make_app <name> <bundle id> <version> [feed] [sparkle|mas]
 make_app() {
@@ -159,8 +167,8 @@ admin_setup() {
 }
 
 out="" rc=0
-run() { : > "$CALLS"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 < /dev/null; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
-run_input() { local input="$1"; shift; : > "$CALLS"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 <<< "$input"; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
+run() { : > "$CALLS"; rm -f "$FIX/privileges-count"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 < /dev/null; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
+run_input() { local input="$1"; shift; : > "$CALLS"; rm -f "$FIX/privileges-count"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 <<< "$input"; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
 calls() { cat "$CALLS"; }
 install_calls() { grep -E '^(sudo|softwareupdate --install|RemoteUpdateManager --action=install|brew (update|upgrade)|msupdate --install|mas upgrade|pipx upgrade-all|code --update-extensions)' "$CALLS"; }
 
@@ -328,19 +336,21 @@ check "not admin: nothing run" equals "$(install_calls)" ""
 admin_setup admin 20
 run --install
 expected="sudo -v
-sudo softwareupdate --install --all
-softwareupdate --install --all
 sudo RemoteUpdateManager --action=install
 RemoteUpdateManager --action=install
+sudo mas upgrade
+mas upgrade
 brew update
 brew upgrade --greedy
 msupdate --install
-sudo mas upgrade
-mas upgrade
 pipx upgrade-all
-code --update-extensions"
+code --update-extensions
+sudo softwareupdate --install --all
+softwareupdate --install --all"
 check "admin 20 min: exit 0" equals "$rc" 0
-check "admin 20 min: sudo -v once, sudo sources first" equals "$(install_calls)" "$expected"
+check "admin 20 min: sudo -v once, short sudo steps first, macOS last" equals "$(install_calls)" "$expected"
+check "admin 20 min: admin re-checked before each sudo step" equals "$(grep -c '^PrivilegesCLI --status' "$CALLS")" 4
+check "admin 20 min: no password-once promise" lacks "$out" "password once"
 check "admin 20 min: restart required shown" contains "$out" "restart required"
 check "admin 20 min: summary" has "$out" "pipx \\.+ installed"
 check "admin 20 min: header" has "$out" "^mac-outdated --install · [0-9-]+ [0-9:]+"
@@ -413,6 +423,19 @@ run --install
 check "macOS failing: exit 1" equals "$rc" 1
 check "macOS failing: Adobe still runs" contains "$(calls)" "RemoteUpdateManager --action=install"
 rm -f "$FIX/fail-softwareupdate"
+
+# admin runs out after Adobe: the later sudo steps are skipped, the rest still runs
+echo 2 > "$FIX/privileges-expire-after"
+run --install
+rm -f "$FIX/privileges-expire-after"
+check "admin expired: exit 1" equals "$rc" 1
+check "admin expired: Adobe still installed" contains "$(calls)" "RemoteUpdateManager --action=install"
+check "admin expired: mas upgrade not run" lacks "$(calls)" "mas upgrade"
+check "admin expired: macOS not installed" lacks "$(calls)" "softwareupdate --install"
+check "admin expired: non-sudo steps still run" contains "$(calls)" "code --update-extensions"
+check "admin expired: App Store step skipped" has "$out" "App Store \\.+ skipped \\(admin expired: click Privileges and rerun\\)"
+check "admin expired: macOS step skipped" has "$out" "macOS \\.+ skipped \\(admin expired: click Privileges and rerun\\)"
+check "admin expired: total" has "$out" "total 5 installed · 2 skipped"
 
 # a missing tool is skipped, not a failure
 mkdir -p "$WORK/nomas"
