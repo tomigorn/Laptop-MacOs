@@ -9,6 +9,8 @@ manual wake step, no proxy host in the path.
 Both hosts use the identical mechanism; only the endpoint and the credentials
 differ. Everything below applies to both unless stated otherwise.
 
+See [ssh-config.md](ssh-config.md) for the config layout and the `ssh-why` tool (`ssh-why <host>`).
+
 ## The problem
 
 - A Wake-on-LAN "magic packet" is an **L2 broadcast** — it only reaches the target
@@ -136,3 +138,10 @@ and hides beefy's real address. The `Match exec` approach decouples the two: the
 Pi only sends the wake packet, while the SSH session connects **directly** to the
 target (`HostName beefy.homelab`) — lower latency, no proxy hop, and the real host
 is visible in the config.
+
+## Install / tests
+
+| | |
+|---|---|
+| Install | `ssh/install.sh` (links `ssh-why` into fish) |
+| Tests | `ssh/tests/ssh-why.fish`, or all via `tests/test-all.sh` |

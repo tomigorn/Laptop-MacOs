@@ -119,3 +119,7 @@ It overlaps with the Network Drives tools above: ForkLift has a **built-in remot
 How they divide up:
 - **ConnectMeNow** — system-wide, persistent auto-mounts that survive across apps (the NAS is always *there*).
 - **ForkLift** — interactive browsing/transfer inside the app; reach for it when you just need to poke at a server, not keep it mounted.
+
+## Install / tests
+
+Manual settings, no installer. `dock-add-spacer.sh` adds a Dock spacer (changes Dock defaults and restarts the Dock; run by hand). No tests.

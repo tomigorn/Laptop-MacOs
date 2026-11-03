@@ -49,6 +49,8 @@ macOS) to grant Accessibility — do this once:
 3. If the shortcuts don't fire, also add **skhd** under **Input Monitoring**.
 4. `yabai --restart-service && skhd --restart-service`
 
+Tests: `window-manager/tests/*.sh`, or all via `tests/test-all.sh`.
+
 ## Shortcuts
 
 | Shortcut | Action |

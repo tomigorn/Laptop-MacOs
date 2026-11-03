@@ -149,6 +149,8 @@ cd ~/development/private/Laptop-MacOs/virt-manager
 
 ---
 
+Tests: `virt-manager/tests/launcher.sh`, or all via `tests/test-all.sh`.
+
 ## Launching
 
 | Where | How |

@@ -157,6 +157,8 @@ Installs the scripts to `/usr/local/sbin/` and two daemons to
 `com.tmilata.homelab-dns-timer.plist`, the 5-min safety net), then loads both.
 Runs at boot, on every network change, and every 5 minutes. Safe to re-run.
 
+Tests: `homelab-dns/tests/homelab-dns.sh` (stubbed, no system changes), or all via `tests/test-all.sh`.
+
 ## Verify / operate
 
 ```sh

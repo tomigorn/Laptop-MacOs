@@ -47,3 +47,7 @@ Obsidian doesn't pick up new snippets automatically — enable it once in the UI
 The edit-mode rule is scoped to `[data-task="x"]` so it **only** affects standard
 completed tasks. Custom checkbox states — `[/]` (in progress), `[-]` (cancelled),
 `[>]` (forwarded), etc. — keep their normal styling and are left untouched.
+
+## Install / tests
+
+Copy `no-strikethrough.css` into `<vault>/.obsidian/snippets/` and enable it (see above). No script, no tests.

@@ -157,6 +157,8 @@ running 7 minutes fast reported `Connected in 422.3s` for a two-second connect).
 
 ### Tests
 
+Offline (greeting, xxhc, wrappers): `tests/test-all.sh`. Live:
+
 `terminal/tests/concurrent-sessions.fish <host>` is a live integration test — it
 needs a reachable host and takes about 90 seconds. It runs two overlapping
 sessions and asserts that the first keeps its binaries while the second connects
