@@ -167,7 +167,7 @@ cd ~/development/private/Laptop-MacOs/virt-manager
 ```sh
 # Service running?
 brew services list | grep libvirt
-# → libvirt  started   tmilata  ~/Library/LaunchAgents/homebrew.mxcl.libvirt.plist
+# → libvirt  started   jdoe     ~/Library/LaunchAgents/homebrew.mxcl.libvirt.plist
 
 # Session socket reachable?
 virsh --connect qemu:///session uri

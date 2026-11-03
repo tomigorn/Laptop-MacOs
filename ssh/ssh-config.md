@@ -53,9 +53,9 @@ deliberately unchanged.
 
 ```
 ~/.ssh/keys/
-├── eth/       tmilata.ethServers        nethz account, ETH-wide
-│              tmilata.4ea.ethServers    tmil4ea, S4D admin
-│              tmilata.4la.ethServers    tmil4la, ITET/TIK admin
+├── eth/       jdoe.ethServers           nethz account, ETH-wide
+│              jdoe.4ea.ethServers       jdoe4ea, S4D admin
+│              jdoe.4la.ethServers       jdoe4la, ITET/TIK admin
 │              sysadmin                  shared local account, legacy TIK boxes
 ├── homelab/   fastpi.EthMac  beefy.EthMac  tower
 └── git/       gitHub-Tomigorn  gitLab-ETH
@@ -99,8 +99,8 @@ Host chouffe
 
 # tik.config -- matches because the RESOLVED name is ee-tik-nsgsrv01.ethz.ch
 Match host "ee-tik-*"
-    User                tmil4la
-    IdentityFile        ~/.ssh/keys/eth/tmilata.4la.ethServers
+    User                jdoe4la
+    IdentityFile        ~/.ssh/keys/eth/jdoe.4la.ethServers
     IdentitiesOnly      yes
 ```
 
@@ -156,15 +156,15 @@ the whole ProxyJump chain and reports, per hop:
 $ ssh-why cn100
 
   ── hop 1/2  j2comsec  (jump host)
-       connects to    tmil4la@comsec-jumphost.ethz.ch:22
-       key            ~/.ssh/keys/eth/tmilata.4la.ethServers
+       connects to    jdoe4la@comsec-jumphost:22
+       key            ~/.ssh/keys/eth/jdoe.4la.ethServers
        blocks that applied:
          ~/.ssh/config.d/jumphosts.config:82      Host  j2comsec
          ~/.ssh/config:40                         Host  *
 
   ── hop 2/2  cn100  (target)
-       connects to    tmil4la@ee-tik-cn100.ethz.ch:22
-       key            ~/.ssh/keys/eth/tmilata.4la.ethServers
+       connects to    jdoe4la@ee-tik-cn100:22
+       key            ~/.ssh/keys/eth/jdoe.4la.ethServers
        via            j2comsec
        blocks that applied:
          ~/.ssh/config.d/aliases.config:18        Host  cn???
@@ -181,8 +181,8 @@ the server actually accepted:
 
 ```
   KEY ACTUALLY ACCEPTED (one real login per hop)
-       j2comsec               OK  ~/.ssh/keys/eth/tmilata.4la.ethServers ED25519
-       cn100                  OK  ~/.ssh/keys/eth/tmilata.4la.ethServers ED25519
+       j2comsec               OK  ~/.ssh/keys/eth/jdoe.4la.ethServers ED25519
+       cn100                  OK  ~/.ssh/keys/eth/jdoe.4la.ethServers ED25519
 ```
 
 Three things to know:
@@ -252,8 +252,8 @@ diff <(ssh -G somehost) <(ssh -G -F /path/to/old/config somehost)
 ## The ITET family
 
 `itet.config` covers the departmental ITET boxes — `itet-ifa-*`, `itet-aps-*`,
-`itet-hvl-*` — with one `Match host "itet-*.ethz.ch"` rule supplying `tmil4la`,
-`tmilata.4la.ethServers` and the routing. `aliases.config` adds the short forms
+`itet-hvl-*` — with one `Match host "itet-*.ethz.ch"` rule supplying `jdoe4la`,
+`jdoe.4la.ethServers` and the routing. `aliases.config` adds the short forms
 (`ifa-s52`, `aps-s50`, `hvl-503`, …) plus `Host itet-* !*.*` FQDN completion, so
 a bare name resolves to the FQDN and then matches the family rule.
 

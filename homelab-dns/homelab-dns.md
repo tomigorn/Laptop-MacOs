@@ -174,7 +174,7 @@ sudo launchctl kickstart -k system/com.tmilata.homelab-dns   # force a run
 Every evaluation writes one line, e.g.:
 
 ```
-2026-05-29 15:01:44  change  iface=en0 gw=10.113.253.86  homelab=reachable tries=1  changed=[Wi-Fi]set->192.168.1.2 [Thunderbolt Ethernet Slot 1]set->192.168.1.2
+2026-05-29 15:01:44  change  iface=en0 gw=192.0.2.1  homelab=reachable tries=1  changed=[Wi-Fi]set->192.168.1.2 [Thunderbolt Ethernet Slot 1]set->192.168.1.2
 ```
 
 - first field — why it ran: `boot` (daemon start), `change` (network change), `timer` (5-min safety net — only logs when it changed DNS), `manual`

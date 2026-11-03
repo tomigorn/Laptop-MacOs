@@ -1,6 +1,6 @@
 [user]
 	name = tomigorn
-	email = tomigorn@gmail.com
+	email = private-email@example.com
 	signingkey = ~/.ssh/keys/git/gitHub-Tomigorn.pub
 
 [core]

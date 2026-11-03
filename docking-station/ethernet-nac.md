@@ -32,11 +32,11 @@ MacBook Air `Mac17,3`, Apple **M5** (arm64). No internal wired NIC.
 
 | Device | Interface | MAC | Chipset / type | Notes |
 |---|---|---|---|---|
-| **Wi-Fi (built-in)** | `en0` | `c0:c7:db:be:ea:57` (factory); currently randomized to `9e:c1:4f:0c:9b:18` | Apple Wi-Fi | Private Wi-Fi Address is on. Auth = EAP-TLS. |
-| **Monitor dock — HP E34m G4** | `en5` | `a8:4a:63:62:90:e2` | Realtek RTL8153 (USB `0x0bda`/`0x8153`) | RJ-45 is on the monitor; integrated USB-C dock. |
-| **Standalone USB-C dock** | `en7` | `98:fc:84:e0:6a:7d` | Realtek RTL8153 (USB `0x0bda`/`0x8153`) | Separate portable dock. |
-| Virtual adapters | `en2`, `en3` | `5a:16:7e:1f:80:d0/d1` | software (locally-administered bit set) | Not physical; ignore. |
-| Thunderbolt bridge | `en1`/`en4`/`bridge0` | `36:ab:17:02:bf:40/44` | TB bridge | Ignore. |
+| **Wi-Fi (built-in)** | `en0` | `aa:bb:cc:00:00:10` (factory); currently randomized to `aa:bb:cc:00:00:11` | Apple Wi-Fi | Private Wi-Fi Address is on. Auth = EAP-TLS. |
+| **Monitor dock — HP E34m G4** | `en5` | `aa:bb:cc:00:00:01` | Realtek RTL8153 (USB `0x0bda`/`0x8153`) | RJ-45 is on the monitor; integrated USB-C dock. |
+| **Standalone USB-C dock** | `en7` | `aa:bb:cc:00:00:02` | Realtek RTL8153 (USB `0x0bda`/`0x8153`) | Separate portable dock. |
+| Virtual adapters | `en2`, `en3` | `aa:bb:cc:00:00:20/21` | software (locally-administered bit set) | Not physical; ignore. |
+| Thunderbolt bridge | `en1`/`en4`/`bridge0` | `aa:bb:cc:00:00:30/34` | TB bridge | Ignore. |
 
 > `en5`/`en7` numbering is per-MAC and persistent: macOS keeps an interface
 > record for every USB-ethernet MAC it has *ever* seen. The standalone OWC TB3
@@ -47,9 +47,9 @@ MacBook Air `Mac17,3`, Apple **M5** (arm64). No internal wired NIC.
 
 Hardware-confirmed three independent ways (don't trust labels, trust this):
 
-1. Only the **USB-C dock** plugged in → `en7` = `98:fc:84:e0:6a:7d` appeared.
-2. Only the **monitor dock** plugged in → `en5` = `a8:4a:63:62:90:e2` appeared.
-3. Both plugged, Ethernet cable in the monitor → `en5` (`a8:4a:63:62:90:e2`) is
+1. Only the **USB-C dock** plugged in → `en7` = `aa:bb:cc:00:00:02` appeared.
+2. Only the **monitor dock** plugged in → `en5` = `aa:bb:cc:00:00:01` appeared.
+3. Both plugged, Ethernet cable in the monitor → `en5` (`aa:bb:cc:00:00:01`) is
    the active wired interface holding the IP / default route.
 
 Adapters are detected at the driver level **even when the macOS network service
@@ -66,7 +66,7 @@ adapter; the USB device still enumerates and its MAC is visible).
 - Config: `/Library/Preferences/SystemConfiguration/com.apple.network.eapolclient.configuration.plist`
   — every profile has `AcceptEAPTypes => [13]` (**EAP-TLS**). SSIDs `eth`,
   `eth-5`, `eth-6`.
-- Machine identity **`ITET-ITS-301.ethz.ch`** is present in the **System
+- Machine identity **`ITET-ITS-100.example.com`** is present in the **System
   keychain** (`/Library/Keychains/System.keychain`) — i.e. usable by
   System-Mode auth that runs as root at link-up.
 
@@ -83,9 +83,9 @@ adapter; the USB device still enumerates and its MAC is visible).
 
 Observed wired addressing (varies by VLAN/lease):
 
-- `82.130.102.184/23`, gw `82.130.102.1`, DNS `129.132.98.12` /
+- `203.0.113.184/24`, gw `203.0.113.1`, DNS `129.132.98.12` /
   `129.132.250.2`, search `d.ethz.ch ethz.ch` (public ETH range).
-- Earlier observed `10.4.99.133/24`, gw `10.4.99.1` (private). The profile is
+- Earlier observed `10.0.0.133/24`, gw `10.0.0.1` (private). The profile is
   the same (`ee-tik-dock`); the lease/subnet can differ.
 
 ---
@@ -97,9 +97,9 @@ profile `ee-tik-dock`):
 
 | MAC | Host ID | Beschreibung | Physical device (verified) |
 |---|---|---|---|
-| `a8:4a:63:62:90:e2` | `itet-its-HP-E34m-G4-001-dock-monitor` | `ETZ G 64.2: HP E34m G4 dock` | **HP E34m G4 monitor dock** (`en5`) |
-| `98:fc:84:e0:6a:7d` | `itet-its-301-dock-usbc` | `MacBook tmilata – USB-C dock` | **standalone USB-C dock** (`en7`) |
-| `48:2a:e3:b2:8c:4c` | `itet-its-lenovo-40as-001-dock-usbc` | `ETZ G 64.2: Lenovo ThinkPad Universal USB-C Dock (40AS)` | **Lenovo ThinkPad Universal USB-C Dock** — model `40AS`, s/n `1S40ASZKW216EN` (`en6`) |
+| `aa:bb:cc:00:00:01` | `itet-its-HP-E34m-G4-001-dock-monitor` | `Room 1.23: HP E34m G4 dock` | **HP E34m G4 monitor dock** (`en5`) |
+| `aa:bb:cc:00:00:02` | `itet-its-100-dock-usbc` | `MacBook jdoe – USB-C dock` | **standalone USB-C dock** (`en7`) |
+| `aa:bb:cc:00:00:03` | `itet-its-lenovo-40as-001-dock-usbc` | `Room 1.23: Lenovo ThinkPad Universal USB-C Dock (40AS)` | **Lenovo ThinkPad Universal USB-C Dock** — model `40AS`, s/n `SERIAL-EXAMPLE` (`en6`) |
 
 All three MAC↔device assignments are hardware-verified (see the dock→MAC mapping
 section above).
@@ -109,16 +109,16 @@ section above).
 The two entries deliberately use **different bases**, which is fine as long as
 it's intentional:
 
-- **USB-C dock** → named after the **laptop** (`itet-its-301-…`): a personal,
+- **USB-C dock** → named after the **laptop** (`itet-its-100-…`): a personal,
   portable device that travels with the machine.
 - **Monitor dock** → named after the **monitor + room**
-  (`itet-its-HP-E34m-G4-001`, "ETZ G 64.2"): a fixed desk/location asset.
+  (`itet-its-HP-E34m-G4-001`, "Room 1.23"): a fixed desk/location asset.
 
 Side effect: the wired identity depends on which dock you're at (laptop-identity
 at the USB-C dock, desk-identity at the monitor). Network access is identical
 (both `ee-tik-dock`); only the DNS/log identity differs. If you instead wanted
 **one identity regardless of dock**, name both under the laptop base
-(`itet-its-301-dock-mon` / `itet-its-301-dock-usbc`). Host IDs must be unique per
+(`itet-its-100-dock-mon` / `itet-its-100-dock-usbc`). Host IDs must be unique per
 MAC (each maps to a DNS name) and are DNS labels: lowercase, hyphens OK, no
 underscores.
 

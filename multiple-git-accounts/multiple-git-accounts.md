@@ -26,7 +26,7 @@ Each included file sets five things, and all five switch together:
 
 | | `~/development/private/` | `~/development/work/` |
 |---|---|---|
-| name / email | tomigorn / private-email@example.com | Tomas Stefan Milata / work-email@example.com |
+| name / email | tomigorn / private-email@example.com | Jane Doe / work-email@example.com |
 | signs with | `~/.ssh/keys/git/gitHub-Tomigorn.pub` | `~/.ssh/keys/git/gitLab-ETH.pub` |
 | pushes with | `~/.ssh/keys/git/gitHub-Tomigorn` | `~/.ssh/keys/git/gitLab-ETH` |
 | verifies against | `~/.config/git/allowed_signers-private` | `~/.config/git/allowed_signers-work` |
