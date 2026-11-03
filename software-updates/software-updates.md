@@ -53,7 +53,7 @@ mac-outdated · 2026-11-03 11:20
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
 | App Store | `mas outdated --json` (note if `mas` is missing) | `sudo mas upgrade` (mas needs root to update apps) |
 | macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all`, never restarts; `restart required` only after a successful install |
-| pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped) | `pipx upgrade-all` |
+| pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | VS Code extensions | count only | `code --update-extensions` |
 | Sparkle apps | appcast from `SUFeedURL` (beta channel skipped) | none: open the app |
 | Apps without an updater | cask with the same app name | none: `brew install --cask --adopt <token>` |

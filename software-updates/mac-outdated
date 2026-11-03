@@ -213,8 +213,10 @@ check_macos() {
 
 check_pipx() {
   command -v pipx >/dev/null || { note pipx "pipx not installed" "skipped (pipx not installed)" – "brew install pipx"; return; }
-  local json venv pkg inst latest
-  json=$(pipx list --json 2>/dev/null) || { check_failed pipx "pipx list failed"; return; }
+  local json rc venv pkg inst latest
+  json=$(pipx list --json 2>/dev/null); rc=$?
+  jq -e '.venvs | type == "object"' <<< "$json" >/dev/null 2>&1 || { check_failed pipx "pipx list failed"; return; }
+  [ "$rc" -eq 0 ] || note pipx "pipx reports a broken package: run pipx reinstall-all"
   while IFS=$'\t' read -r venv pkg inst src; do
     [ -n "$venv" ] || continue
     [[ "$src" == /* || "$src" == .* || "$src" == file:* ]] && continue  # local path install, nothing to look up

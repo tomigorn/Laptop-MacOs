@@ -66,7 +66,7 @@ esac'
 stub sw_vers 'echo 27.2'
 stub pipx '
 case "$1" in
-  list) cat "$FIX/pipx-list.json" ;;
+  list) cat "$FIX/pipx-list.json"; [ -f "$FIX/fail-pipx-list" ] && exit 1; exit 0 ;;
   runpip) f="$FIX/pip-index-$2.txt"; [ -f "$f" ] || exit 1; cat "$f"; grep -q ERROR "$f" && exit 1; exit 0 ;;
   upgrade-all) [ -f "$FIX/fail-pipx" ] && exit 1; exit 0 ;;
 esac'
@@ -264,6 +264,20 @@ check "adobe: checked during install on the progress line" has "$out" "Adobe \.+
 check "adobe: no admin text left" lacks "$out" "needs admin"
 check "adobe: no summary row" lacks "$out" "listing needs admin"
 check "adobe: no unknown count" lacks "$out" "Adobe ?"
+
+# pipx list exits non-zero but still prints JSON (a broken venv)
+touch "$FIX/fail-pipx-list"
+run
+check "pipx broken venv: still lists outdated" contains "$out" "xxh-xxh 0.8.14 → 0.8.15"
+check "pipx broken venv: note" contains "$out" "pipx reports a broken package: run pipx reinstall-all"
+check "pipx broken venv: not a failed check" no_match "$out" "pipx \\.+ check failed"
+echo "Error: something broke" > "$FIX/pipx-list.json"
+run
+check "pipx no JSON: check failed" has "$out" "^ pipx \\.+ check failed$"
+rm -f "$FIX/fail-pipx-list"
+run
+check "pipx no JSON, exit 0: check failed" has "$out" "^ pipx \\.+ check failed$"
+cp "$FIXTURES/pipx-list.json" "$FIX/pipx-list.json"
 
 # brew update failing
 touch "$FIX/fail-brew-update"
