@@ -60,6 +60,7 @@ function fish_greeting
     fastfetch
 end
 ```
+(Simplified; the real one also shows the setup version and, on the Mac, `software not checked for N days: mac-outdated` when the last [software check](../software-updates/software-updates.md) is older than 7 days.)
 fastfetch shows OS, CPU, memory, uptime. It auto-detects the system and shows the correct distro name and logo whether running on macOS or any Linux distro.
 
 **`~/.config/starship.toml`:**

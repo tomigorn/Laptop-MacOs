@@ -5,7 +5,7 @@ Global rules apply (`~/.claude/CLAUDE.md`). Only what is special here:
 - `homelab-dns/install.sh`, `homelab-dns/uninstall.sh` (sudo, LaunchDaemons), `macos-settings/dock-add-spacer.sh` (defaults, killall), `window-manager/install.sh`, `window-manager/restart-launcher.sh` (LaunchAgents, osascript): edit and review only, I run them.
 
 ## Workflow
-- Install step: `terminal/install.sh` for `terminal/`; `ssh/install.sh` for `ssh/`; `backdrop-carousel/install.sh` for `backdrop-carousel/`; `window-manager/install.sh` for `window-manager/` (I run it, see above).
+- Install step: `terminal/install.sh` for `terminal/`; `ssh/install.sh` for `ssh/`; `backdrop-carousel/install.sh` for `backdrop-carousel/`; `software-updates/install.sh` for `software-updates/`; `window-manager/install.sh` for `window-manager/` (I run it, see above).
 - Try it: a new fish shell; for remote changes an `xxhc` connect.
 - Tests: `tests/test-all.sh` (offline, all folders); also the smoke test after every change on this Mac.
 - Live test: `terminal/tests/concurrent-sessions.fish <host>`, against a remote host; ask me which host.

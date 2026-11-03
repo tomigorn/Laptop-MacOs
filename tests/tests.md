@@ -13,12 +13,13 @@
 |---|---|
 | `backdrop-carousel/` | `sync.sh` |
 | `homelab-dns/` | `homelab-dns.sh` |
+| `software-updates/` | `mac-outdated.sh` |
 | `ssh/` | `ssh-why.fish` |
 | `terminal/` | `greeting.fish`, `xxhc.fish`, `wrappers.sh` |
 | `virt-manager/` | `launcher.sh` |
 | `window-manager/` | `arrange.sh`, `bottom.sh`, `launcher.sh`, `make-icon.sh`, `model-fallback.sh` |
 
-All stub external tools (ssh, curl, yabai, ...) and use a temp `HOME`; nothing is installed or changed on the Mac.
+All stub external tools (ssh, curl, yabai, brew, sudo, ...) and use a temp `HOME`; nothing is installed or changed on the Mac.
 
 ## Adding a test
 

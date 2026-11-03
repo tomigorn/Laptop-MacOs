@@ -12,6 +12,7 @@ Reproducible blueprint for configuring a Mac to my preferences. One folder per t
 | USB-C docking station | [docking-station/](docking-station/docking-station.md) | dock guide, [ethernet NAC](docking-station/ethernet-nac.md), `net-diag.sh` |
 | Virtualization | [virt-manager/](virt-manager/virt-manager.md) | virt-manager / libvirt / QEMU, launchable from Spotlight. Install: `virt-manager/install.sh` |
 | Obsidian | [obsidian/](obsidian/obsidian.md) | CSS snippet for completed tasks |
+| Software updates | [software-updates/](software-updates/software-updates.md) | `mac-outdated`: every outdated app, one install command. Install: `software-updates/install.sh` |
 | Backdrop carousel | [backdrop-carousel/](backdrop-carousel/backdrop-carousel.md) | sync script for a Shortcut. Install: `backdrop-carousel/install.sh` |
 | Git multi-account | [multiple-git-accounts/](multiple-git-accounts/multiple-git-accounts.md) | git identity per folder, signing, secret scan |
 | Tests | [tests/](tests/tests.md) | `tests/test-all.sh` runs every offline test and syntax check |
