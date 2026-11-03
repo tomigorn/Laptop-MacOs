@@ -16,6 +16,7 @@ touch "$ALLCALLS"
 export HOME="$WORK/home"
 export PATH="$BIN:/usr/bin:/bin"
 export FIX CALLS ALLCALLS
+export MAC_OUTDATED_TEST=1
 export MAC_OUTDATED_PRIVILEGESCLI="$BIN/PrivilegesCLI"
 export MAC_OUTDATED_MSUPDATE="$BIN/msupdate"
 export MAC_OUTDATED_RUM="$BIN/RemoteUpdateManager"
@@ -342,6 +343,18 @@ check "missing softwareupdate: note" contains "$out" "skipped (softwareupdate no
 check "missing pipx: note" contains "$out" "skipped (pipx not installed)"
 check "missing code: note" contains "$out" "skipped (code not found)"
 check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 → 2.71.1"
+
+# ── test hooks: path overrides only with MAC_OUTDATED_TEST=1 ─────────────────
+paths() { /opt/homebrew/bin/bash -c 'source "$1"; printf "%s\n" "$PRIVILEGESCLI" "$MSUPDATE" "$RUM" "$APP_DIRS"' _ "$SCRIPT"; }
+check "hooks: overrides used in tests" equals "$(paths)" "$BIN/PrivilegesCLI
+$BIN/msupdate
+$BIN/RemoteUpdateManager
+$APPS"
+check "hooks: overrides ignored without MAC_OUTDATED_TEST=1" equals "$(MAC_OUTDATED_TEST='' paths)" "/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI
+/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate
+/usr/local/bin/RemoteUpdateManager
+/Applications:$HOME/Applications"
+check "hooks: sourcing runs nothing" equals "$(: > "$CALLS"; paths >/dev/null; calls)" ""
 
 # ── usage ────────────────────────────────────────────────────────────────────
 run --help

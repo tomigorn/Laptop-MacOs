@@ -3,10 +3,16 @@
 #   mac-outdated [--install | --help]
 set -uo pipefail
 
-PRIVILEGESCLI=${MAC_OUTDATED_PRIVILEGESCLI:-/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI}
-MSUPDATE=${MAC_OUTDATED_MSUPDATE:-/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate}
-RUM=${MAC_OUTDATED_RUM:-/usr/local/bin/RemoteUpdateManager}
-APP_DIRS=${MAC_OUTDATED_APP_DIRS:-/Applications:$HOME/Applications}
+PRIVILEGESCLI=/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI
+MSUPDATE="/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate"
+RUM=/usr/local/bin/RemoteUpdateManager
+APP_DIRS=/Applications:$HOME/Applications
+if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; never honoured otherwise, RUM runs under sudo
+  PRIVILEGESCLI=${MAC_OUTDATED_PRIVILEGESCLI:-$PRIVILEGESCLI}
+  MSUPDATE=${MAC_OUTDATED_MSUPDATE:-$MSUPDATE}
+  RUM=${MAC_OUTDATED_RUM:-$RUM}
+  APP_DIRS=${MAC_OUTDATED_APP_DIRS:-$APP_DIRS}
+fi
 STAMP="$HOME/.local/state/mac-outdated/last-check"
 MIN_ADMIN_MINUTES=15
 SKIPPED=3
@@ -552,4 +558,4 @@ main() {
   esac
 }
 
-main "$@"
+[ "${BASH_SOURCE[0]}" != "$0" ] || main "$@"
