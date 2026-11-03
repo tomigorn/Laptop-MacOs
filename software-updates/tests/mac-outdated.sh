@@ -41,12 +41,12 @@ case "$1" in
       while [ ! -f "$FIX/go" ] && [ "$i" -lt 60 ]; do sleep 0.1; i=$((i + 1)); done; echo
     fi
     printf "==> Upgrading 1 outdated package\n50%%\r100%%\n"
-    [ -f "$FIX/fail-brew" ] && exit 1; exit 0 ;;
+    [ -f "$FIX/exit-brew" ] && exit "$(cat "$FIX/exit-brew")"; [ -f "$FIX/fail-brew" ] && exit 1; exit 0 ;;
 esac'
 stub msupdate '
 case "$1" in
   --list) cat "$FIX/msupdate-list.txt" ;;
-  --install) [ -f "$FIX/fail-msupdate" ] && exit 1; exit 0 ;;
+  --install) [ -f "$FIX/exit-msupdate" ] && exit "$(cat "$FIX/exit-msupdate")"; [ -f "$FIX/fail-msupdate" ] && exit 1; exit 0 ;;
 esac'
 stub RemoteUpdateManager '
 case "$1" in
@@ -466,6 +466,14 @@ check "brew failing: step line" has "$out" "brew \\.+ failed \\(exit 1\\)"
 check "brew failing: others installed" has "$out" "Microsoft AutoUpdate \\.+ installed"
 check "brew failing: total" has "$out" "total 6 installed · 1 failed"
 rm -f "$FIX/fail-brew"
+
+# a real exit 3 from a tool is a failure, not a skip
+echo 3 > "$FIX/exit-msupdate"
+run --install
+rm -f "$FIX/exit-msupdate"
+check "tool exit 3: exit 1" equals "$rc" 1
+check "tool exit 3: failed, not skipped" has "$out" "Microsoft AutoUpdate \\.+ failed \\(exit 3\\)"
+check "tool exit 3: total" has "$out" "total 6 installed · 1 failed"
 
 touch "$FIX/fail-softwareupdate"
 run --install

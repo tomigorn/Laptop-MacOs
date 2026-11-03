@@ -15,8 +15,7 @@ if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; nev
 fi
 STAMP="$HOME/.local/state/mac-outdated/last-check"
 MIN_ADMIN_MINUTES=15
-SKIPPED=3
-EXPIRED=4
+STEP_STATUS=""  # set by an install step instead of its exit code: missing, expired
 
 SOURCES=(brew msupdate adobe mas macos pipx vscode sparkle unmanaged)
 INSTALL_ORDER=(adobe mas brew msupdate pipx vscode macos)
@@ -437,43 +436,43 @@ require_admin() {
 
 still_admin() { is_admin_status "$("$PRIVILEGESCLI" --status 2>&1)"; }
 
-# ── install_<src>: 0 ok, 1 failed, $SKIPPED tool missing, $EXPIRED admin ran out ──
+# ── install_<src>: the tool's exit code; a step that does not run sets STEP_STATUS and returns 0 ──
 install_macos() {  # runs on the terminal, not through a pipe: softwareupdate may ask for the owner password
-  command -v softwareupdate >/dev/null || return "$SKIPPED"
-  still_admin || return "$EXPIRED"
+  command -v softwareupdate >/dev/null || { STEP_STATUS=missing; return 0; }
+  still_admin || { STEP_STATUS=expired; return 0; }
   local list rc
   list=$(softwareupdate --list 2>&1)
   sudo softwareupdate --install --all; rc=$?
   grep -q 'Action: restart' <<< "$list" && echo "    restart required: restart the Mac when it suits you"
-  [ "$rc" -eq 0 ]
+  return "$rc"
 }
 install_adobe() {
-  [ -x "$RUM" ] || return "$SKIPPED"
-  still_admin || return "$EXPIRED"
+  [ -x "$RUM" ] || { STEP_STATUS=missing; return 0; }
+  still_admin || { STEP_STATUS=expired; return 0; }
   sudo "$RUM" --action=install
 }
 install_brew() {
-  command -v brew >/dev/null || return "$SKIPPED"
+  command -v brew >/dev/null || { STEP_STATUS=missing; return 0; }
   brew update || echo "brew update failed, upgrading anyway"
   brew upgrade --greedy
 }
 install_msupdate() {
-  [ -x "$MSUPDATE" ] || return "$SKIPPED"
+  [ -x "$MSUPDATE" ] || { STEP_STATUS=missing; return 0; }
   "$MSUPDATE" --install
 }
 install_mas() {
   local mas
-  mas=$(command -v mas) || return "$SKIPPED"
-  still_admin || return "$EXPIRED"
+  mas=$(command -v mas) || { STEP_STATUS=missing; return 0; }
+  still_admin || { STEP_STATUS=expired; return 0; }
   sudo "$mas" upgrade
 }
 install_pipx() {
-  command -v pipx >/dev/null || return "$SKIPPED"
+  command -v pipx >/dev/null || { STEP_STATUS=missing; return 0; }
   pipx upgrade-all
 }
 install_vscode() {
   local code
-  code=$(code_cmd) || return "$SKIPPED"
+  code=$(code_cmd) || { STEP_STATUS=missing; return 0; }
   "$code" --update-extensions
 }
 
@@ -511,15 +510,17 @@ install_mode() {
   for src in "${INSTALL_ORDER[@]}"; do
     label=${LABELS[$src]}
     printf '\n%s\n' "$(c 1 "── $label")"
+    STEP_STATUS=""
     if [ "$src" = macos ]; then
       install_macos; rc=$?
     else
-      "install_$src" 2>&1 | indent; rc=${PIPESTATUS[0]}
+      "install_$src" > >(indent) 2>&1; rc=$?
+      wait "$!"
     fi
-    case $rc in
-      0) result[$src]=installed; installed+=1; word=$(c 32 installed) ;;
-      "$SKIPPED") result[$src]="skipped ($src not installed)"; skipped+=1; word=$(c 33 "${result[$src]}") ;;
-      "$EXPIRED") result[$src]="skipped (admin expired: click Privileges and rerun)"; skipped+=1; failed=1; word=$(c 33 "${result[$src]}") ;;
+    case $STEP_STATUS:$rc in
+      missing:*) result[$src]="skipped ($src not installed)"; skipped+=1; word=$(c 33 "${result[$src]}") ;;
+      expired:*) result[$src]="skipped (admin expired: click Privileges and rerun)"; skipped+=1; failed=1; word=$(c 33 "${result[$src]}") ;;
+      :0) result[$src]=installed; installed+=1; word=$(c 32 installed) ;;
       *) result[$src]="failed (exit $rc)"; nfailed+=1; failed=1; word=$(c 31 "failed (exit $rc)") ;;
     esac
     progress_start "$label"
