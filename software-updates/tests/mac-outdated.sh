@@ -60,7 +60,7 @@ case "$1" in
 esac'
 stub softwareupdate '
 case "$1" in
-  --list) [ -f "$FIX/fail-softwareupdate-list" ] && { echo "Can’t connect to the Apple Software Update server." >&2; exit 1; }; cat "$FIX/softwareupdate-list.txt" >&2 ;;
+  --list) [ -f "$FIX/fail-softwareupdate-list" ] && { echo "Cannot connect to the Apple Software Update server." >&2; exit 1; }; cat "$FIX/softwareupdate-list.txt" >&2 ;;
   --install) echo "Restart is required to complete installation"; [ -f "$FIX/fail-softwareupdate" ] && exit 1; exit 0 ;;
 esac'
 stub sw_vers 'echo 27.2'

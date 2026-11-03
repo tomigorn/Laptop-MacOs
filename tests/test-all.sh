@@ -13,14 +13,15 @@ record() {  # record <name> <rc>
 }
 
 echo "== tests"
+tmp="$(mktemp "${TMPDIR:-/tmp}/test-all.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
 for t in */tests/*; do
   [ -f "$t" ] && [ -x "$t" ] || continue
   case "$(basename "$t")" in concurrent-sessions.fish) continue ;; esac
-  if "$t" > /tmp/test-all.$$.out 2>&1; then rc=0; else rc=$?; fi
-  [ "$rc" -eq 0 ] || sed 's/^/      /' /tmp/test-all.$$.out
+  if "$t" > "$tmp" 2>&1; then rc=0; else rc=$?; fi
+  [ "$rc" -eq 0 ] || sed 's/^/      /' "$tmp"
   record "$t" "$rc"
 done
-rm -f /tmp/test-all.$$.out
 
 echo "== syntax"
 have_shellcheck=0; command -v shellcheck >/dev/null 2>&1 && have_shellcheck=1
