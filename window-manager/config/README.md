@@ -60,7 +60,7 @@ manager"), so it is current whenever you arrive here to edit. To refresh by hand
 ~/.config/yabai/yabai-snap.sh connected
 ```
 
-In `zones.conf` itself, connected screens are marked with `* ` in front of their `monitor` line (or of the `model` rule they use), updated on every shortcut and plug in/out. If yabai isn't running, both are left untouched.
+In `zones.conf` itself, connected screens are marked with `* ` in front of their `monitor` line (or of the `model` rule they use), updated on every shortcut and plug in/out. The file is replaced in one step, so runs firing at once (docking, yabai start) never empty it. If yabai isn't running, both are left untouched.
 
 ## Change window sizes — `zones.conf`
 
@@ -86,7 +86,7 @@ re-reads this file on every keypress). Sizes examples:
 | `100`      | one full-width zone |
 
 The number of values = how many stops you walk through on that monitor.
-`layout default …` is used for any monitor without its own `layout` line.
+`layout default …` is used for any monitor without its own `layout` line (no `default` line: 50 50).
 
 ## Add a monitor / a new work location
 

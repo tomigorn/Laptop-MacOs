@@ -87,7 +87,7 @@ bottom  <pt>                         # gap kept free at the bottom of every scre
 * monitor …                          # leading "* " = connected right now (set automatically)
 ```
 
-Lookup: UUID's name (if it has a `layout` line) → `model` rule → `layout default`.
+Lookup: UUID's name (if it has a `layout` line) → `model` rule → `layout default` → 50 50.
 
 Examples for the sizes on a `layout` line:
 
@@ -174,7 +174,7 @@ arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
 Spotlight app always leaves you looking at current information.
 If yabai isn't running, the command says so and changes nothing.
 
-`zones.conf` also marks them: `* ` in front of the `monitor` line of each connected screen, or of the `model` rule a screen without its own line uses; the other lines start with two spaces, so the columns stay aligned. Every run of `yabai-snap.sh` (any shortcut, plug in/out) updates the marks; the file is only rewritten when a mark changes. Because `zones.conf` is in the repo, git shows it as modified after a plug in/out.
+`zones.conf` also marks them: `* ` in front of the `monitor` line of each connected screen, or of the `model` rule a screen without its own line uses; the other lines start with two spaces, so the columns stay aligned. Every run of `yabai-snap.sh` (any shortcut, plug in/out) updates the marks; the file is only rewritten when a mark changes, and then replaced in one step (temp file + rename), so runs firing at once never empty it. Because `zones.conf` is in the repo, git shows it as modified after a plug in/out.
 
 Unlike the other subcommands, `connected` doesn't need a focused window, so it
 skips the focused-window guard that makes the snap commands no-op.
@@ -211,7 +211,7 @@ window-manager/
 ├── RestartIcon.icns            # restart launcher's icon (white refresh glyph on blue)
 ├── window-manager.md           # this file
 ├── VERSION                     # window manager version (tag window-manager-X.Y.Z)
-├── tests/model-fallback.sh     # tests for the model fallback (stubs yabai + ioreg)
+├── tests/model-fallback.sh     # tests for the model fallback, marks and safe rewrites (stubs yabai + ioreg)
 ├── tests/arrange.sh            # tests for arrange (stubs yabai, ioreg, displayplacer)
 ├── tests/bottom.sh             # tests for the fixed bottom gap (stubs yabai)
 └── config/
