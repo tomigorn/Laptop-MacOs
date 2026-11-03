@@ -4,11 +4,11 @@ One command for every outdated piece of software on this Mac. Install: `software
 
 | Command | Admin | Does |
 |---|---|---|
-| `mac-outdated` | no | check all sources, print progress, details and a summary, write the last-check stamp |
+| `mac-outdated` | no | check all sources, print progress, details and a summary, write the last-check stamp (not when a check failed) |
 | `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update; sudo may ask for your password again for later steps |
 | `mac-outdated --help` | no | usage |
 
-Exit: `0` nothing outdated / all installed, `1` something outdated / something failed, `2` usage error or admin precondition not met.
+Exit: `0` nothing outdated / all installed, `1` something outdated / a check or step failed, `2` usage error or admin precondition not met.
 
 ## Output
 
@@ -36,7 +36,8 @@ mac-outdated · 2026-11-03 11:20
   next: mac-outdated --install
 ```
 
-- One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped). Adobe is only listed with admin, so check mode shows `checked during --install`.
+- One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped, `!` check failed).
+- A source that could not be checked (`brew outdated`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding. Adobe is only listed with admin, so check mode shows `checked during --install`.
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
 - `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (…)`) and a summary.

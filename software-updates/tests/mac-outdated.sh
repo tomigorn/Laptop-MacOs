@@ -29,7 +29,7 @@ stub() {
 stub brew '
 case "$1" in
   update) [ -f "$FIX/fail-brew-update" ] && exit 1; exit 0 ;;
-  outdated) cat "$FIX/brew-outdated.json" ;;
+  outdated) [ -f "$FIX/fail-brew-outdated" ] && { echo "Error: brew outdated failed" >&2; exit 1; }; cat "$FIX/brew-outdated.json" ;;
   info)
     if [ "$4" = --installed ]; then cat "$FIX/brew-info-installed.json"; exit 0; fi
     [ -f "$FIX/brew-info-$4.json" ] || { echo "Error: Cask $4 is unavailable" >&2; exit 1; }
@@ -54,12 +54,12 @@ case "$1" in
 esac'
 stub mas '
 case "$1" in
-  outdated) [ "$2" = --json ] || exit 9; echo "Warning: Found a likely App Store app that is not indexed in Spotlight" >&2; cat "$FIX/mas-outdated.json" ;;
+  outdated) [ "$2" = --json ] || exit 9; [ -f "$FIX/fail-mas-outdated" ] && { echo "Error: offline" >&2; exit 1; }; echo "Warning: Found a likely App Store app that is not indexed in Spotlight" >&2; cat "$FIX/mas-outdated.json" ;;
   upgrade) [ -f "$FIX/fail-mas" ] && exit 1; exit 0 ;;
 esac'
 stub softwareupdate '
 case "$1" in
-  --list) cat "$FIX/softwareupdate-list.txt" >&2 ;;
+  --list) [ -f "$FIX/fail-softwareupdate-list" ] && { echo "Can’t connect to the Apple Software Update server." >&2; exit 1; }; cat "$FIX/softwareupdate-list.txt" >&2 ;;
   --install) echo "Restart is required to complete installation"; [ -f "$FIX/fail-softwareupdate" ] && exit 1; exit 0 ;;
 esac'
 stub sw_vers 'echo 27.2'
@@ -300,6 +300,31 @@ check "nothing outdated: progress" has "$out" "Microsoft AutoUpdate \\.+ up to d
 check "nothing outdated: no total" lacks "$out" "total"
 check "nothing outdated: no install hint" lacks "$out" "next:"
 check "nothing outdated: stamp written" test -f "$HOME/.local/state/mac-outdated/last-check"
+
+# ── check mode: failed checks ────────────────────────────────────────────────
+touch "$FIX/fail-brew-outdated"
+rm -f "$HOME/.local/state/mac-outdated/last-check"
+run
+check "brew check failing: exit 1" equals "$rc" 1
+check "brew check failing: progress" has "$out" "^ brew \\.+ check failed$"
+check "brew check failing: summary row" has "$out" "^ brew ! check failed$"
+check "brew check failing: total" has "$out" "^ total 0 1 check failed$"
+check "brew check failing: not up to date" lacks "$out" "everything up to date"
+check "brew check failing: no stamp" test ! -e "$HOME/.local/state/mac-outdated/last-check"
+MAC_OUTDATED_COLOR=always run
+check "brew check failing: red" grep -q $'\033\\[31mcheck failed' "$WORK/out"
+rm -f "$FIX/fail-brew-outdated"
+
+# offline: the App Store and macOS lists fail, the others still count
+fixtures_outdated
+touch "$FIX/fail-mas-outdated" "$FIX/fail-softwareupdate-list"
+run
+check "offline: exit 1" equals "$rc" 1
+check "offline: App Store check failed" has "$out" "^ App Store \\.+ check failed$"
+check "offline: macOS check failed" has "$out" "^ macOS \\.+ check failed$"
+check "offline: macOS summary row" has "$out" "^ macOS ! check failed$"
+check "offline: total" has "$out" "^ total 12 10 via --install · 2 by hand · 2 checks failed$"
+check "offline: no stamp" test ! -e "$HOME/.local/state/mac-outdated/last-check"
 
 # ── check mode: missing tools ────────────────────────────────────────────────
 fixtures_outdated
