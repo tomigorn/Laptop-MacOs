@@ -127,6 +127,8 @@ cask_like() {
 fixtures_outdated() {
   rm -rf "$FIX" "$APPS"; mkdir -p "$FIX" "$APPS"
   cp "$FIXTURES"/* "$FIX/"
+  jq --arg k token '.casks |= map({($k): (.name[0] | ascii_downcase | gsub(" "; "-")), auto_updates: (.name[0] == "Discord")} + .)' \
+    "$FIXTURES/brew-info-installed.json" > "$FIX/brew-info-installed.json"
   cp "$FIX/pip-index-fail.txt" "$FIX/pip-index-example-tool.txt"
   cp "$FIX/pip-index-xxh.txt" "$FIX/pip-index-xxh-xxh.txt"
   make_app Fork com.example.fork 2.70.2 https://example.com/fork/appcast.xml sparkle
@@ -309,6 +311,37 @@ rm -f "$FIX/brew-update-stderr.txt" "$FIX/brew-list-full.txt"
 run
 check "no untrusted tap: no note" lacks "$out" "untrusted tap"
 
+# casks: the real app version decides; auto-updating casks are updated by the app itself
+jq '.casks += [
+  {name: "utm", installed_versions: ["4.7.5"], current_version: "5.0.8", pinned: false},
+  {name: "discord", installed_versions: ["0.0.389"], current_version: "0.0.421", pinned: false},
+  {name: "betterdisplay", installed_versions: ["4.2.3"], current_version: "5.2.1", pinned: false}]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
+make_app UTM com.utmapp.UTM 5.0.8
+make_app Discord com.hammerandchisel.discord 0.0.420
+make_app BetterDisplay pro.betterdisplay.BetterDisplay 4.2.3
+run
+check "stale cask: dim note" contains "$out" "utm: app already at 5.0.8 (brew's record is stale)"
+check "stale cask: no row" lacks "$out" "utm 4.7.5"
+check "auto-updating cask: not in the casks group" lacks "$(sed -n '/^ casks$/,/updates itself/p' <<< "$out")" "discord"
+check "auto-updating cask: under updates itself on launch" has "$(sed -n '/updates itself on launch/,$p' <<< "$out")" "Discord 0.0.420 → 0.0.421"
+check "auto-updating cask: open hint" contains "$out" "open Discord to update"
+check "older non-auto cask: row" contains "$out" "betterdisplay 4.2.3 → 5.2.1"
+check "casks: brew progress" has "$out" "brew \\.+ 5 outdated · 1 by hand"
+check "casks: total" has "$out" "total 14 11 via --install · 3 by hand"
+MAC_OUTDATED_COLOR=always run
+check "stale cask: note dim" grep -q $'\033\\[2mutm: app already at' "$WORK/out"
+admin_setup admin 20
+run --install
+check "casks install: formulae without --greedy" contains "$(calls)" "brew upgrade --formula"
+check "casks install: only older non-auto casks" contains "$(calls)" "brew upgrade --cask ghostty betterdisplay"
+check "casks install: no greedy upgrade" lacks "$(calls)" "--greedy"
+jq '.casks = [{name: "utm", installed_versions: ["4.7.5"], current_version: "5.0.8", pinned: false}]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
+run --install
+check "casks install: nothing to upgrade, no cask call" lacks "$(calls)" "brew upgrade --cask"
+rm -rf "$APPS/UTM.app" "$APPS/BetterDisplay.app"
+make_app Discord com.hammerandchisel.discord 0.0.389
+cp "$FIXTURES/brew-outdated.json" "$FIX/brew-outdated.json"
+
 # downgrade marker
 jq '.formulae[0].current_version = "3.0.0" | .formulae[0].installed_versions = ["3.15.2_1"]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
 run
@@ -440,7 +473,8 @@ RemoteUpdateManager --action=install
 sudo mas upgrade
 mas upgrade
 brew update
-brew upgrade --greedy
+brew upgrade --formula
+brew upgrade --cask ghostty
 msupdate --install --wait 600
 pipx upgrade-all
 code --update-extensions
@@ -621,7 +655,7 @@ check "1 min left before a sudo step: exit 1" equals "$rc" 1
 check "1 min left before a sudo step: Adobe not run" lacks "$(calls)" "RemoteUpdateManager --action=install"
 check "1 min left before a sudo step: macOS not run" lacks "$(calls)" "softwareupdate --install"
 check "1 min left before a sudo step: Adobe skipped" has "$out" "Adobe \\.+ skipped \\(admin expires in 1 min: click Privileges and rerun\\)"
-check "1 min left before a sudo step: brew still runs" contains "$(calls)" "brew upgrade --greedy"
+check "1 min left before a sudo step: brew still runs" contains "$(calls)" "brew upgrade --formula"
 printf 'User jane has administrator privileges\nAdministrator privileges expire in 2 minutes\n' > "$FIX/privileges-status-later.txt"
 run --install
 check "2 min left before a sudo step: exit 0" equals "$rc" 0
@@ -651,6 +685,7 @@ check "root: says it asks for the password itself" contains "$out" "asks for you
 all="$(cat "$ALLCALLS")"
 check "PrivilegesCLI only ever --status" no_match "$all" '^PrivilegesCLI .*(--add|--remove)'
 check "brew never via sudo" no_match "$all" '^sudo brew'
+check "brew upgrade never greedy" no_match "$all" '^brew upgrade .*--greedy'
 check "only sudo -v, macOS, Adobe and mas upgrade via sudo" only_allowed_sudo "$all"
 check "softwareupdate never restarts" no_match "$all" '^softwareupdate .*(-R|--restart|--reboot)'
 

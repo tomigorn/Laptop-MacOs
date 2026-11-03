@@ -41,6 +41,15 @@ mac-outdated · 2026-11-03 11:20
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - brew warns `The following taps are not trusted:` (in `brew update`/`brew outdated` stderr) -> yellow note `brew ignores untrusted tap <tap> (its formulae get no updates): brew trust --formula <tap>/<formula> …` with the installed formulae of that tap (also those installed under the tap's old name), counted by hand (`brew by hand` row).
 - "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
+- Outdated casks are checked against the real app (`CFBundleShortVersionString` in `/Applications` or `~/Applications`):
+
+| Real app | Shown | Counts |
+|---|---|---|
+| at or above brew's latest | dim `<token>: app already at <ver> (brew's record is stale)` | no |
+| older, cask `auto_updates` | under "updates itself on launch": `open <App> to update` | by hand |
+| older (or unknown), no `auto_updates` | casks row | via `--install` |
+
+- brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.
 - `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
 - Adobe exit 2 (an update could not be installed, often because an Adobe app is open; details in Adobe's RUM log) shows yellow `some updates failed (Adobe exit 2: …)`, still exit 1; exit 1 is `failed (exit 1)`.
 - Ctrl-C during `--install` stops the whole run: the current step ends, then `interrupted — remaining steps not run`, the summary so far (`interrupted` / `not run`), exit 130. A step ending with 130 counts the same.
@@ -58,7 +67,7 @@ mac-outdated · 2026-11-03 11:20
 
 | Source | Check | Install |
 |---|---|---|
-| brew (formulae + casks) | `brew outdated --greedy --json=v2` (after `brew update`) | `brew upgrade --greedy`, never under sudo |
+| brew (formulae + casks) | `brew outdated --greedy --json=v2` (after `brew update`), casks checked against the real app | `brew upgrade --formula`, then `brew upgrade --cask <tokens>` only for non-auto-updating casks whose app is older; never `--greedy`, never under sudo |
 | Microsoft AutoUpdate | `msupdate --list` | `msupdate --list` first: no updates -> `up to date`; else `msupdate --install --wait 600` (without a wait it can hang until the MAU window is clicked) |
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
 | App Store | `mas outdated --json` (note if `mas` is missing) | `sudo mas upgrade` (mas needs root to update apps) |
@@ -71,7 +80,7 @@ mac-outdated · 2026-11-03 11:20
 
 Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, VS Code, macOS last (sudo, longest). A failing source does not stop the others; a summary follows.
 
-`brew upgrade --greedy` runs each cask's own uninstall/quit steps: it may quit running apps and show macOS Automation/App Management prompts, and pkg casks (e.g. XQuartz) call sudo themselves. Quit Discord, BetterDisplay, Hiddenbar, UTM, XQuartz and apps launched from Ghostty before running.
+`brew upgrade --cask` runs each cask's own uninstall/quit steps: it may quit running apps and show macOS Automation/App Management prompts, and pkg casks (e.g. XQuartz) call sudo themselves. Quit Discord, BetterDisplay, Hiddenbar, UTM, XQuartz and apps launched from Ghostty before running.
 
 ## Admin rules
 
