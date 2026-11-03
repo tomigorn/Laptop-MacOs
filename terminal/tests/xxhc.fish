@@ -22,8 +22,9 @@ printf '%s\n' \
     '  *"-O check"*) exit "${STUB_CHECK_RC:-1}" ;;' \
     'esac' \
     'exit 1' > $WORK/bin/ssh
+printf '#!/bin/sh\nexit "${STUB_AGENT_RC:-0}"\n' > $WORK/bin/ssh-add
 printf '#!/bin/sh\necho XXH-CALLED >> "$SSH_LOG"\nexit 1\n' > $WORK/bin/xxh
-chmod +x $WORK/bin/ssh $WORK/bin/xxh
+chmod +x $WORK/bin/ssh $WORK/bin/xxh $WORK/bin/ssh-add
 set -gx PATH $WORK/bin $PATH
 set -gx SSH_LOG $SSH_LOG
 
@@ -103,10 +104,29 @@ set -l out (xxhc nohost 2>&1 | plain | string collect)
 xxhc nohost >/dev/null 2>&1
 check "xxhc: no arch -> exit 1" test $status -eq 1
 check "xxhc: no arch message" has $out "could not detect remote architecture on nohost"
+check "xxhc: agent has keys -> connection failed hint" has $out "(connection failed?)"
 check "xxhc: aborts before upload" has $out "Aborting — no binaries uploaded."
 check "xxhc: master pre-setup warning" has $out "ControlMaster pre-setup failed"
 check "xxhc: xxh never run" lacks (cat $SSH_LOG | string collect) XXH-CALLED
 check "xxhc: claim dir cleaned" test ! -e $HOME/.ssh/cm/xxh-nohost.users
+
+# xxhc: probe fails, branch on ssh-add -l
+for rc in 1 2
+    : > $SSH_LOG
+    set -gx STUB_PROBE ""
+    set -gx STUB_AGENT_RC $rc
+    set -l out (xxhc nohost 2>&1 | plain | string collect)
+    check "xxhc: ssh-add rc $rc aborts" has $out "Aborting — no binaries uploaded."
+    check "xxhc: ssh-add rc $rc no 'connection failed'" lacks $out "(connection failed?)"
+    if test $rc -eq 1
+        check "xxhc: ssh-add rc 1 hint" has $out "xxhc: no ssh key loaded in the agent — run ssh-add, then retry."
+        check "xxhc: ssh-add rc 1 not the agent-missing hint" lacks $out "no ssh-agent running"
+    else
+        check "xxhc: ssh-add rc 2 hint" has $out "xxhc: no ssh-agent running — start one or load your key, then retry."
+        check "xxhc: ssh-add rc 2 not the no-key hint" lacks $out "no ssh key loaded"
+    end
+end
+set -e STUB_AGENT_RC
 
 # unsupported architecture
 set -gx STUB_PROBE '1000.0\nriscv64'

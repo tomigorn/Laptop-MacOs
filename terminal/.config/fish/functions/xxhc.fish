@@ -150,7 +150,15 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         case '*'
             set_color --bold red
             if test -z "$remote_uname"
-                echo "  xxhc: could not detect remote architecture on $target (connection failed?)."
+                ssh-add -l >/dev/null 2>&1
+                switch $status
+                    case 1
+                        echo "  xxhc: no ssh key loaded in the agent — run ssh-add, then retry."
+                    case 2
+                        echo "  xxhc: no ssh-agent running — start one or load your key, then retry."
+                    case '*'
+                        echo "  xxhc: could not detect remote architecture on $target (connection failed?)."
+                end
             else
                 echo "  xxhc: unsupported remote architecture '$remote_uname' on $target."
                 echo "  Supported: x86_64, aarch64."
