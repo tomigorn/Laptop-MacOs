@@ -468,7 +468,10 @@ install_brew() {
 }
 install_msupdate() {
   [ -x "$MSUPDATE" ] || { STEP_STATUS=missing; return 0; }
-  "$MSUPDATE" --install
+  local list rc
+  list=$("$MSUPDATE" --list 2>&1) || { rc=$?; printf '%s\n' "$list"; return "$rc"; }
+  [ -n "$(parse_msupdate <<< "$list")" ] || { STEP_STATUS=uptodate; return 0; }
+  "$MSUPDATE" --install --wait 600
 }
 install_mas() {
   local mas

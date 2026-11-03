@@ -417,7 +417,7 @@ sudo mas upgrade
 mas upgrade
 brew update
 brew upgrade --greedy
-msupdate --install
+msupdate --install --wait 600
 pipx upgrade-all
 code --update-extensions
 sudo softwareupdate --install --all
@@ -448,6 +448,12 @@ check "no macOS update: up to date" has "$out" "macOS \\.+ up to date"
 check "no macOS update: no install" lacks "$(calls)" "softwareupdate --install"
 check "no macOS update: no admin check for it" equals "$(grep -c '^PrivilegesCLI --status' "$CALLS")" 3
 check "no macOS update: total" has "$out" "total 6 installed · 1 up to date"
+cp "$FIX/msupdate-none.txt" "$FIX/msupdate-list.txt"
+run --install
+check "no Microsoft update: --list first" contains "$(calls)" "msupdate --list"
+check "no Microsoft update: --install never called" lacks "$(calls)" "msupdate --install"
+check "no Microsoft update: up to date" has "$out" "Microsoft AutoUpdate \\.+ up to date"
+cp "$FIXTURES/msupdate-list.txt" "$FIX/msupdate-list.txt"
 echo 3 > "$FIX/privileges-expire-after"
 run --install
 rm -f "$FIX/privileges-expire-after"
