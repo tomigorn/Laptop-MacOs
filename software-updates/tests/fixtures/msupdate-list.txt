@@ -1,0 +1,13 @@
+
+[2KChecking for updates...[2KUpdate Assistant: Checking[2KUpdates available:
+Microsoft Word
+	 Version: 16.115.26110212
+	 Application ID: MSWD2019
+	 Size: 1.32 GB
+	 Package Name: Microsoft_Word_16.115.26110212_Updater.pkg
+Microsoft Excel
+	 Version: 16.115.26110212
+	 Application ID: XCEL2019
+	 Size: 1.21 GB
+	 Package Name: Microsoft_Excel_16.115.26110212_Updater.pkg
+[2KUpdate Assistant: Idle   

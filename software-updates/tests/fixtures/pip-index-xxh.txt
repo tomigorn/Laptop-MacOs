@@ -1,0 +1,4 @@
+xxh-xxh (0.8.15)
+Available versions: 0.8.15, 0.8.14, 0.8.12
+  INSTALLED: 0.8.14
+  LATEST:    0.8.15

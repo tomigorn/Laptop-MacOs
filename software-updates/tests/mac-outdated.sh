@@ -1,0 +1,349 @@
+#!/opt/homebrew/bin/bash
+# mac-outdated check and --install against stubbed brew, msupdate, softwareupdate, sudo, PrivilegesCLI, ... with a temp HOME.
+#   software-updates/tests/mac-outdated.sh
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT="$HERE/../mac-outdated"
+FIXTURES="$HERE/fixtures"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/mac-outdated.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
+BIN="$WORK/bin" FIX="$WORK/fix" APPS="$WORK/apps"
+CALLS="$WORK/calls" ALLCALLS="$WORK/allcalls"
+mkdir -p "$BIN" "$WORK/home"
+touch "$ALLCALLS"
+
+export HOME="$WORK/home"
+export PATH="$BIN:/usr/bin:/bin"
+export FIX CALLS ALLCALLS
+export MAC_OUTDATED_PRIVILEGESCLI="$BIN/PrivilegesCLI"
+export MAC_OUTDATED_MSUPDATE="$BIN/msupdate"
+export MAC_OUTDATED_RUM="$BIN/RemoteUpdateManager"
+export MAC_OUTDATED_PRIVILEGES_PLIST="$WORK/privileges.plist"
+export MAC_OUTDATED_LOG="$BIN/log"
+export MAC_OUTDATED_APP_DIRS="$APPS"
+
+# stub <name> <body>: every call is logged as "<name> <args>"; a file $FIX/fail-<name> makes install actions fail
+stub() {
+  printf '#!/bin/sh\necho "%s $*" | tee -a "$CALLS" >> "$ALLCALLS"\n%s\n' "$1" "$2" > "$BIN/$1"
+  chmod +x "$BIN/$1"
+}
+stub brew '
+case "$1" in
+  update) [ -f "$FIX/fail-brew-update" ] && exit 1; exit 0 ;;
+  outdated) cat "$FIX/brew-outdated.json" ;;
+  info)
+    if [ "$4" = --installed ]; then cat "$FIX/brew-info-installed.json"; exit 0; fi
+    [ -f "$FIX/brew-info-$4.json" ] || { echo "Error: Cask $4 is unavailable" >&2; exit 1; }
+    cat "$FIX/brew-info-$4.json" ;;
+  upgrade) [ -f "$FIX/fail-brew" ] && exit 1; exit 0 ;;
+esac'
+stub msupdate '
+case "$1" in
+  --list) cat "$FIX/msupdate-list.txt" ;;
+  --install) [ -f "$FIX/fail-msupdate" ] && exit 1; exit 0 ;;
+esac'
+stub RemoteUpdateManager '
+case "$1" in
+  --action=list) cat "$FIX/rum-list.txt" ;;
+  --action=install) [ -f "$FIX/fail-rum" ] && exit 1; exit 0 ;;
+esac'
+stub mas '
+case "$1" in
+  outdated) cat "$FIX/mas-outdated.txt" ;;
+  upgrade) [ -f "$FIX/fail-mas" ] && exit 1; exit 0 ;;
+esac'
+stub softwareupdate '
+case "$1" in
+  --list) cat "$FIX/softwareupdate-list.txt" >&2 ;;
+  --install) echo "Restart is required to complete installation"; [ -f "$FIX/fail-softwareupdate" ] && exit 1; exit 0 ;;
+esac'
+stub sw_vers 'echo 27.2'
+stub pipx '
+case "$1" in
+  list) cat "$FIX/pipx-list.json" ;;
+  runpip) f="$FIX/pip-index-$2.txt"; [ -f "$f" ] || exit 1; cat "$f"; grep -q ERROR "$f" && exit 1; exit 0 ;;
+  upgrade-all) [ -f "$FIX/fail-pipx" ] && exit 1; exit 0 ;;
+esac'
+stub code '
+case "$1" in
+  --list-extensions) cat "$FIX/code-extensions.txt" ;;
+  --update-extensions) [ -f "$FIX/fail-code" ] && exit 1; exit 0 ;;
+esac'
+stub curl '
+for a; do url=$a; done
+case "$url" in
+  https://example.com/*) cat "$FIX/appcast.xml" ;;
+  *) exit 6 ;;
+esac'
+cat > "$BIN/sudo" <<'EOF'
+#!/bin/sh
+if [ "$1" = -v ]; then echo "sudo -v" | tee -a "$CALLS" >> "$ALLCALLS"; exit 0; fi
+n=$(basename "$1"); shift
+echo "sudo $n $*" | tee -a "$CALLS" >> "$ALLCALLS"
+exec "$(dirname "$0")/$n" "$@"
+EOF
+chmod +x "$BIN/sudo"
+stub PrivilegesCLI '[ "$1" = --status ] && cat "$FIX/privileges-status.txt"; exit 0'
+stub log '[ -f "$FIX/privileges-log.ndjson" ] && cat "$FIX/privileges-log.ndjson"; exit 0'
+
+# make_app <name> <bundle id> <version> [feed] [sparkle|mas]
+make_app() {
+  local app="$APPS/$1.app"
+  mkdir -p "$app/Contents"
+  {
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n'
+    printf '<key>CFBundleIdentifier</key><string>%s</string>\n<key>CFBundleShortVersionString</key><string>%s</string>\n' "$2" "$3"
+    [ -n "${4:-}" ] && printf '<key>SUFeedURL</key><string>%s</string>\n' "$4"
+    printf '</dict></plist>\n'
+  } > "$app/Contents/Info.plist"
+  case "${5:-}" in
+    sparkle) mkdir -p "$app/Contents/Frameworks/Sparkle.framework" ;;
+    mas) mkdir -p "$app/Contents/_MASReceipt" ;;
+  esac
+}
+# cask_like <token> <app name> <version>: a brew info fixture for a cask that installs <app name>.app
+cask_like() {
+  jq --arg a "$2.app" --arg v "$3" \
+    '.casks[0].version = $v | .casks[0].artifacts = [{app: [$a]}]' \
+    "$FIXTURES/brew-info-keepassxc.json" > "$FIX/brew-info-$1.json"
+}
+
+# fixtures_outdated / fixtures_current: a fresh $FIX and app folder for each run
+fixtures_outdated() {
+  rm -rf "$FIX" "$APPS"; mkdir -p "$FIX" "$APPS"
+  cp "$FIXTURES"/* "$FIX/"
+  cp "$FIX/pip-index-fail.txt" "$FIX/pip-index-example-tool.txt"
+  cp "$FIX/pip-index-xxh.txt" "$FIX/pip-index-xxh-xxh.txt"
+  make_app Fork com.example.fork 2.70.2 https://example.com/fork/appcast.xml sparkle
+  make_app Current com.example.current 2.71.1 https://example.com/current/appcast.xml sparkle
+  make_app Broken com.example.broken 1.0 https://unreachable.example.org/appcast.xml sparkle
+  make_app Ghostty com.mitchellh.ghostty 1.0 https://example.com/ghostty/appcast.xml sparkle
+  make_app KeePassXC org.keepassxc.keepassxc 2.7.9
+  make_app "Microsoft Word" com.microsoft.Word 16.114.3
+  make_app "Google Chrome" com.google.Chrome 150.0
+  make_app Telegram ru.keepcoder.Telegram 13.1.0 "" mas
+  make_app "ETH Self Service" com.jamfsoftware.selfservice.mac 11.0
+  make_app NoCask com.example.nocask 1.0
+  cask_like microsoft-word "Microsoft Word" 99.0
+  cask_like google-chrome "Google Chrome" 999.0
+  cask_like telegram Telegram 99.0
+  cask_like eth-self-service "ETH Self Service" 99.0
+}
+fixtures_current() {
+  fixtures_outdated
+  rm -rf "$APPS"; mkdir -p "$APPS"
+  cp "$FIX/brew-outdated-none.json" "$FIX/brew-outdated.json"
+  cp "$FIX/msupdate-none.txt" "$FIX/msupdate-list.txt"
+  cp "$FIX/rum-none.txt" "$FIX/rum-list.txt"
+  : > "$FIX/mas-outdated.txt"
+  cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
+  printf 'xxh-xxh (0.8.14)\n' > "$FIX/pip-index-xxh-xxh.txt"
+  printf 'example-tool (0.1.0)\n' > "$FIX/pip-index-example-tool.txt"
+}
+ts() { date -r "$1" '+%Y-%m-%d %H:%M:%S.000000%z'; }
+# admin_setup <status: admin|standard> <minutes since grant, or "none"> [interval]
+admin_setup() {
+  cp "$FIX/privileges-status-$1.txt" "$FIX/privileges-status.txt"
+  if [ "$2" = none ]; then rm -f "$FIX/privileges-log.ndjson"
+  else
+    local now
+    now=$(date +%s)
+    sed -e "s/@BEFORE@/$(ts $((now - $2 * 60 - 300)))/" -e "s/@GRANT@/$(ts $((now - $2 * 60)))/" \
+        -e "s/@AFTER@/$(ts "$now")/" "$FIXTURES/privileges-log.ndjson" > "$FIX/privileges-log.ndjson"
+  fi
+  if [ -n "${3:-}" ]; then
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>ExpirationInterval</key><integer>%s</integer></dict></plist>\n' "$3" > "$MAC_OUTDATED_PRIVILEGES_PLIST"
+  else rm -f "$MAC_OUTDATED_PRIVILEGES_PLIST"; fi
+}
+
+out="" rc=0
+run() { : > "$CALLS"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 < /dev/null; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
+run_input() { local input="$1"; shift; : > "$CALLS"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 <<< "$input"; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
+calls() { cat "$CALLS"; }
+install_calls() { grep -E '^(sudo|softwareupdate --install|RemoteUpdateManager --action=install|brew (update|upgrade)|msupdate --install|mas upgrade|pipx upgrade-all|code --update-extensions)' "$CALLS"; }
+
+fails=0
+check() {  # check <name> <condition...>
+  local name="$1"; shift
+  if "$@"; then echo "PASS  $name"; else echo "FAIL  $name"; fails=$((fails + 1)); fi
+}
+contains() { [[ "$1" == *"$2"* ]]; }
+lacks() { [[ "$1" != *"$2"* ]]; }
+equals() { [ "$1" = "$2" ]; }
+no_match() { ! grep -qE "$2" <<< "$1"; }
+only_allowed_sudo() {
+  local bad
+  bad=$(grep '^sudo ' <<< "$1" | grep -vE '^sudo (-v|softwareupdate --install --all|RemoteUpdateManager --action=install)$')
+  [ -z "$bad" ]
+}
+
+# ── check mode: parsers ──────────────────────────────────────────────────────
+fixtures_outdated
+run
+check "check: something outdated -> exit 1" equals "$rc" 1
+check "brew: formula, last installed version" contains "$out" "aom 3.15.2 -> 3.15.3"
+check "brew: formula" contains "$out" "bash 5.3.15 -> 5.3.20"
+check "brew: cask" contains "$out" "ghostty 1.3.1 -> 1.4.0"
+check "brew: pinned formula skipped" lacks "$out" "node@20"
+check "brew: update first" equals "$(grep -E '^brew (update|outdated)' "$CALLS" | head -1 | cut -d' ' -f1-2)" "brew update"
+check "msupdate: Word with installed app version" contains "$out" "Microsoft Word 16.114.3 -> 16.115.26110212"
+check "msupdate: Excel without app" contains "$out" "Microsoft Excel ? -> 16.115.26110212"
+check "adobe: product update" contains "$out" "PHSP ? -> 27.1"
+check "adobe: second product" contains "$out" "AEFT ? -> 26.0.1"
+check "adobe: Acrobat update" contains "$out" "AcrobatDC ? -> update"
+check "mas: app update" contains "$out" "Xcode 27.2 -> 27.3"
+check "mas: second app" contains "$out" "Telegram 13.1.0 -> 13.2.0"
+check "macOS: update with restart note" contains "$out" "macOS Golden Gate 27.2.1 27.2 -> 27.2.1 (restart required)"
+check "macOS: other update" contains "$out" "Command Line Tools for Xcode ? -> 27.2"
+check "pipx: outdated package" contains "$out" "xxh-xxh 0.8.14 -> 0.8.15"
+check "pipx: lookup failure is a note" contains "$out" "note: example-tool: latest version lookup failed"
+check "vscode: extension count note" contains "$out" "note: 3 extensions installed, mac-outdated --install updates them"
+check "sparkle: outdated app, newest non-beta" contains "$out" "Fork 2.70.2 -> 2.71.1 (open Fork to update)"
+check "sparkle: current app not listed" lacks "$out" "Current "
+check "sparkle: unreachable appcast is a note" contains "$out" "note: Broken: appcast not reachable"
+check "sparkle: brew-managed app skipped" lacks "$out" "open Ghostty"
+check "unmanaged: cask with same app" contains "$out" "KeePassXC 2.7.9 -> 2.8.0 (brew install --cask --adopt keepassxc)"
+check "unmanaged: Microsoft app excluded" lacks "$out" "adopt microsoft-word"
+check "unmanaged: self-updater excluded" lacks "$out" "adopt google-chrome"
+check "unmanaged: App Store app excluded" lacks "$out" "adopt telegram"
+check "unmanaged: Jamf app excluded" lacks "$out" "adopt eth-self-service"
+check "unmanaged: no cask, no line" lacks "$out" "NoCask"
+check "self-updating listed once" equals "$(grep -c 'updates itself on launch' <<< "$out")" 1
+check "self-updating names the app" contains "$out" "Google Chrome"
+check "summary counts" contains "$out" "16 outdated, 2 need a manual step"
+check "summary install hint" contains "$out" "run: mac-outdated --install"
+check "check runs no install command" equals "$(install_calls | grep -v '^brew update')" ""
+check "stamp written" grep -qE '^[0-9]{10}$' "$HOME/.local/state/mac-outdated/last-check"
+stamp_age=$(( $(date +%s) - $(cat "$HOME/.local/state/mac-outdated/last-check" 2>/dev/null || echo 0) ))
+check "stamp is now" test "$stamp_age" -le 5
+
+# msupdate "Name (version)" layout
+printf 'Updates available:\n\tMicrosoft Outlook (16.115.26110212)\n' > "$FIX/msupdate-list.txt"
+run
+check "msupdate: name (version) layout" contains "$out" "Microsoft Outlook ? -> 16.115.26110212"
+
+# Adobe without admin
+cp "$FIX/rum-noadmin.txt" "$FIX/rum-list.txt"
+run
+check "adobe: needs admin is a note" contains "$out" "note: Adobe: listing needs admin, mac-outdated --install updates Adobe apps"
+
+# brew update failing
+touch "$FIX/fail-brew-update"
+run
+check "brew: update failure is a note" contains "$out" "note: brew update failed"
+check "brew: still lists outdated" contains "$out" "bash 5.3.15 -> 5.3.20"
+
+# ── check mode: nothing outdated ─────────────────────────────────────────────
+fixtures_current
+rm -f "$HOME/.local/state/mac-outdated/last-check"
+run
+check "nothing outdated -> exit 0" equals "$rc" 0
+check "nothing outdated: summary" contains "$out" "0 outdated, 0 need a manual step"
+check "nothing outdated: no install hint" lacks "$out" "run: mac-outdated --install"
+check "nothing outdated: stamp written" test -f "$HOME/.local/state/mac-outdated/last-check"
+
+# ── check mode: missing tools ────────────────────────────────────────────────
+fixtures_outdated
+SAVED_PATH=$PATH
+mkdir -p "$WORK/empty"
+ln -sf "$BIN/curl" "$BIN/sw_vers" "$WORK/empty/"
+PATH="$WORK/empty:/usr/bin:/bin" MAC_OUTDATED_MSUPDATE="$WORK/none/msupdate" MAC_OUTDATED_RUM="$WORK/none/rum" run
+PATH=$SAVED_PATH
+check "missing tools: no crash" equals "$rc" 1
+check "missing brew: note" contains "$out" "note: brew not installed"
+check "missing mas: note" contains "$out" "note: mas not installed: brew install mas"
+check "missing msupdate: note" contains "$out" "note: Microsoft AutoUpdate not installed"
+check "missing RemoteUpdateManager: note" contains "$out" "note: RemoteUpdateManager not installed"
+check "missing softwareupdate: note" contains "$out" "note: softwareupdate not found"
+check "missing pipx: note" contains "$out" "note: pipx not installed"
+check "missing code: note" contains "$out" "note: VS Code CLI not found"
+check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 -> 2.71.1"
+
+# ── usage ────────────────────────────────────────────────────────────────────
+run --help
+check "--help: exit 0" equals "$rc" 0
+check "--help: usage" contains "$out" "usage: mac-outdated [--install]"
+run --bogus
+check "unknown option: exit 2" equals "$rc" 2
+
+# ── install ──────────────────────────────────────────────────────────────────
+fixtures_outdated
+admin_setup standard 0 20
+run --install
+check "not admin: exit 2" equals "$rc" 2
+check "not admin: message" contains "$out" "Click Privileges (lock icon in the menu bar), then rerun mac-outdated --install"
+check "not admin: nothing run" equals "$(install_calls)" ""
+
+admin_setup admin 0 20
+run --install
+expected="sudo -v
+sudo softwareupdate --install --all
+softwareupdate --install --all
+sudo RemoteUpdateManager --action=install
+RemoteUpdateManager --action=install
+brew update
+brew upgrade --greedy
+msupdate --install
+mas upgrade
+pipx upgrade-all
+code --update-extensions"
+check "admin 20 min: exit 0" equals "$rc" 0
+check "admin 20 min: sudo -v once, sudo sources first" equals "$(install_calls)" "$expected"
+check "admin 20 min: restart required shown" contains "$out" "restart required"
+check "admin 20 min: summary" contains "$out" "pipx ok"
+check "admin: grant read from Privileges processes" contains "$(calls)" 'processImagePath CONTAINS "/Privileges.app/"'
+
+admin_setup admin 10 20
+run --install
+check "10 min left: exit 2" equals "$rc" 2
+check "10 min left: message" contains "$out" "only 10 min of admin left, need 15: revert and click Privileges again"
+check "10 min left: nothing run" equals "$(install_calls)" ""
+
+admin_setup admin none 20
+run_input n --install
+check "unknown time + n: exit 2" equals "$rc" 2
+check "unknown time: message" contains "$out" "admin time left unknown"
+check "unknown time: asks" contains "$out" "Continue anyway? [y/N]"
+check "unknown time + n: nothing run" equals "$(install_calls)" ""
+
+run_input y --install
+check "unknown time + y: exit 0" equals "$rc" 0
+check "unknown time + y: runs" equals "$(install_calls)" "$expected"
+
+admin_setup admin 0
+run_input n --install
+check "no interval: unknown time" contains "$out" "admin time left unknown"
+check "no interval + n: exit 2" equals "$rc" 2
+
+admin_setup admin 0 20
+touch "$FIX/fail-brew"
+run --install
+check "brew failing: exit 1" equals "$rc" 1
+check "brew failing: later sources still run" contains "$(calls)" "code --update-extensions"
+check "brew failing: summary" contains "$out" "brew failed"
+check "brew failing: others ok" contains "$out" "msupdate ok"
+rm -f "$FIX/fail-brew"
+
+touch "$FIX/fail-softwareupdate"
+run --install
+check "macOS failing: exit 1" equals "$rc" 1
+check "macOS failing: Adobe still runs" contains "$(calls)" "RemoteUpdateManager --action=install"
+rm -f "$FIX/fail-softwareupdate"
+
+# a missing tool is skipped, not a failure
+mkdir -p "$WORK/nomas"
+for f in "$BIN"/*; do [ "$(basename "$f")" = mas ] || ln -sf "$f" "$WORK/nomas/"; done
+PATH="$WORK/nomas:/usr/bin:/bin" run --install
+check "mas missing: install exit 0" equals "$rc" 0
+check "mas missing: skipped" contains "$out" "mas skipped"
+
+# ── safety, over every run above ─────────────────────────────────────────────
+all="$(cat "$ALLCALLS")"
+check "PrivilegesCLI only ever --status" no_match "$all" '^PrivilegesCLI .*(--add|--remove)'
+check "brew never via sudo" no_match "$all" '^sudo brew'
+check "only sudo -v, macOS and Adobe via sudo" only_allowed_sudo "$all"
+check "softwareupdate never restarts" no_match "$all" '^softwareupdate .*(-R|--restart|--reboot)'
+
+echo
+if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

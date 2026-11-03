@@ -1,0 +1,6 @@
+RemoteUpdateManager version is : 3.1.0.3
+Starting the RemoteUpdateManager...
+
+
+RemoteUpdateManager not launched with Admin privileges.
+RemoteUpdateManager exiting with Return Code (1)

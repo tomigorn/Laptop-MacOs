@@ -1,0 +1,4 @@
+{"timestamp":"@BEFORE@","messageType":"Default","eventType":"logEvent","subsystem":"com.apple.defaults","category":"audit","processImagePath":"\/Applications\/Privileges.app\/Contents\/MacOS\/PrivilegesDaemon","eventMessage":"SAPCorp: User jane now has standard user privileges"}
+{"timestamp":"@GRANT@","messageType":"Default","eventType":"logEvent","subsystem":"com.apple.defaults","category":"audit","processImagePath":"\/Applications\/Privileges.app\/Contents\/MacOS\/PrivilegesDaemon","eventMessage":"SAPCorp: User jane now has administrator privileges"}
+{"timestamp":"@AFTER@","messageType":"Default","eventType":"logEvent","subsystem":"","category":"","processImagePath":"\/Applications\/Privileges.app\/Contents\/MacOS\/PrivilegesAgent","eventMessage":"SAPCorp: Administrator privileges are automatically revoked in 20 minutes"}
+{"count":3,"finished":1}

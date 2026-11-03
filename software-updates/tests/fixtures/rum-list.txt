@@ -1,0 +1,11 @@
+RemoteUpdateManager version is : 3.1.0.3
+Starting the RemoteUpdateManager...
+**************************************************
+Following Updates are applicable on the system :
+	- PHSP/27.1/macarm64
+	- AEFT/26.0.1/macuniversal
+**************************************************
+Following Acrobat/Reader updates are applicable on the system :
+	- AcrobatDC
+*****************************************
+RemoteUpdateManager exiting with Return Code (0)

@@ -1,0 +1,404 @@
+#!/opt/homebrew/bin/bash
+# Lists outdated software from every update source on this Mac; --install installs the updates.
+#   mac-outdated [--install | --help]
+set -uo pipefail
+
+PRIVILEGESCLI=${MAC_OUTDATED_PRIVILEGESCLI:-/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI}
+MSUPDATE=${MAC_OUTDATED_MSUPDATE:-/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate}
+RUM=${MAC_OUTDATED_RUM:-/usr/local/bin/RemoteUpdateManager}
+PRIVILEGES_PLIST=${MAC_OUTDATED_PRIVILEGES_PLIST:-/Library/Managed Preferences/corp.sap.privileges.plist}
+LOG_CMD=${MAC_OUTDATED_LOG:-/usr/bin/log}
+APP_DIRS=${MAC_OUTDATED_APP_DIRS:-/Applications:$HOME/Applications}
+STAMP="$HOME/.local/state/mac-outdated/last-check"
+MIN_ADMIN_MINUTES=15
+SKIPPED=3
+
+SOURCES=(brew msupdate adobe mas macos pipx vscode sparkle unmanaged)
+INSTALL_ORDER=(macos adobe brew msupdate mas pipx vscode)
+declare -A LABELS=(
+  [brew]="brew" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
+  [pipx]="pipx" [vscode]="VS Code extensions" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
+)
+MANUAL_SOURCES=" sparkle unmanaged "
+SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian Docker Steam zoom.us Element "Autodesk Fusion")
+MANAGED_IDS=('com.apple.*' 'com.microsoft.*' 'com.adobe.*' 'com.jamf*' '*ethz*' 'corp.sap.privileges' 'nl.root3.support')
+BREW_APPS=""
+
+usage() {
+  cat <<'EOF'
+usage: mac-outdated [--install]
+  (none)     check every source, print what is outdated (no admin needed)
+  --install  install every available update (needs admin from the Privileges app, >= 15 min left)
+  --help     this text
+exit: 0 nothing outdated / all installed, 1 something outdated / something failed, 2 usage or admin precondition
+EOF
+}
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+item() { printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "${5:-}"; }
+note() { printf '%s||||%s\n' "$1" "$2"; }
+progress() { [ -t 2 ] || return 0; printf '\r\033[Kchecking %s...' "$1" >&2; }
+
+plist_get() { plutil -extract "$2" raw -o - "$1" 2>/dev/null; }
+app_version() { plist_get "$1/Contents/Info.plist" CFBundleShortVersionString; }
+
+newer() {  # newer <installed> <latest>: latest is strictly newer
+  [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$2" ]
+}
+
+all_apps() {
+  local dirs d a
+  IFS=: read -ra dirs <<< "$APP_DIRS"
+  for d in "${dirs[@]}"; do
+    for a in "$d"/*.app; do [ -d "$a" ] && printf '%s\n' "$a"; done
+  done
+}
+find_app() {
+  local a
+  while IFS= read -r a; do
+    [ "$(basename "$a" .app)" = "$1" ] && { printf '%s\n' "$a"; return 0; }
+  done < <(all_apps)
+  return 1
+}
+is_self_updating() {
+  local s
+  for s in "${SELF_UPDATING[@]}"; do [ "$s" = "$1" ] && return 0; done
+  return 1
+}
+is_managed_id() {
+  local p
+  for p in "${MANAGED_IDS[@]}"; do
+    # shellcheck disable=SC2053
+    [[ $1 == $p ]] && return 0
+  done
+  return 1
+}
+is_brew_app() { grep -qxF "$1.app" <<< "$BREW_APPS"; }
+load_brew_apps() {
+  command -v brew >/dev/null || return 0
+  BREW_APPS=$(brew info --cask --json=v2 --installed 2>/dev/null \
+    | jq -r '.casks[].artifacts[]? | objects | .app? // empty | .[] | strings' 2>/dev/null)
+}
+code_cmd() {
+  local c
+  c=$(command -v code) && { printf '%s\n' "$c"; return 0; }
+  c="$HOME/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
+  [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  return 1
+}
+
+# ── check_<src>: print src|name|installed|latest|note lines ──────────────────
+check_brew() {
+  command -v brew >/dev/null || { note brew "brew not installed"; return; }
+  brew update --quiet >/dev/null 2>&1 || note brew "brew update failed, the list may be stale"
+  local json
+  json=$(brew outdated --greedy --json=v2 2>/dev/null) || { note brew "brew outdated failed"; return; }
+  jq -r '(.formulae + .casks)[] | select(.pinned | not)
+    | "brew|\(.name)|\(.installed_versions | if type == "array" then last else . end)|\(.current_version)|"' <<< "$json" \
+    || note brew "could not read brew outdated output"
+}
+
+parse_msupdate() {
+  sed -e $'s/\033\\[[0-9;]*[A-Za-z]//g' | tr '\r' '\n' | awk '
+    function flush() { if (name != "") print name "|" (v == "" ? "?" : v); name = ""; v = "" }
+    /Updates available:/ { on = 1; next }
+    !on { next }
+    { sub(/^[ \t]+/, ""); sub(/[ \t]+$/, "") }
+    $0 == "" || /^Update Assistant/ || /^No updates/ { next }
+    /^Version:/ { sub(/^Version:[ \t]*/, ""); split($0, f, " "); v = f[1]; next }
+    /^[A-Za-z][A-Za-z ]*:/ { next }
+    {
+      flush(); name = $0
+      if (match(name, / \([^)]*\)$/)) { v = substr(name, RSTART + 2, RLENGTH - 3); name = substr(name, 1, RSTART - 1) }
+    }
+    END { flush() }'
+}
+check_msupdate() {
+  [ -x "$MSUPDATE" ] || { note msupdate "Microsoft AutoUpdate not installed"; return; }
+  local out name version app inst
+  out=$("$MSUPDATE" --list 2>&1) || { note msupdate "msupdate --list failed"; return; }
+  while IFS='|' read -r name version; do
+    [ -n "$name" ] || continue
+    inst=""
+    app=$(find_app "$name") && inst=$(app_version "$app")
+    item msupdate "$name" "${inst:-?}" "$version"
+  done < <(parse_msupdate <<< "$out")
+}
+
+check_adobe() {
+  [ -x "$RUM" ] || { note adobe "RemoteUpdateManager not installed"; return; }
+  local out rc
+  out=$("$RUM" --action=list 2>&1); rc=$?
+  if grep -q "not launched with Admin" <<< "$out"; then
+    note adobe "Adobe: listing needs admin, mac-outdated --install updates Adobe apps"; return
+  fi
+  awk '
+    /^\*+/ { on = 0 }
+    /Following .*[Uu]pdates are applicable/ { on = 1; next }
+    on && /^[ \t]*- / {
+      sub(/^[ \t]*- /, ""); n = split($0, p, "/")
+      if (n >= 2) print "adobe|" p[1] "|?|" p[2] "|"; else print "adobe|" $0 "|?|update|"
+    }' <<< "$out"
+  [ "$rc" -eq 0 ] || grep -q "Following" <<< "$out" || note adobe "RemoteUpdateManager --action=list failed (exit $rc)"
+}
+
+check_mas() {
+  command -v mas >/dev/null || { note mas "mas not installed: brew install mas"; return; }
+  local out
+  out=$(mas outdated 2>&1) || { note mas "mas outdated failed"; return; }
+  sed -nE 's/^[0-9]+[[:space:]]+(.*[^[:space:]])[[:space:]]+\((.+) -> (.+)\)[[:space:]]*$/mas|\1|\2|\3|/p' <<< "$out"
+}
+
+check_macos() {
+  command -v softwareupdate >/dev/null || { note macos "softwareupdate not found"; return; }
+  local out current
+  out=$(softwareupdate --list 2>&1) || { note macos "softwareupdate --list failed"; return; }
+  current=$(sw_vers -productVersion 2>/dev/null)
+  awk -v cur="$current" '
+    /Title: / {
+      t = $0; sub(/.*Title: /, "", t); sub(/, Version: .*/, "", t)
+      v = $0; sub(/.*Version: /, "", v); sub(/,.*/, "", v)
+      inst = (t ~ /^macOS/ && cur != "") ? cur : "?"
+      print "macos|" t "|" inst "|" v "|" ($0 ~ /Action: restart/ ? "restart required" : "")
+    }' <<< "$out"
+}
+
+check_pipx() {
+  command -v pipx >/dev/null || { note pipx "pipx not installed"; return; }
+  local json venv pkg inst latest
+  json=$(pipx list --json 2>/dev/null) || { note pipx "pipx list failed"; return; }
+  while IFS=$'\t' read -r venv pkg inst; do
+    [ -n "$venv" ] || continue
+    latest=$(pipx runpip "$venv" index versions "$pkg" 2>/dev/null | head -n 1 | sed -nE 's/^.*\((.+)\)$/\1/p')
+    [ -n "$latest" ] || { note pipx "$pkg: latest version lookup failed"; continue; }
+    newer "$inst" "$latest" && item pipx "$pkg" "$inst" "$latest"
+  done < <(jq -r '.venvs | to_entries[] | [.key, .value.metadata.main_package.package, .value.metadata.main_package.package_version] | @tsv' <<< "$json")
+}
+
+check_vscode() {
+  local code n
+  code=$(code_cmd) || { note vscode "VS Code CLI not found"; return; }
+  n=$("$code" --list-extensions --show-versions 2>/dev/null | grep -c '@')
+  note vscode "$n extensions installed, mac-outdated --install updates them"
+}
+
+appcast_latest() {  # prints "S <newest shortVersionString>" and "V <newest version>" lines, beta channels skipped
+  awk '
+    { buf = buf " " $0 }
+    END {
+      n = split(buf, items, "</item>")
+      for (i = 1; i <= n; i++) {
+        s = items[i]
+        if (s !~ /<item/ || s ~ /sparkle:channel/) continue
+        if (match(s, /sparkle:shortVersionString="[^"]+"/) || match(s, /<sparkle:shortVersionString>[^<]+</))
+          print "S " substr(s, RSTART + 28, RLENGTH - 29)
+        if (match(s, /sparkle:version="[^"]+"/) || match(s, /<sparkle:version>[^<]+</))
+          print "V " substr(s, RSTART + 17, RLENGTH - 18)
+      }
+    }' | sort -k1,1 -k2V | awk '{ last[$1] = $2 } END { for (k in last) print k, last[k] }'
+}
+check_sparkle() {
+  local app name plist feed xml kind value short="" build="" inst latest
+  while IFS= read -r app; do
+    [ -d "$app/Contents/Frameworks/Sparkle.framework" ] || continue
+    name=$(basename "$app" .app)
+    is_brew_app "$name" && continue
+    is_self_updating "$name" && continue
+    plist="$app/Contents/Info.plist"
+    feed=$(plist_get "$plist" SUFeedURL)
+    [ -n "$feed" ] || continue
+    xml=$(curl -fsSL --max-time 10 "$feed" 2>/dev/null) || { note sparkle "$name: appcast not reachable"; continue; }
+    short="" build=""
+    while read -r kind value; do
+      case $kind in S) short=$value ;; V) build=$value ;; esac
+    done < <(appcast_latest <<< "$xml")
+    if [ -n "$short" ]; then inst=$(app_version "$app"); latest=$short
+    elif [ -n "$build" ]; then inst=$(plist_get "$plist" CFBundleVersion); latest=$build
+    else note sparkle "$name: no version in appcast"; continue
+    fi
+    [ -n "$inst" ] && newer "$inst" "$latest" && item sparkle "$name" "$inst" "$latest" "open $name to update"
+  done < <(all_apps)
+}
+
+cask_token() { printf '%s' "$1" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9.-'; }
+check_unmanaged() {
+  command -v brew >/dev/null || return 0
+  local app name id inst token version latest
+  while IFS= read -r app; do
+    name=$(basename "$app" .app)
+    [ -d "$app/Contents/Frameworks/Sparkle.framework" ] && continue
+    [ -d "$app/Contents/_MASReceipt" ] && continue
+    is_brew_app "$name" && continue
+    is_self_updating "$name" && continue
+    id=$(plist_get "$app/Contents/Info.plist" CFBundleIdentifier)
+    is_managed_id "$id" && continue
+    inst=$(app_version "$app")
+    [ -n "$inst" ] || continue
+    token=$(cask_token "$name")
+    [ -n "$token" ] || continue
+    version=$(brew info --cask --json=v2 "$token" 2>/dev/null \
+      | jq -r --arg a "$name.app" '.casks[0] | select([.artifacts[]? | objects | .app? // empty | .[] | strings] | index($a)) | .version' 2>/dev/null)
+    latest=${version%%,*}
+    [ -n "$latest" ] && [ "$latest" != latest ] || continue
+    newer "$inst" "$latest" && item unmanaged "$name" "$inst" "$latest" "brew install --cask --adopt $token"
+  done < <(all_apps)
+}
+
+self_updating_installed() {
+  local s found=()
+  for s in "${SELF_UPDATING[@]}"; do find_app "$s" >/dev/null && found+=("$s"); done
+  [ "${#found[@]}" -gt 0 ] || return 0
+  local IFS=,
+  printf '\nupdates itself on launch: %s\n' "${found[*]}" | sed 's/,/, /g'
+}
+
+# ── check mode ───────────────────────────────────────────────────────────────
+check_mode() {
+  command -v jq >/dev/null || { echo "jq not found: brew install jq" >&2; exit 2; }
+  load_brew_apps
+  local lines="" src
+  for src in "${SOURCES[@]}"; do
+    progress "${LABELS[$src]}"
+    lines+=$("check_$src")$'\n'
+  done
+  [ -t 2 ] && printf '\r\033[K' >&2
+
+  local block name inst latest extra outdated=0 manual=0 installable=0
+  for src in "${SOURCES[@]}"; do
+    block=$(grep "^$src|" <<< "$lines") || continue
+    printf '\n%s\n' "${LABELS[$src]}"
+    while IFS='|' read -r _ name inst latest extra; do
+      if [ -n "$latest" ]; then
+        printf '  %-32s %s -> %s%s\n' "$name" "$inst" "$latest" "${extra:+  ($extra)}"
+        outdated=$((outdated + 1))
+        if [[ $MANUAL_SOURCES == *" $src "* ]]; then manual=$((manual + 1)); else installable=$((installable + 1)); fi
+      else
+        printf '  note: %s\n' "$extra"
+      fi
+    done <<< "$block"
+  done
+  self_updating_installed
+
+  echo
+  echo "$outdated outdated, $manual need a manual step"
+  [ "$installable" -gt 0 ] && echo "run: mac-outdated --install"
+  mkdir -p "$(dirname "$STAMP")" && date +%s > "$STAMP"
+  [ "$outdated" -eq 0 ]
+}
+
+# ── admin precondition ───────────────────────────────────────────────────────
+expiration_interval() {
+  local v
+  v=$(plist_get "$PRIVILEGES_PLIST" ExpirationInterval)
+  [[ $v =~ ^[0-9]+$ ]] && printf '%s\n' "$v"
+}
+# Newest Privileges grant in the unified log ("SAPCorp: User <name> now has administrator privileges", logged under subsystem com.apple.defaults).
+privileges_grant_epoch() {
+  local ts
+  ts=$("$LOG_CMD" show --last 1h --style ndjson --predicate 'processImagePath CONTAINS "/Privileges.app/"' 2>/dev/null \
+    | jq -R -r 'fromjson? | select(.eventMessage? | type == "string")
+        | select(.eventMessage | test("administrator|admin rights"; "i"))
+        | select(.eventMessage | test("standard|revok|remov|expire"; "i") | not) | .timestamp' 2>/dev/null \
+    | tail -n 1)
+  [ -n "$ts" ] || return 1
+  date -j -f '%Y-%m-%d %H:%M:%S%z' "${ts:0:19}${ts: -5}" +%s 2>/dev/null
+}
+admin_minutes_left() {
+  local interval grant
+  interval=$(expiration_interval) || return 1
+  grant=$(privileges_grant_epoch) || return 1
+  echo $(( interval - ($(date +%s) - grant) / 60 ))
+}
+require_admin() {
+  local status left answer
+  [ -x "$PRIVILEGESCLI" ] || { echo "Privileges app not found: $PRIVILEGESCLI"; return 1; }
+  status=$("$PRIVILEGESCLI" --status 2>&1)
+  if [[ $status != *administrator* ]]; then
+    echo "Click Privileges (lock icon in the menu bar), then rerun mac-outdated --install"
+    return 1
+  fi
+  if left=$(admin_minutes_left); then
+    if [ "$left" -lt "$MIN_ADMIN_MINUTES" ]; then
+      echo "only $left min of admin left, need $MIN_ADMIN_MINUTES: revert and click Privileges again"
+      return 1
+    fi
+    echo "admin: $left min left"
+  else
+    echo "admin time left unknown"
+    printf 'Continue anyway? [y/N] '
+    read -r answer || answer=""
+    [[ $answer == [yY]* ]] || return 1
+  fi
+}
+
+# ── install_<src>: 0 ok, 1 failed, $SKIPPED tool missing ─────────────────────
+install_macos() {
+  command -v softwareupdate >/dev/null || return "$SKIPPED"
+  local tmp rc
+  tmp=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX")
+  sudo softwareupdate --install --all 2>&1 | tee "$tmp"; rc=${PIPESTATUS[0]}
+  grep -qi 'restart' "$tmp" && echo "restart required: restart the Mac when it suits you"
+  rm -f "$tmp"
+  [ "$rc" -eq 0 ]
+}
+install_adobe() {
+  [ -x "$RUM" ] || return "$SKIPPED"
+  sudo "$RUM" --action=install
+}
+install_brew() {
+  command -v brew >/dev/null || return "$SKIPPED"
+  brew update || echo "brew update failed, upgrading anyway"
+  brew upgrade --greedy
+}
+install_msupdate() {
+  [ -x "$MSUPDATE" ] || return "$SKIPPED"
+  "$MSUPDATE" --install
+}
+install_mas() {
+  command -v mas >/dev/null || return "$SKIPPED"
+  mas upgrade
+}
+install_pipx() {
+  command -v pipx >/dev/null || return "$SKIPPED"
+  pipx upgrade-all
+}
+install_vscode() {
+  local code
+  code=$(code_cmd) || return "$SKIPPED"
+  "$code" --update-extensions
+}
+
+install_mode() {
+  require_admin || exit 2
+  echo "sudo asks for your password once, for the macOS and Adobe updates"
+  sudo -v || { echo "sudo failed"; exit 2; }
+  local src rc failed=0
+  declare -A result
+  for src in "${INSTALL_ORDER[@]}"; do
+    printf '\n== %s\n' "${LABELS[$src]}"
+    "install_$src"; rc=$?
+    case $rc in
+      0) result[$src]=ok ;;
+      "$SKIPPED") result[$src]=skipped ;;
+      *) result[$src]=failed; failed=1 ;;
+    esac
+  done
+  echo
+  for src in "${INSTALL_ORDER[@]}"; do printf '  %-10s %s\n' "$src" "${result[$src]}"; done
+  exit "$failed"
+}
+
+main() {
+  if [ "$(id -u)" -eq 0 ]; then
+    echo "run mac-outdated as your own user, not as root (brew must not run under sudo)" >&2
+    exit 2
+  fi
+  case "${1:-}" in
+    "") check_mode; exit $? ;;
+    --install) [ $# -eq 1 ] || { usage >&2; exit 2; }; install_mode ;;
+    -h|--help) usage ;;
+    *) usage >&2; exit 2 ;;
+  esac
+}
+
+main "$@"

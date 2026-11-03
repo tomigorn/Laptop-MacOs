@@ -1,0 +1,32 @@
+{
+  "pipx_spec_version": "0.1",
+  "venvs": {
+    "example-tool": {
+      "metadata": {
+        "main_package": {
+          "package": "example-tool",
+          "package_version": "0.1.0",
+          "apps": [
+            "example-tool"
+          ]
+        },
+        "python_version": "Python 3.14.6"
+      }
+    },
+    "xxh-xxh": {
+      "metadata": {
+        "main_package": {
+          "package": "xxh-xxh",
+          "package_version": "0.8.14",
+          "apps": [
+            "xxh",
+            "xxh.bash",
+            "xxh.xsh",
+            "xxh.zsh"
+          ]
+        },
+        "python_version": "Python 3.14.4"
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+RemoteUpdateManager version is : 3.1.0.3
+Starting the RemoteUpdateManager...
+No new applicable Updates. Seems like all products are up-to-date.
+RemoteUpdateManager exiting with Return Code (0)

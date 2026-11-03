@@ -1,0 +1,2 @@
+User jane has administrator privileges
+Administrator privileges expire in 19 minutes
