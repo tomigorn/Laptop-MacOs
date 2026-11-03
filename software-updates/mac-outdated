@@ -182,9 +182,11 @@ check_adobe() {
 
 check_mas() {
   command -v mas >/dev/null || { note mas "mas not installed: brew install mas" "skipped (mas not installed)" – "brew install mas"; return; }
-  local out
-  out=$(mas outdated 2>&1) || { note mas "mas outdated failed"; return; }
-  sed -nE 's/^[0-9]+[[:space:]]+(.*[^[:space:]])[[:space:]]+\((.+) -> (.+)\)[[:space:]]*$/mas|\1|\2|\3|/p' <<< "$out"
+  local json
+  json=$(mas outdated --json 2>/dev/null) || { note mas "mas outdated failed"; return; }
+  jq -r 'select(type == "object" and .newVersion != null and (.name // "") != "")
+    | "mas|\(.name)|\(.version // "?")|\(.newVersion)|"' <<< "$json" \
+    || note mas "could not read mas outdated output"
 }
 
 check_macos() {
@@ -439,8 +441,9 @@ install_msupdate() {
   "$MSUPDATE" --install
 }
 install_mas() {
-  command -v mas >/dev/null || return "$SKIPPED"
-  mas upgrade
+  local mas
+  mas=$(command -v mas) || return "$SKIPPED"
+  sudo "$mas" upgrade
 }
 install_pipx() {
   command -v pipx >/dev/null || return "$SKIPPED"

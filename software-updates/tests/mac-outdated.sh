@@ -48,7 +48,7 @@ case "$1" in
 esac'
 stub mas '
 case "$1" in
-  outdated) cat "$FIX/mas-outdated.txt" ;;
+  outdated) [ "$2" = --json ] || exit 9; echo "Warning: Found a likely App Store app that is not indexed in Spotlight" >&2; cat "$FIX/mas-outdated.json" ;;
   upgrade) [ -f "$FIX/fail-mas" ] && exit 1; exit 0 ;;
 esac'
 stub softwareupdate '
@@ -135,7 +135,7 @@ fixtures_current() {
   cp "$FIX/brew-outdated-none.json" "$FIX/brew-outdated.json"
   cp "$FIX/msupdate-none.txt" "$FIX/msupdate-list.txt"
   cp "$FIX/rum-none.txt" "$FIX/rum-list.txt"
-  : > "$FIX/mas-outdated.txt"
+  : > "$FIX/mas-outdated.json"
   cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
   printf 'xxh-xxh (0.8.14)\n' > "$FIX/pip-index-xxh-xxh.txt"
   printf 'example-tool (0.1.0)\n' > "$FIX/pip-index-example-tool.txt"
@@ -170,7 +170,7 @@ has() { grep -qE "$2" <<< "$1"; }
 no_match() { ! grep -qE "$2" <<< "$1"; }
 only_allowed_sudo() {
   local bad
-  bad=$(grep '^sudo ' <<< "$1" | grep -vE '^sudo (-v|softwareupdate --install --all|RemoteUpdateManager --action=install)$')
+  bad=$(grep '^sudo ' <<< "$1" | grep -vE '^sudo (-v|softwareupdate --install --all|RemoteUpdateManager --action=install|mas upgrade)$')
   [ -z "$bad" ]
 }
 
@@ -189,7 +189,10 @@ check "adobe: product update" contains "$out" "PHSP ? → 27.1"
 check "adobe: second product" contains "$out" "AEFT ? → 26.0.1"
 check "adobe: Acrobat update" contains "$out" "AcrobatDC ? → update"
 check "mas: app update" contains "$out" "Xcode 27.2 → 27.3"
-check "mas: second app" contains "$out" "Telegram 13.1.0 → 13.2.0"
+check "mas: second app, 10-digit id" contains "$out" "Telegram 13.1.0 → 13.2.0"
+check "mas: no stray empty entry" no_match "$out" "^ +\? → |^ + ? →"
+check "mas: stderr warning not parsed" lacks "$out" "Spotlight"
+check "progress: mas outdated count" has "$out" "App Store \.+ 2 outdated"
 check "macOS: update with restart note" contains "$out" "macOS Golden Gate 27.2.1 27.2 → 27.2.1 (restart required)"
 check "macOS: other update" contains "$out" "Command Line Tools for Xcode ? → 27.2"
 check "pipx: outdated package" contains "$out" "xxh-xxh 0.8.14 → 0.8.15"
@@ -326,6 +329,7 @@ RemoteUpdateManager --action=install
 brew update
 brew upgrade --greedy
 msupdate --install
+sudo mas upgrade
 mas upgrade
 pipx upgrade-all
 code --update-extensions"
@@ -401,7 +405,7 @@ check "root: says it asks for the password itself" contains "$out" "asks for you
 all="$(cat "$ALLCALLS")"
 check "PrivilegesCLI only ever --status" no_match "$all" '^PrivilegesCLI .*(--add|--remove)'
 check "brew never via sudo" no_match "$all" '^sudo brew'
-check "only sudo -v, macOS and Adobe via sudo" only_allowed_sudo "$all"
+check "only sudo -v, macOS, Adobe and mas upgrade via sudo" only_allowed_sudo "$all"
 check "softwareupdate never restarts" no_match "$all" '^softwareupdate .*(-R|--restart|--reboot)'
 
 echo

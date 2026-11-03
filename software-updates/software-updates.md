@@ -49,7 +49,7 @@ mac-outdated · 2026-11-03 11:20
 | brew (formulae + casks) | `brew outdated --greedy --json=v2` (after `brew update`) | `brew upgrade --greedy`, never under sudo |
 | Microsoft AutoUpdate | `msupdate --list` | `msupdate --install` |
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
-| App Store | `mas outdated` (note if `mas` is missing) | `mas upgrade` |
+| App Store | `mas outdated --json` (note if `mas` is missing) | `sudo mas upgrade` (mas needs root to update apps) |
 | macOS | `softwareupdate --list` | `sudo softwareupdate --install --all`, never restarts |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped) | `pipx upgrade-all` |
 | VS Code extensions | count only | `code --update-extensions` |
