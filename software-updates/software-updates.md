@@ -8,7 +8,7 @@ One command for every outdated piece of software on this Mac. Install: `software
 | `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update; sudo may ask for your password again for later steps |
 | `mac-outdated --help` | no | usage |
 
-Exit: `0` nothing outdated / all installed, `1` something outdated / a check or step failed, `2` usage error or admin precondition not met.
+Exit: `0` nothing outdated / all installed, `1` something outdated / a check or step failed, `2` usage error or admin precondition not met, `130` interrupted.
 
 ## Output
 
@@ -41,6 +41,7 @@ mac-outdated · 2026-11-03 11:20
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
 - `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
+- Ctrl-C during `--install` stops the whole run: the current step ends, then `interrupted — remaining steps not run`, the summary so far (`interrupted` / `not run`), exit 130. A step ending with 130 counts the same.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 
 ## Sources

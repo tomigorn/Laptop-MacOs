@@ -43,7 +43,7 @@ usage: mac-outdated [--install]
   (none)     check every source, print what is outdated (no admin needed)
   --install  install every available update (needs admin from the Privileges app, >= 15 min left)
   --help     this text
-exit: 0 nothing outdated / all installed, 1 something outdated / something failed, 2 usage or admin precondition
+exit: 0 nothing outdated / all installed, 1 something outdated / something failed, 2 usage or admin precondition, 130 interrupted (Ctrl-C)
 EOF
 }
 
@@ -506,17 +506,56 @@ indent() {  # indents tool output as it arrives; a line without newline (a promp
   done
 }
 
+declare -A RESULT
+STEP="" FAILED=0
+
+install_summary() {
+  local src r word n_inst=0 n_up=0 n_fail=0 n_skip=0 n_int=0 n_not=0
+  section "Summary" ""
+  for src in "${INSTALL_ORDER[@]}"; do
+    r=${RESULT[$src]:-not run}
+    case $r in
+      installed) n_inst=$((n_inst + 1)); word=$(c 32 "$r") ;;
+      "up to date") n_up=$((n_up + 1)); word=$(c 32 "$r") ;;
+      skipped*) n_skip=$((n_skip + 1)); word=$(c 33 "$r") ;;
+      interrupted) n_int=$((n_int + 1)); word=$(c 31 "$r") ;;
+      "not run") n_not=$((n_not + 1)); word=$(c 2 "$r") ;;
+      *) n_fail=$((n_fail + 1)); word=$(c 31 "$r") ;;
+    esac
+    printf '  %-26s%s\n' "${LABELS[$src]}" "$word"
+  done
+  printf '  %s\n' "$THIN"
+  local parts=()
+  [ "$n_inst" -eq 0 ] || parts+=("$n_inst installed")
+  [ "$n_up" -eq 0 ] || parts+=("$n_up up to date")
+  [ "$n_fail" -eq 0 ] || parts+=("$n_fail failed")
+  [ "$n_skip" -eq 0 ] || parts+=("$n_skip skipped")
+  [ "$n_int" -eq 0 ] || parts+=("$n_int interrupted")
+  [ "$n_not" -eq 0 ] || parts+=("$n_not not run")
+  local joined=${parts[0]-} i
+  for i in "${parts[@]:1}"; do joined+=" · $i"; done
+  printf '  %-26s%s\n' total "$joined"
+}
+
+install_abort() {  # Ctrl-C or a step ending with 130: no further steps
+  trap - INT
+  [ -z "$STEP" ] || [ -n "${RESULT[$STEP]:-}" ] || RESULT[$STEP]=interrupted
+  printf '\n  %s\n' "$(c 31 "interrupted — remaining steps not run")"
+  install_summary
+  exit 130
+}
+
 install_mode() {
   setup_color
   header "mac-outdated --install"
   require_admin || exit 2
   echo "  sudo asks for your password for Adobe, App Store and macOS, and may ask again for later steps"
   sudo -v || { echo "sudo failed"; exit 2; }
-  local src rc failed=0 label word
-  local -A result
-  local -i installed=0 nfailed=0 skipped=0 uptodate=0
+  trap install_abort INT
+  local src rc label word
   for src in "${INSTALL_ORDER[@]}"; do
     label=${LABELS[$src]}
+    STEP=$src
     printf '\n%s\n' "$(c 1 "── $label")"
     STEP_STATUS=""
     if [ "$src" = macos ]; then
@@ -526,36 +565,27 @@ install_mode() {
       wait "$!"
     fi
     case $STEP_STATUS:$rc in
-      uptodate:*) result[$src]="up to date"; uptodate+=1; word=$(c 32 "up to date") ;;
-      missing:*) result[$src]="skipped ($src not installed)"; skipped+=1; word=$(c 33 "${result[$src]}") ;;
-      expired:*) result[$src]="skipped (admin expired: click Privileges and rerun)"; skipped+=1; failed=1; word=$(c 33 "${result[$src]}") ;;
-      expires*) result[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; skipped+=1; failed=1; word=$(c 33 "${result[$src]}") ;;
-      :0) result[$src]=installed; installed+=1; word=$(c 32 installed) ;;
-      *) result[$src]="failed (exit $rc)"; nfailed+=1; failed=1; word=$(c 31 "failed (exit $rc)") ;;
+      uptodate:*) RESULT[$src]="up to date" ;;
+      missing:*) RESULT[$src]="skipped ($src not installed)" ;;
+      expired:*) RESULT[$src]="skipped (admin expired: click Privileges and rerun)"; FAILED=1 ;;
+      expires*) RESULT[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; FAILED=1 ;;
+      :0) RESULT[$src]=installed ;;
+      :130) RESULT[$src]=interrupted ;;
+      *) RESULT[$src]="failed (exit $rc)"; FAILED=1 ;;
+    esac
+    case ${RESULT[$src]} in
+      installed|"up to date") word=$(c 32 "${RESULT[$src]}") ;;
+      skipped*) word=$(c 33 "${RESULT[$src]}") ;;
+      *) word=$(c 31 "${RESULT[$src]}") ;;
     esac
     progress_start "$label"
     printf '%s\n' "$word"
+    [ "${RESULT[$src]}" != interrupted ] || install_abort
   done
-
-  section "Summary" ""
-  for src in "${INSTALL_ORDER[@]}"; do
-    case ${result[$src]} in
-      installed|"up to date") word=$(c 32 "${result[$src]}") ;;
-      skipped*) word=$(c 33 "${result[$src]}") ;;
-      *) word=$(c 31 "${result[$src]}") ;;
-    esac
-    printf '  %-26s%s\n' "${LABELS[$src]}" "$word"
-  done
-  printf '  %s\n' "$THIN"
-  local parts=()
-  [ "$installed" -eq 0 ] || parts+=("$installed installed")
-  [ "$uptodate" -eq 0 ] || parts+=("$uptodate up to date")
-  [ "$nfailed" -eq 0 ] || parts+=("$nfailed failed")
-  [ "$skipped" -eq 0 ] || parts+=("$skipped skipped")
-  local joined=${parts[0]-} i
-  for i in "${parts[@]:1}"; do joined+=" · $i"; done
-  printf '  %-26s%s\n' total "$joined"
-  exit "$failed"
+  STEP=""
+  trap - INT
+  install_summary
+  exit "$FAILED"
 }
 
 main() {

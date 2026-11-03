@@ -482,6 +482,36 @@ check "brew failing: others installed" has "$out" "Microsoft AutoUpdate \\.+ ins
 check "brew failing: total" has "$out" "total 6 installed · 1 failed"
 rm -f "$FIX/fail-brew"
 
+# Ctrl-C: a step ending with 130 stops the run
+echo 130 > "$FIX/exit-brew"
+run --install
+rm -f "$FIX/exit-brew"
+check "step exit 130: exit 130" equals "$rc" 130
+check "step exit 130: later steps not run" no_match "$(calls)" "^(msupdate --install|pipx upgrade-all|code --update-extensions|sudo softwareupdate|softwareupdate)"
+check "step exit 130: earlier steps ran" contains "$(calls)" "mas upgrade"
+check "step exit 130: message" contains "$out" "interrupted — remaining steps not run"
+check "step exit 130: summary so far" has "$out" "App Store installed"
+check "step exit 130: interrupted step" has "$out" "^ brew interrupted$"
+check "step exit 130: remaining steps listed as not run" has "$out" "^ macOS not run$"
+
+# Ctrl-C while a step runs: the step finishes, nothing after it runs
+touch "$FIX/prompt-brew"
+: > "$CALLS"
+set -m
+"$SCRIPT" --install > "$WORK/out" 2>&1 < /dev/null &
+pid=$!
+set +m
+for _ in $(seq 40); do grep -q 'Proceed?' "$WORK/out" && break; sleep 0.1; done
+kill -INT "$pid"
+touch "$FIX/go"
+wait "$pid"; rc=$?
+out="$(tr -s ' ' < "$WORK/out")"
+rm -f "$FIX/prompt-brew" "$FIX/go"
+check "Ctrl-C: exit 130" equals "$rc" 130
+check "Ctrl-C: later steps not run" no_match "$(calls)" "^(msupdate --install|pipx upgrade-all|code --update-extensions|softwareupdate --install)"
+check "Ctrl-C: message" contains "$out" "interrupted — remaining steps not run"
+check "Ctrl-C: summary" contains "$out" "Summary"
+
 # a real exit 3 from a tool is a failure, not a skip
 echo 3 > "$FIX/exit-msupdate"
 run --install
