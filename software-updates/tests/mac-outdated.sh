@@ -51,7 +51,7 @@ esac'
 stub RemoteUpdateManager '
 case "$1" in
   --action=list) cat "$FIX/rum-list.txt" ;;
-  --action=install) [ -f "$FIX/fail-rum" ] && exit 1; exit 0 ;;
+  --action=install) echo "Successfully installed (AdobeAcrobatDC)"; [ -f "$FIX/exit-rum" ] && exit "$(cat "$FIX/exit-rum")"; [ -f "$FIX/fail-rum" ] && exit 1; exit 0 ;;
 esac'
 stub mas '
 case "$1" in
@@ -538,6 +538,22 @@ check "Ctrl-C: exit 130" equals "$rc" 130
 check "Ctrl-C: later steps not run" no_match "$(calls)" "^(msupdate --install|pipx upgrade-all|code --update-extensions|softwareupdate --install)"
 check "Ctrl-C: message" contains "$out" "interrupted — remaining steps not run"
 check "Ctrl-C: summary" contains "$out" "Summary"
+
+# Adobe exit 2: some updates could not be installed, a warning, not a plain failure
+echo 2 > "$FIX/exit-rum"
+run --install
+check "Adobe exit 2: exit 1" equals "$rc" 1
+check "Adobe exit 2: some updates failed" has "$out" "Adobe \\.+ some updates failed \\(Adobe exit 2: often an open Adobe app; see Adobe's RUM log\\)"
+check "Adobe exit 2: not a plain failure" lacks "$out" "failed (exit 2)"
+check "Adobe exit 2: later steps still run" contains "$(calls)" "code --update-extensions"
+MAC_OUTDATED_COLOR=always run --install
+check "Adobe exit 2: yellow" grep -q $'\033\\[33msome updates failed' "$WORK/out"
+echo 1 > "$FIX/exit-rum"
+run --install
+check "Adobe exit 1: failed" has "$out" "Adobe \\.+ failed \\(exit 1\\)"
+MAC_OUTDATED_COLOR=always run --install
+check "Adobe exit 1: red" grep -q $'\033\\[31mfailed (exit 1)' "$WORK/out"
+rm -f "$FIX/exit-rum"
 
 # a real exit 3 from a tool is a failure, not a skip
 echo 3 > "$FIX/exit-msupdate"

@@ -520,6 +520,7 @@ install_summary() {
       installed) n_inst=$((n_inst + 1)); word=$(c 32 "$r") ;;
       "up to date") n_up=$((n_up + 1)); word=$(c 32 "$r") ;;
       skipped*) n_skip=$((n_skip + 1)); word=$(c 33 "$r") ;;
+      "some updates failed"*) n_fail=$((n_fail + 1)); word=$(c 33 "$r") ;;
       interrupted) n_int=$((n_int + 1)); word=$(c 31 "$r") ;;
       "not run") n_not=$((n_not + 1)); word=$(c 31 "$r") ;;
       *) n_fail=$((n_fail + 1)); word=$(c 31 "$r") ;;
@@ -573,11 +574,13 @@ install_mode() {
       expires*) RESULT[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; FAILED=1 ;;
       :0) RESULT[$src]=installed ;;
       :130) RESULT[$src]=interrupted ;;
+      :2) if [ "$src" = adobe ]; then RESULT[$src]="some updates failed (Adobe exit 2: often an open Adobe app; see Adobe's RUM log)"
+          else RESULT[$src]="failed (exit $rc)"; fi; FAILED=1 ;;
       *) RESULT[$src]="failed (exit $rc)"; FAILED=1 ;;
     esac
     case ${RESULT[$src]} in
       installed|"up to date") word=$(c 32 "${RESULT[$src]}") ;;
-      skipped*) word=$(c 33 "${RESULT[$src]}") ;;
+      skipped*|"some updates failed"*) word=$(c 33 "${RESULT[$src]}") ;;
       *) word=$(c 31 "${RESULT[$src]}") ;;
     esac
     progress_start "$label"

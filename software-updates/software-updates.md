@@ -41,6 +41,7 @@ mac-outdated · 2026-11-03 11:20
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
 - `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
+- Adobe exit 2 (an update could not be installed, often because an Adobe app is open; details in Adobe's RUM log) shows yellow `some updates failed (Adobe exit 2: …)`, still exit 1; exit 1 is `failed (exit 1)`.
 - Ctrl-C during `--install` stops the whole run: the current step ends, then `interrupted — remaining steps not run`, the summary so far (`interrupted` / `not run`), exit 130. A step ending with 130 counts the same.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 - Colours (traffic light):
@@ -48,7 +49,7 @@ mac-outdated · 2026-11-03 11:20
 | Colour | Means |
 |---|---|
 | green | `up to date`, `installed` |
-| yellow | outdated: count, name, new version, `(older version …)`, by-hand hints, `skipped (…)`, summary counts |
+| yellow | outdated: count, name, new version, `(older version …)`, by-hand hints, `skipped (…)`, `some updates failed (…)`, summary counts |
 | red | `check failed`, `failed (exit N)`, `interrupted`, `not run`, `!` rows |
 | dim | installed version, notes, informational lines |
 
