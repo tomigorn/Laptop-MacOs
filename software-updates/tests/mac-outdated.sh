@@ -192,6 +192,7 @@ check "macOS: update with restart note" contains "$out" "macOS Golden Gate 27.2.
 check "macOS: other update" contains "$out" "Command Line Tools for Xcode ? → 27.2"
 check "pipx: outdated package" contains "$out" "xxh-xxh 0.8.14 → 0.8.15"
 check "pipx: lookup failure is a note" contains "$out" "example-tool: latest version lookup failed"
+check "pipx: local path install not looked up" no_match "$out" "local-tool"
 check "vscode: extension count on the progress line" has "$out" "VS Code extensions \.+ 3 installed"
 check "sparkle: outdated app, newest non-beta" contains "$out" "Fork 2.70.2 → 2.71.1"
 check "sparkle: current app not listed" lacks "$out" "Current "
@@ -380,6 +381,14 @@ for f in "$BIN"/*; do [ "$(basename "$f")" = mas ] || ln -sf "$f" "$WORK/nomas/"
 PATH="$WORK/nomas:/usr/bin:/bin" run --install
 check "mas missing: install exit 0" equals "$rc" 0
 check "mas missing: skipped" has "$out" "App Store \\.+ skipped \\(mas not installed\\)"
+
+mkdir -p "$WORK/asroot"
+for f in "$BIN"/*; do ln -sf "$f" "$WORK/asroot/"; done
+printf '#!/bin/sh\necho 0\n' > "$WORK/asroot/id"; chmod +x "$WORK/asroot/id"
+PATH="$WORK/asroot:/usr/bin:/bin" run --install
+check "root: exit 2" equals "$rc" 2
+check "root: says what to run instead" contains "$out" "run mac-outdated --install as your own user"
+check "root: says it asks for the password itself" contains "$out" "asks for your password itself"
 
 # ── safety, over every run above ─────────────────────────────────────────────
 all="$(cat "$ALLCALLS")"

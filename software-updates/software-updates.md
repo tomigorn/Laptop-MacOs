@@ -50,13 +50,13 @@ mac-outdated · 2026-11-03 11:20
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
 | App Store | `mas outdated` (note if `mas` is missing) | `mas upgrade` |
 | macOS | `softwareupdate --list` | `sudo softwareupdate --install --all`, never restarts |
-| pipx | `pipx list --json` + `pip index versions` | `pipx upgrade-all` |
+| pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped) | `pipx upgrade-all` |
 | VS Code extensions | count only | `code --update-extensions` |
 | Sparkle apps | appcast from `SUFeedURL` (beta channel skipped) | none: open the app |
 | Apps without an updater | cask with the same app name | none: `brew install --cask --adopt <token>` |
 | Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion) | listed once | none: update on launch |
 
-Install order: macOS, Adobe (sudo), then brew, Microsoft, App Store, pipx, VS Code. A failing source does not stop the others; a summary follows.
+Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: macOS, Adobe (sudo), then brew, Microsoft, App Store, pipx, VS Code. A failing source does not stop the others; a summary follows.
 
 ## Admin rules
 

@@ -205,12 +205,13 @@ check_pipx() {
   command -v pipx >/dev/null || { note pipx "pipx not installed" "skipped (pipx not installed)" – "brew install pipx"; return; }
   local json venv pkg inst latest
   json=$(pipx list --json 2>/dev/null) || { note pipx "pipx list failed"; return; }
-  while IFS=$'\t' read -r venv pkg inst; do
+  while IFS=$'\t' read -r venv pkg inst src; do
     [ -n "$venv" ] || continue
+    [[ "$src" == /* || "$src" == .* || "$src" == file:* ]] && continue  # local path install, nothing to look up
     latest=$(pipx runpip "$venv" index versions "$pkg" 2>/dev/null | head -n 1 | sed -nE 's/^.*\((.+)\)$/\1/p')
     [ -n "$latest" ] || { note pipx "$pkg: latest version lookup failed"; continue; }
     newer "$inst" "$latest" && item pipx "$pkg" "$inst" "$latest"
-  done < <(jq -r '.venvs | to_entries[] | [.key, .value.metadata.main_package.package, .value.metadata.main_package.package_version] | @tsv' <<< "$json")
+  done < <(jq -r '.venvs | to_entries[] | [.key, .value.metadata.main_package.package, .value.metadata.main_package.package_version, (.value.metadata.main_package.package_or_url // "")] | @tsv' <<< "$json")
 }
 
 check_vscode() {
@@ -496,7 +497,7 @@ install_mode() {
 
 main() {
   if [ "$(id -u)" -eq 0 ]; then
-    echo "run mac-outdated as your own user, not as root (brew must not run under sudo)" >&2
+    echo "run mac-outdated --install as your own user, not with sudo: it asks for your password itself (brew must not run as root)" >&2
     exit 2
   fi
   case "${1:-}" in
