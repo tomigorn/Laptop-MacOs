@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.tmilata.homelab-dns</string>
+    <string>com.tomigorn.homelab-dns</string>
 
     <!-- Run the long-running watcher. It blocks on `route -n monitor` and only
          re-evaluates DNS when the network path actually changes — no polling,

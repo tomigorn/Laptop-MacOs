@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.tmilata.homelab-dns-timer</string>
+    <string>com.tomigorn.homelab-dns-timer</string>
 
     <!-- Safety net for the watcher's blind spot: the watcher reacts only to route
          changes, so a homelab that was down at the last change (Pi rebooting) would

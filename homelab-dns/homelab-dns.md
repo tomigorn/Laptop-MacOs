@@ -37,7 +37,7 @@ Three parts, run by two `LaunchDaemon`s:
   reachable it takes over **enabled** services only; when away it reverts **every**
   service it owns, **including disabled/parked ones** — see *Set enabled, revert
   everything* below.
-- A **5-minute timer** ([`com.tmilata.homelab-dns-timer.plist`](com.tmilata.homelab-dns-timer.plist))
+- A **5-minute timer** ([`com.tomigorn.homelab-dns-timer.plist`](com.tomigorn.homelab-dns-timer.plist))
   re-runs the actor every 300s as a safety net (see *Why a timer too?* below). It's
   silent unless it actually changes the DNS, so a stable network stays quiet.
 
@@ -153,8 +153,8 @@ sudo ./install.sh
 ```
 
 Installs the scripts to `/usr/local/sbin/` and two daemons to
-`/Library/LaunchDaemons/` (`com.tmilata.homelab-dns.plist`, the watcher, and
-`com.tmilata.homelab-dns-timer.plist`, the 5-min safety net), then loads both.
+`/Library/LaunchDaemons/` (`com.tomigorn.homelab-dns.plist`, the watcher, and
+`com.tomigorn.homelab-dns-timer.plist`, the 5-min safety net), then loads both.
 Runs at boot, on every network change, and every 5 minutes. Safe to re-run.
 
 Tests: `homelab-dns/tests/homelab-dns.sh` (stubbed, no system changes), or all via `tests/test-all.sh`.
@@ -168,7 +168,7 @@ networksetup -listallnetworkservices | tail -n +2 | grep -v '^\*' | while IFS= r
 done
 
 tail -f /var/log/homelab-dns.log           # one line per network change
-sudo launchctl kickstart -k system/com.tmilata.homelab-dns   # force a run
+sudo launchctl kickstart -k system/com.tomigorn.homelab-dns   # force a run
 ```
 
 ### Debug log

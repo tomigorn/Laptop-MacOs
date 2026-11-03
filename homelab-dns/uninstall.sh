@@ -11,8 +11,8 @@
 #     sudo ./uninstall.sh
 set -euo pipefail
 
-LABEL="com.tmilata.homelab-dns"
-TIMER_LABEL="com.tmilata.homelab-dns-timer"
+LABEL="com.tomigorn.homelab-dns"
+TIMER_LABEL="com.tomigorn.homelab-dns-timer"
 BIN_DEST="/usr/local/sbin/homelab-dns.sh"
 WATCH_DEST="/usr/local/sbin/homelab-dns-watch.sh"
 PLIST_DEST="/Library/LaunchDaemons/${LABEL}.plist"
