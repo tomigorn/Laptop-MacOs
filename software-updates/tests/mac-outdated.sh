@@ -122,6 +122,8 @@ fixtures_outdated() {
   make_app Telegram ru.keepcoder.Telegram 13.1.0 "" mas
   make_app "ETH Self Service" com.jamfsoftware.selfservice.mac 11.0
   make_app NoCask com.example.nocask 1.0
+  make_app Discord com.hammerandchisel.discord 0.0.389
+  make_app "iStat Menus" com.bjango.istatmenus 7.0
   cask_like microsoft-word "Microsoft Word" 99.0
   cask_like google-chrome "Google Chrome" 999.0
   cask_like telegram Telegram 99.0
@@ -193,7 +195,7 @@ check "macOS: other update" contains "$out" "Command Line Tools for Xcode ? → 
 check "pipx: outdated package" contains "$out" "xxh-xxh 0.8.14 → 0.8.15"
 check "pipx: lookup failure is a note" contains "$out" "example-tool: latest version lookup failed"
 check "pipx: local path install not looked up" no_match "$out" "local-tool"
-check "vscode: extension count on the progress line" has "$out" "VS Code extensions \.+ 3 installed"
+check "vscode: extension count on the progress line" has "$out" "VS Code extensions \.+ 3 extensions, updated during --install"
 check "sparkle: outdated app, newest non-beta" contains "$out" "Fork 2.70.2 → 2.71.1"
 check "sparkle: current app not listed" lacks "$out" "Current "
 check "sparkle: unreachable appcast is a note" contains "$out" "Broken: appcast not reachable"
@@ -206,6 +208,9 @@ check "unmanaged: Jamf app excluded" lacks "$out" "adopt eth-self-service"
 check "unmanaged: no cask, no line" lacks "$out" "NoCask"
 check "self-updating listed once" equals "$(grep -c 'updates itself on launch' <<< "$out")" 1
 check "self-updating names the app" contains "$out" "Google Chrome"
+check "self-updating: iStat Menus listed" has "$out" "updates itself on launch:.*iStat Menus"
+check "self-updating: iStat Menus has no updater warning" lacks "$out" "iStat Menus 7.0"
+check "self-updating: brew-managed Discord left out" lacks "$(grep 'updates itself on launch' <<< "$out")" "Discord"
 check "sparkle: open hint under the item" contains "$out" "open Fork to update"
 check "unmanaged: adopt hint under the item" contains "$out" "brew install --cask --adopt keepassxc"
 check "brew: formulae group" has "$out" "^ formulae$"
@@ -237,8 +242,10 @@ check "msupdate: name (version) layout" contains "$out" "Microsoft Outlook ? →
 # Adobe without admin
 cp "$FIX/rum-noadmin.txt" "$FIX/rum-list.txt"
 run
-check "adobe: needs admin on the progress line" has "$out" "Adobe \.+ needs admin to list"
-check "adobe: needs admin in the summary" has "$out" "Adobe \? listing needs admin"
+check "adobe: checked during install on the progress line" has "$out" "Adobe \.+ checked during --install"
+check "adobe: no admin text left" lacks "$out" "needs admin"
+check "adobe: no summary row" lacks "$out" "listing needs admin"
+check "adobe: no unknown count" lacks "$out" "Adobe ?"
 
 # brew update failing
 touch "$FIX/fail-brew-update"
@@ -249,14 +256,14 @@ check "brew: still lists outdated" contains "$out" "bash 5.3.15 → 5.3.20"
 # downgrade marker
 jq '.formulae[0].current_version = "3.0.0" | .formulae[0].installed_versions = ["3.15.2_1"]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
 run
-check "downgrade: marked" has "$out" "aom 3.15.2_1 → 3.0.0 \\(downgrade\\)"
-check "downgrade: upgrade not marked" lacks "$out" "bash 5.3.15 → 5.3.20 (downgrade)"
+check "downgrade: marked" has "$out" "aom 3.15.2_1 → 3.0.0 \\(older version: brew moved to the 3.0 line\\)"
+check "downgrade: upgrade not marked" lacks "$out" "bash 5.3.15 → 5.3.20 (older version"
 jq '.formulae[0].current_version = "3.15.2" | .formulae[0].installed_versions = ["3.15.2_1"]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
 run
-check "downgrade: revision only is not one" lacks "$out" "(downgrade)"
+check "downgrade: revision only is not one" lacks "$out" "(older version"
 jq '.formulae[0].current_version = "1.9.3b" | .formulae[0].installed_versions = ["1.9.3"]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
 run
-check "downgrade: 1.9.3 -> 1.9.3b is not one" lacks "$out" "(downgrade)"
+check "downgrade: 1.9.3 -> 1.9.3b is not one" lacks "$out" "(older version"
 cp "$FIXTURES/brew-outdated.json" "$FIX/brew-outdated.json"
 
 # colours

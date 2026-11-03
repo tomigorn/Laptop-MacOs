@@ -17,27 +17,28 @@ mac-outdated · 2026-11-03 11:20
 
   brew ......................... 33 outdated
   Microsoft AutoUpdate ......... up to date
-  Adobe ........................ needs admin to list
+  Adobe ........................ checked during --install
   App Store .................... skipped (mas not installed)
 
 ══════════════════════════════════════════════════════════
  brew · 33 outdated
 ══════════════════════════════════════════════════════════
   formulae
-    openssl@3                3.6.3     →  3.5.9  (downgrade)
+    openssl@3                3.6.3     →  3.5.9  (older version: brew moved to the 3.5 line)
 
 ══════════════════════════════════════════════════════════
  Summary
 ══════════════════════════════════════════════════════════
   brew                        33   mac-outdated --install
-  Adobe                        ?   listing needs admin
   ────────────────────────────────
   total                       33   33 via --install · 0 by hand
 
   next: mac-outdated --install
 ```
 
-- One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped).
+- One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped). Adobe is only listed with admin, so check mode shows `checked during --install`.
+- `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
+- "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
 - `--install` prints a `── <source>` block with the indented tool output per step, a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (…)`) and a summary.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 

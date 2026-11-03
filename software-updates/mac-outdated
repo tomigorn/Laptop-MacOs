@@ -18,7 +18,7 @@ declare -A LABELS=(
   [pipx]="pipx" [vscode]="VS Code extensions" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
 )
 MANUAL_SOURCES=" sparkle unmanaged "
-SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian Docker Steam zoom.us Element "Autodesk Fusion")
+SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian Docker Steam zoom.us Element "Autodesk Fusion" "iStat Menus")
 MANAGED_IDS=('com.apple.*' 'com.microsoft.*' 'com.adobe.*' 'com.jamf*' '*ethz*' 'corp.sap.privileges' 'nl.root3.support')
 BREW_APPS=""
 declare -A HINTS=(
@@ -111,7 +111,7 @@ is_managed_id() {
   done
   return 1
 }
-is_brew_app() { grep -qxF "$1.app" <<< "$BREW_APPS"; }
+is_brew_app() { grep -qixF "$1.app" <<< "$BREW_APPS"; }
 load_brew_apps() {
   command -v brew >/dev/null || return 0
   BREW_APPS=$(brew info --cask --json=v2 --installed 2>/dev/null \
@@ -168,7 +168,7 @@ check_adobe() {
   local out rc
   out=$("$RUM" --action=list 2>&1); rc=$?
   if grep -q "not launched with Admin" <<< "$out"; then
-    note adobe "listing needs admin, mac-outdated --install updates Adobe apps" "needs admin to list" "?" "listing needs admin"; return
+    note adobe "mac-outdated --install updates Adobe apps" "checked during --install"; return
   fi
   awk '
     /^\*+/ { on = 0 }
@@ -218,7 +218,7 @@ check_vscode() {
   local code n
   code=$(code_cmd) || { note vscode "VS Code CLI not found" "skipped (code not found)" – "install the code CLI"; return; }
   n=$("$code" --list-extensions --show-versions 2>/dev/null | grep -c '@')
-  note vscode "$n extensions installed, mac-outdated --install updates them" "$n installed"
+  note vscode "$n extensions, mac-outdated --install updates them" "$n extensions, updated during --install"
 }
 
 appcast_latest() {  # prints "S <newest shortVersionString>" and "V <newest version>" lines, beta channels skipped
@@ -285,7 +285,7 @@ check_unmanaged() {
 
 self_updating_installed() {
   local s found=()
-  for s in "${SELF_UPDATING[@]}"; do find_app "$s" >/dev/null && found+=("$s"); done
+  for s in "${SELF_UPDATING[@]}"; do find_app "$s" >/dev/null && ! is_brew_app "$s" && found+=("$s"); done
   [ "${#found[@]}" -gt 0 ] || return 0
   local IFS=,
   printf '\n%s\n' "$(c 2 "updates itself on launch: $(sed 's/,/, /g' <<< "${found[*]}")")"
@@ -334,7 +334,7 @@ detail_section() {  # detail_section <src> <lines>
       [ "$src" != brew ] || [ "$extra" = "$group" ] || continue
       tag=""
       case $src in
-        brew) older "$inst" "$latest" && tag="(downgrade)" ;;
+        brew) older "$inst" "$latest" && tag="(older version: brew moved to the $(cut -d. -f1,2 <<< "$latest") line)" ;;
         macos) [ -z "$extra" ] || tag="($extra)" ;;
       esac
       row "$name" "$inst" "$latest" "$nw" "$vw" "$tag"
