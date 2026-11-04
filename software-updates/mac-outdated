@@ -386,8 +386,13 @@ check_pipx() {
 check_vscode() {
   local code n
   code=$(code_cmd) || { note vscode "VS Code CLI not found" "skipped (code not found)" – "install the code CLI"; return; }
-  n=$("$code" --list-extensions --show-versions 2>/dev/null | grep -c '@')
+  local list ext
+  list=$("$code" --list-extensions --show-versions 2>/dev/null | grep '@')
+  n=$(grep -c . <<< "$list")
   note vscode "$n extensions, mac-outdated --install updates them" "$n extensions, updated during --install"
+  while IFS= read -r ext; do
+    [ -n "$ext" ] && note vscode "${ext%@*}" "" l "${ext##*@}"
+  done <<< "$list"
 }
 
 github_latest() {  # github_latest <owner/repo>: tag of the latest release; the API first, then the release page redirect (no API rate limit)
@@ -575,16 +580,17 @@ open_to_update() {  # open_to_update <open items> <info notes without a section>
 }
 
 # ── check mode ───────────────────────────────────────────────────────────────
-declare -A N_ITEMS N_HAND N_OPEN N_INFO N_NOTES N_FAILED SHORT KIND SHINT HHINT
+declare -A N_ITEMS N_HAND N_OPEN N_INFO N_NOTES N_FAILED N_LIST SHORT KIND SHINT HHINT
 
 analyze() {  # analyze <src> <lines>: fills the counters and the short result of the first note that has one
   local src=$1 s name inst latest extra hint
-  N_ITEMS[$src]=0 N_HAND[$src]=0 N_OPEN[$src]=0 N_INFO[$src]=0 N_NOTES[$src]=0 N_FAILED[$src]=0 SHORT[$src]="" KIND[$src]="" SHINT[$src]="" HHINT[$src]=""
+  N_ITEMS[$src]=0 N_HAND[$src]=0 N_OPEN[$src]=0 N_INFO[$src]=0 N_NOTES[$src]=0 N_FAILED[$src]=0 N_LIST[$src]=0 SHORT[$src]="" KIND[$src]="" SHINT[$src]="" HHINT[$src]=""
   while IFS='|' read -r s name inst latest extra hint; do
     [ -n "$s" ] || continue
     if [ -n "$latest" ] && [ "$extra" = open ]; then N_OPEN[$src]=$((N_OPEN[$src] + 1)); continue; fi
     if [ -n "$latest" ]; then N_ITEMS[$src]=$((N_ITEMS[$src] + 1)); continue; fi
     if [ "$inst" = i ]; then N_INFO[$src]=$((N_INFO[$src] + 1)); continue; fi
+    if [ "$inst" = l ]; then N_LIST[$src]=$((N_LIST[$src] + 1)); continue; fi
     if [ "$inst" = + ]; then
       N_HAND[$src]=$((N_HAND[$src] + 1))
       [[ "${HHINT[$src]}" == *"$hint"* ]] || HHINT[$src]+="${HHINT[$src]:+ · }$hint"
@@ -650,6 +656,17 @@ detail_section() {  # detail_section <src> <lines>
   done <<< "$block"
 }
 
+list_section() {  # list_section <src> <lines>: name and version of each listed entry (nothing to do)
+  local s name inst latest extra hint w=24
+  while IFS='|' read -r s name inst latest extra hint; do
+    [ "$inst" = l ] && [ "${#extra}" -gt "$w" ] && w=${#extra}
+  done <<< "$2"
+  section "${LABELS[$1]}" "${N_LIST[$1]} installed"
+  while IFS='|' read -r s name inst latest extra hint; do
+    [ "$inst" = l ] && printf '    %s  %s\n' "$(printf '%-*s' "$w" "$extra")" "$(c 2 "$hint")"
+  done <<< "$2"
+}
+
 check_mode() {
   command -v jq >/dev/null || { echo "jq not found: brew install jq" >&2; exit 2; }
   load_brew_apps
@@ -679,6 +696,7 @@ check_mode() {
     else
       info+=$(grep -E '^[^|]*\|\|i\|\|' <<< "${LINES[$src]}")$'\n'
     fi
+    [ "${N_LIST[$src]}" -eq 0 ] || list_section "$src" "${LINES[$src]}"
   done
   open_to_update "$(grep . <<< "$open" | sort -f -t'|' -k2,2)" "$(grep . <<< "$info")"
 

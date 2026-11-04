@@ -235,6 +235,10 @@ check "pipx: outdated package" contains "$out" "xxh-xxh 0.8.14 → 0.8.15"
 check "pipx: lookup failure is a note" contains "$out" "example-tool: latest version lookup failed"
 check "pipx: local path install not looked up" no_match "$out" "local-tool"
 check "vscode: extension count on the progress line" has "$out" "VS Code extensions \.+ 3 extensions, updated during --install"
+check "vscode: section with the extensions" contains "$out" "VS Code extensions · 3 installed"
+check "vscode: name and version" has "$out" "^ catppuccin.catppuccin-vsc 3.19.0$"
+check "vscode: every extension" has "$out" "^ mechatroner.rainbow-csv 3.24.1$"
+check "vscode: not counted as outdated" has "$out" "total 16 14 via --install · 2 by hand"
 check "sparkle: outdated app, newest non-beta" contains "$out" "Fork 2.70.2 → 2.71.1"
 check "sparkle: current app not listed" lacks "$out" "Current "
 check "sparkle: unreachable appcast is a note" contains "$out" "Broken: appcast not reachable"
@@ -417,6 +421,7 @@ check "colour: to open yellow" grep -q $'\033\\[33m1 to open' "$WORK/out"
 check "colour: install hint yellow" grep -q $'\033\\[33mbrew install --cask --force keepassxc' "$WORK/out"
 check "colour: note dim" grep -q $'\033\\[2mbrew update failed' "$WORK/out"
 check "colour: summary count yellow" grep -qE $'brew +\033\\[33m4\033' "$WORK/out"
+check "colour: extension version dim" grep -q $'\033\\[2m3\\.19\\.0' "$WORK/out"
 NO_COLOR=1 run
 check "colour: NO_COLOR none" no_match "$(cat "$WORK/out")" $'\033'
 
@@ -428,6 +433,7 @@ check "nothing outdated -> exit 0" equals "$rc" 0
 check "nothing outdated: up to date" contains "$out" "everything up to date"
 check "nothing outdated: progress" has "$out" "Microsoft AutoUpdate \\.+ up to date"
 check "nothing outdated: no total" lacks "$out" "total"
+check "nothing outdated: extensions still listed" has "$out" "^ johnpapa.vscode-peacock 4.5.1$"
 check "nothing outdated: no install hint" lacks "$out" "next:"
 check "nothing outdated: stamp written" test -f "$HOME/.local/state/mac-outdated/last-check"
 MAC_OUTDATED_COLOR=always run
