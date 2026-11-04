@@ -256,6 +256,23 @@ check "stamp written" grep -qE '^[0-9]{10}$' "$HOME/.local/state/mac-outdated/la
 stamp_age=$(( $(date +%s) - $(cat "$HOME/.local/state/mac-outdated/last-check" 2>/dev/null || echo 0) ))
 check "stamp is now" test "$stamp_age" -le 5
 
+# log file: full output without colour, newest 20 kept
+LOGS="$HOME/.local/state/mac-outdated/logs"
+logpath() { tail -n 1 "$WORK/out" | sed -n 's/^log: //p'; }
+MAC_OUTDATED_COLOR=always run
+log=$(logpath)
+check "log: last line names it" has "$(tail -n 1 "$WORK/out")" "^log: $LOGS/[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}-check\\.log$"
+check "log: created" test -s "$log"
+check "log: terminal keeps colours" grep -q $'\033\\[' "$WORK/out"
+check "log: no colour codes" no_match "$(cat "$log" 2>/dev/null)" $'\033'
+check "log: has the summary" contains "$(cat "$log" 2>/dev/null)" "next: mac-outdated --install"
+check "log: has the progress" has "$(cat "$log" 2>/dev/null)" "brew \\.+ 4 outdated"
+mkdir -p "$LOGS"; for i in $(seq -w 1 25); do : > "$LOGS/2000-01-01-0000$i-check.log"; done
+run
+check "log: pruned to 20" equals "$(find "$LOGS" -name '*.log' | wc -l | tr -d ' ')" 20
+check "log: oldest deleted" test ! -e "$LOGS/2000-01-01-000001-check.log"
+check "log: newest kept" test -s "$(logpath)"
+
 # msupdate "Name (version)" layout
 printf 'Updates available:\n\tMicrosoft Outlook (16.115.26110212)\n' > "$FIX/msupdate-list.txt"
 run
@@ -498,6 +515,11 @@ check "admin 20 min: softwareupdate runs on the terminal, not through a pipe" gr
 check "admin 20 min: restart need read from softwareupdate --list before installing" equals "$(grep -E '^softwareupdate --(list|install)' "$CALLS" | cut -d' ' -f2)" "--list
 --install"
 check "admin: time read from PrivilegesCLI --status" contains "$(calls)" 'PrivilegesCLI --status'
+log=$(logpath)
+check "install log: named install" has "$log" "[0-9]{6}-install\\.log$"
+check "install log: softwareupdate output captured" contains "$(cat "$log" 2>/dev/null)" "Restart is required to complete installation"
+check "install log: has the summary" has "$(cat "$log" 2>/dev/null)" "total +7 installed"
+check "install log: log line last on the terminal" has "$(tail -n 1 "$WORK/out")" "^log: "
 
 cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
 run --install
@@ -602,6 +624,7 @@ check "Ctrl-C: exit 130" equals "$rc" 130
 check "Ctrl-C: later steps not run" no_match "$(calls)" "^(msupdate --install|pipx upgrade-all|code --update-extensions|softwareupdate --install)"
 check "Ctrl-C: message" contains "$out" "interrupted — remaining steps not run"
 check "Ctrl-C: summary" contains "$out" "Summary"
+check "Ctrl-C: log complete" contains "$(cat "$(logpath)" 2>/dev/null)" "interrupted — remaining steps not run"
 
 # Adobe exit 2: some updates could not be installed, a warning, not a plain failure
 echo 2 > "$FIX/exit-rum"

@@ -14,6 +14,9 @@ if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; nev
   APP_DIRS=${MAC_OUTDATED_APP_DIRS:-$APP_DIRS}
 fi
 STAMP="$HOME/.local/state/mac-outdated/last-check"
+LOG_DIR="$HOME/.local/state/mac-outdated/logs"
+LOG_KEEP=20
+LOG="" LOG_PID="" OUT_FD="" ERR_FD=""
 MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
 STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N"
@@ -146,6 +149,46 @@ code_cmd() {
   c="$HOME/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
   [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
   return 1
+}
+
+# ── log: the terminal gets the output as it comes, the log every line without colour codes ──
+# a line starting with \x1f goes to the log only (folded tool output)
+# shellcheck disable=SC2016
+SPLITTER='
+$SIG{INT} = "IGNORE";
+open(my $log, ">>", $ARGV[0]) or exit 1;
+select((select($log), $| = 1)[0]);
+my ($bol, $hide, $line) = (1, 0, "");
+sub logline { my $l = shift; $l =~ s/\e\[[0-9;?]*[A-Za-z]//g; $l =~ s/\r(?!\n)/\n/g; print $log $l; }
+while (sysread(STDIN, my $buf, 65536)) {
+  my $out = "";
+  for my $part (split /(?<=\n)/, $buf) {
+    if ($bol && substr($part, 0, 1) eq "\x1f") { $hide = 1; $part = substr($part, 1); }
+    $out .= $part unless $hide;
+    $line .= $part;
+    if ($part =~ /\n\z/) { logline($line); $line = ""; $bol = 1; $hide = 0; } else { $bol = 0; }
+  }
+  syswrite(STDOUT, $out) if length $out;
+}
+logline($line) if length $line;
+'
+start_log() {  # start_log <check|install>: from here on stdout and stderr also go to the log
+  mkdir -p "$LOG_DIR" 2>/dev/null || return 0
+  LOG="$LOG_DIR/$(date +%Y-%m-%d-%H%M%S)-$1.log"
+  : 2>/dev/null > "$LOG" || { LOG=""; return 0; }
+  local logs=("$LOG_DIR"/*.log)
+  [ "${#logs[@]}" -le "$LOG_KEEP" ] || rm -f -- "${logs[@]:0:${#logs[@]}-LOG_KEEP}"
+  exec {OUT_FD}>&1 {ERR_FD}>&2
+  exec > >(trap '' INT; exec perl -e "$SPLITTER" "$LOG") 2>&1
+  LOG_PID=$!
+  trap finish_log EXIT
+}
+finish_log() {  # waits up to 5 s for the log writer, then names the log as the last line
+  [ -n "$LOG_PID" ] || return 0
+  exec >&"$OUT_FD" 2>&"$ERR_FD"
+  local i=0
+  while kill -0 "$LOG_PID" 2>/dev/null && [ "$i" -lt 250 ]; do sleep 0.02; i=$((i + 1)); done
+  printf 'log: %s\n' "$LOG"
 }
 
 # ── check_<src>: print src|name|installed|latest|note lines ──────────────────
@@ -443,7 +486,6 @@ detail_section() {  # detail_section <src> <lines>
 check_mode() {
   command -v jq >/dev/null || { echo "jq not found: brew install jq" >&2; exit 2; }
   load_brew_apps
-  setup_color
   header "mac-outdated"
   local src block
   declare -A LINES
@@ -648,7 +690,6 @@ install_abort() {  # Ctrl-C or a step ending with 130: no further steps
 }
 
 install_mode() {
-  setup_color
   header "mac-outdated --install"
   require_admin || exit 2
   echo "  sudo may ask for your password at the start, during brew (some casks), and again for later steps"
@@ -698,8 +739,8 @@ main() {
     exit 2
   fi
   case "${1:-}" in
-    "") check_mode; exit $? ;;
-    --install) [ $# -eq 1 ] || { usage >&2; exit 2; }; install_mode ;;
+    "") setup_color; start_log check; check_mode; exit $? ;;
+    --install) [ $# -eq 1 ] || { usage >&2; exit 2; }; setup_color; start_log install; install_mode ;;
     -h|--help) usage ;;
     *) usage >&2; exit 2 ;;
   esac

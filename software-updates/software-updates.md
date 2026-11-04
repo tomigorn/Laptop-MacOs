@@ -50,9 +50,10 @@ mac-outdated · 2026-11-03 11:20
 | older (or unknown), no `auto_updates` | casks row | via `--install` |
 
 - brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.
-- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs straight on the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
+- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS is not indented, its input stays the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
 - Adobe exit 2 (an update could not be installed, often because an Adobe app is open; details in Adobe's RUM log) shows yellow `some updates failed (Adobe exit 2: …)`, still exit 1; exit 1 is `failed (exit 1)`.
 - Ctrl-C during `--install` stops the whole run: the current step ends, then `interrupted — remaining steps not run`, the summary so far (`interrupted` / `not run`), exit 130. A step ending with 130 counts the same.
+- Every run (check and `--install`) writes its full output without colour codes to `~/.local/state/mac-outdated/logs/<YYYY-MM-DD-HHMMSS>-<check|install>.log`; the newest 20 are kept. Last line on the terminal: `log: <path>`. sudo prompts go to the terminal only; `softwareupdate` output is in the log too, its prompts still work.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 - Colours (traffic light):
 
@@ -106,3 +107,4 @@ New fish shells show `software not checked for N days: mac-outdated` when the la
 | `software-updates/install.sh` | symlink into `~/.local/bin` |
 | `software-updates/tests/mac-outdated.sh` | offline tests, every tool stubbed |
 | `~/.local/state/mac-outdated/last-check` | epoch of the last check without a failed source |
+| `~/.local/state/mac-outdated/logs/` | one log per run, newest 20 kept |
