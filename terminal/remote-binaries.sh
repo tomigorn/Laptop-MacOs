@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Downloads the pinned Linux binaries in remote-binaries.conf into ~/.xxh/arch/<arch>/, each checked against its sha256 (fail closed).
-#   terminal/remote-binaries.sh
+# Installed versions go to ~/.xxh/arch/<arch>/VERSIONS (`tool version` per line); a tool whose version differs from the pin is fetched again.
+#   terminal/remote-binaries.sh [--refresh]    --refresh: fetch every tool again
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -11,6 +12,14 @@ ok()   { printf '   \033[32m✓\033[0m  %s\n' "$*"; }
 skip() { printf '   \033[2m·\033[0m  %s (already done)\n' "$*"; }
 info() { printf '   %s\n' "$*"; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+REFRESH=0
+for a in "$@"; do
+    case "$a" in
+        --refresh) REFRESH=1 ;;
+        *) die "unknown flag: $a" ;;
+    esac
+done
 
 [[ -f "$CONF" ]] || die "pin file not found: $CONF"
 
@@ -23,6 +32,19 @@ CURRENT_DIR="$(cd "$(dirname "$0")" && pwd)"
 $CURRENT_DIR/fish "$@"
 WRAP
     chmod +x "$1/fish.sh"
+}
+
+installed_version() {  # installed_version <VERSIONS file> <tool>
+    [[ -f "$1" ]] || return 0
+    awk -v t="$2" '$1 == t { print $2 }' "$1"
+}
+
+record_version() {  # record_version <VERSIONS file> <tool> <version>
+    local tmp
+    tmp=$(mktemp)
+    if [[ -f "$1" ]]; then awk -v t="$2" '$1 != t' "$1" > "$tmp"; fi
+    echo "$2 $3" >> "$tmp"
+    mv "$tmp" "$1"
 }
 
 # fetch <tool> <repo> <tag> <arch> <asset> <binary> <sha256> <dest>
@@ -55,10 +77,12 @@ while read -r tool repo tag arch asset binary sha extra; do
     [[ -z "${extra:-}" ]] || die "too many columns for $tool $arch in $CONF"
     store=$ARCH_DIR/$arch
     if [[ "$tool" == fish ]]; then dest=$store/fish-portable/bin/fish; else dest=$store/bin/$tool; fi
-    if [[ -f "$dest" ]]; then
-        skip "$tool [$arch]"
+    version=${tag#v}
+    if [[ "$REFRESH" -eq 0 && -f "$dest" && "$(installed_version "$store/VERSIONS" "$tool")" == "$version" ]]; then
+        skip "$tool $version [$arch]"
     else
         fetch "$tool" "$repo" "$tag" "$arch" "$asset" "$binary" "$sha" "$dest"
+        record_version "$store/VERSIONS" "$tool" "$version"
     fi
     if [[ "$tool" == fish ]]; then write_fish_wrapper "$(dirname "$dest")"; fi
 done < "$CONF"

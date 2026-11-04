@@ -158,7 +158,7 @@ running 7 minutes fast reported `Connected in 422.3s` for a two-second connect).
 
 ### Tests
 
-Offline (greeting, xxhc, wrappers, starship, remote-binaries): `tests/test-all.sh`. Live:
+Offline (greeting, xxhc, wrappers, starship, remote-binaries, install): `tests/test-all.sh`. Live:
 
 `terminal/tests/concurrent-sessions.fish <host>` is a live integration test — it
 needs a reachable host and takes about 90 seconds. It runs two overlapping
@@ -281,7 +281,7 @@ terminal/
     xxh-config.fish                       fish session init on the remote
 
   SETUP_VERSION                           terminal setup version (shown in the greeting)
-  tests/                                  greeting, xxhc, wrapper, remote-binaries tests; concurrent-sessions.fish is live
+  tests/                                  greeting, xxhc, wrapper, remote-binaries, install tests; concurrent-sessions.fish is live
   ghostty.icns                            Ghostty custom icon (referenced from ~/.config/ghostty/config)
 ```
 
@@ -312,6 +312,7 @@ The last two symlinks point into the xxh build directory — the directory xxh u
 ~/.xxh/arch/x86_64/bin/{starship,atuin,bat,fastfetch}    x86_64 static binaries
 ~/.xxh/arch/aarch64/fish-portable/bin/{fish,fish.sh}     official fish 4.x, aarch64
 ~/.xxh/arch/aarch64/bin/{starship,atuin,bat,fastfetch}   aarch64 static binaries
+~/.xxh/arch/<arch>/VERSIONS                               installed version per tool (tool version)
 
 ~/.xxh/history/<alias>.db    per-host atuin history, grows across sessions
 
@@ -527,7 +528,13 @@ ln -sf $BASE/.config/starship.toml ~/.xxh/.xxh/shells/xxh-shell-fish/build/stars
 | File | Role |
 |---|---|
 | `remote-binaries.conf` | pin file: one row per tool and arch: `tool repo tag arch asset binary sha256` |
-| `remote-binaries.sh` | downloads `releases/download/<tag>/<asset>`, checks `shasum -a 256`, extracts `binary`; mismatch → download deleted, exit 1 |
+| `remote-binaries.sh` | downloads `releases/download/<tag>/<asset>`, checks `shasum -a 256`, extracts `binary`; mismatch → download deleted, exit 1, old binary kept |
+| `~/.xxh/arch/<arch>/VERSIONS` | installed version per tool, one `tool version` per line (tag without `v`, e.g. `starship 1.27.0`) |
+
+| Run | Fetches |
+|---|---|
+| `./install.sh` | tools whose `VERSIONS` entry differs from the pin, or is missing |
+| `./install.sh --refresh-remote` | every tool again |
 
 Update a pin (new release): take the sha256 from the API, cross-check with the upstream `.sha256` file where one exists (starship, atuin):
 
@@ -541,6 +548,7 @@ Layout per arch:
 ~/.xxh/arch/<arch>/fish-portable/bin/fish        # fish-shell, single binary
 ~/.xxh/arch/<arch>/fish-portable/bin/fish.sh     # TERMINFO wrapper the entrypoint launches
 ~/.xxh/arch/<arch>/bin/{starship,atuin,bat,fastfetch}
+~/.xxh/arch/<arch>/VERSIONS                      # tool version, one per line
 ```
 
 ### 7. Stage a default arch in the xxh build dir

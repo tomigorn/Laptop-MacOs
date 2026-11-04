@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run once on a new Mac to set up the full terminal environment.
 # Safe to re-run — existing files and installs are skipped.
+#   terminal/install.sh [--refresh-remote]    --refresh-remote: download every remote binary again
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -10,6 +11,14 @@ ok()    { printf '   \033[32m✓\033[0m  %s\n' "$*"; }
 skip()  { printf '   \033[2m·\033[0m  %s (already done)\n' "$*"; }
 info()  { printf '   %s\n' "$*"; }
 die()   { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+REFRESH_REMOTE=()
+for a in "$@"; do
+    case "$a" in
+        --refresh-remote) REFRESH_REMOTE=(--refresh) ;;
+        *) die "unknown flag: $a" ;;
+    esac
+done
 
 symlink() {
     local src=$1 dst=$2
@@ -82,7 +91,7 @@ symlink "$SCRIPT_DIR/.config/starship.toml"  ~/.xxh/.xxh/shells/xxh-shell-fish/b
 # Versions and sha256 are pinned in remote-binaries.conf.
 step "Per-architecture binary stores (uploaded to remote on connect)"
 
-"$SCRIPT_DIR/remote-binaries.sh"
+"$SCRIPT_DIR/remote-binaries.sh" "${REFRESH_REMOTE[@]}"
 
 # ── 7. Stage default (x86_64) binaries in xxh build dir ──────────────────────
 # This keeps a bare `xxh <host>` (without xxhc) working on x86_64 remotes. `xxhc`

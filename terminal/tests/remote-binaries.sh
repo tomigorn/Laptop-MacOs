@@ -63,6 +63,45 @@ check "match: pinned tag url" contains "$(clog)" "https://github.com/atuinsh/atu
 check "match: never releases/latest" eq "$(clog | grep -c latest)" 0
 check "match: temp files cleaned" test -z "$(ls -A "$TMPDIR")"
 
+# VERSIONS: written per arch, current pins are skipped
+check "versions: file lists each tool" eq "$(cat "$STORE/VERSIONS" 2>/dev/null)" $'fish 1\natuin 1'
+rm -f "$CURL_LOG"
+"$SCRIPT" > "$WORK/out" 2>&1; rc=$?
+check "versions: rerun exit 0" eq "$rc" 0
+check "versions: rerun downloads nothing" eq "$(clog)" ""
+
+# pin bumped: only that tool is fetched again
+fixture atuin-x86_64-v2.tar.gz atuin-x86_64/atuin "atuin v2"  z
+pins "$(sha fish-1-linux-x86_64.tar.xz)" "$(sha atuin-x86_64-v2.tar.gz)" | sed 's/ v1   x86_64  atuin-x86_64.tar.gz / v2   x86_64  atuin-x86_64-v2.tar.gz /' > "$REMOTE_BINARIES_CONF"
+rm -f "$CURL_LOG"
+"$SCRIPT" > "$WORK/out" 2>&1; rc=$?
+check "bump: exit 0" eq "$rc" 0
+check "bump: only atuin fetched" eq "$(clog)" "https://github.com/atuinsh/atuin/releases/download/v2/atuin-x86_64-v2.tar.gz"
+check "bump: new atuin installed" eq "$(cat "$STORE/bin/atuin")" "atuin v2"
+check "bump: VERSIONS updated" eq "$(cat "$STORE/VERSIONS")" $'fish 1\natuin 2'
+
+# binary without a VERSIONS entry (store from before VERSIONS): fetched again
+sed -i '' '/^fish /d' "$STORE/VERSIONS"
+rm -f "$CURL_LOG"
+"$SCRIPT" > "$WORK/out" 2>&1
+check "unknown version: fish fetched" eq "$(clog)" "https://github.com/fish-shell/fish-shell/releases/download/1/fish-1-linux-x86_64.tar.xz"
+check "unknown version: recorded" contains "$(cat "$STORE/VERSIONS")" "fish 1"
+
+# --refresh: everything fetched again
+rm -f "$CURL_LOG"
+"$SCRIPT" --refresh > "$WORK/out" 2>&1; rc=$?
+check "refresh: exit 0" eq "$rc" 0
+check "refresh: both fetched" eq "$(clog | wc -l | tr -d ' ')" 2
+
+# bumped pin with a bad hash: old binary and VERSIONS stay
+pins "$(sha fish-1-linux-x86_64.tar.xz)" "$(printf '1%.0s' {1..64})" | sed 's/ v1   x86_64/ v3   x86_64/' > "$REMOTE_BINARIES_CONF"
+"$SCRIPT" > "$WORK/out" 2>&1; rc=$?
+check "bad update: non-zero exit" test "$rc" -ne 0
+check "bad update: old atuin kept" eq "$(cat "$STORE/bin/atuin")" "atuin v2"
+check "bad update: VERSIONS kept" contains "$(cat "$STORE/VERSIONS")" "atuin 2"
+
+check "unknown flag: refused" test "$("$SCRIPT" --bogus > /dev/null 2>&1; echo $?)" -ne 0
+
 # wrong hash: fails closed, nothing extracted, download removed
 rm -rf "$HOME/.xxh" "$CURL_LOG"
 pins "$(sha fish-1-linux-x86_64.tar.xz)" "$(printf '0%.0s' {1..64})" > "$REMOTE_BINARIES_CONF"

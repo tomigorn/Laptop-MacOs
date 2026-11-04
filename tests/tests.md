@@ -15,7 +15,7 @@
 | `homelab-dns/` | `homelab-dns.sh` |
 | `software-updates/` | `mac-outdated.sh` |
 | `ssh/` | `ssh-why.fish` |
-| `terminal/` | `greeting.fish`, `xxhc.fish`, `wrappers.sh`, `starship.sh`, `remote-binaries.sh` |
+| `terminal/` | `greeting.fish`, `xxhc.fish`, `wrappers.sh`, `starship.sh`, `remote-binaries.sh`, `install.sh` |
 | `virt-manager/` | `launcher.sh` |
 | `window-manager/` | `arrange.sh`, `bottom.sh`, `install.sh`, `launcher.sh`, `make-icon.sh`, `model-fallback.sh` |
 
