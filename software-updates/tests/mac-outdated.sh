@@ -29,6 +29,7 @@ stub() {
 }
 stub brew '
 case "$1" in
+  --cache) echo "$FIX/brew-cache" ;;
   update) [ -f "$FIX/brew-update-stderr.txt" ] && cat "$FIX/brew-update-stderr.txt" >&2; [ -f "$FIX/fail-brew-update" ] && exit 1; exit 0 ;;
   outdated) [ -f "$FIX/brew-outdated-stderr.txt" ] && cat "$FIX/brew-outdated-stderr.txt" >&2; [ -f "$FIX/fail-brew-outdated" ] && { echo "Error: brew outdated failed" >&2; exit 1; }; cat "$FIX/brew-outdated.json" ;;
   list) cat "$FIX/brew-list-full.txt" 2>/dev/null ;;
@@ -495,6 +496,58 @@ check "missing softwareupdate: note" contains "$out" "skipped (softwareupdate no
 check "missing pipx: note" contains "$out" "skipped (pipx not installed)"
 check "missing code: note" contains "$out" "skipped (code not found)"
 check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 → 2.71.1"
+
+# ── check mode: casks found by app name in Homebrew's API cache ─────────────
+# cask_cache <payload json>: the signed API file of current brew (internal/packages.*.jws.json)
+cask_cache() {
+  mkdir -p "$FIX/brew-cache/api/internal"
+  jq -c '{payload: tojson, signatures: []}' <<< "$1" > "$FIX/brew-cache/api/internal/packages.arm64_test.jws.json"
+}
+CASKS='{"formulae": {}, "casks": {
+  "bambu-studio": {"version": "02.08.02.61,20260820225108", "raw_artifacts": [[":app", ["BambuStudio.app"]], [":zap", {":trash": "~/x"}]]},
+  "logi-options+": {"version": "2.9.9", "auto_updates": true, "raw_artifacts": [[":installer", {}], [":uninstall", {":delete": ["/Applications/logioptionsplus.app", "/Library/Logi"]}]]},
+  "keepassxc": {"version": "2.8.0,2.8.0-1", "raw_artifacts": [[":app", ["KeePassXC.app"]]]},
+  "foo-bar@beta": {"version": "9.0", "raw_artifacts": [[":app", ["Foo Bar.app"]]]},
+  "foo-bar": {"version": "2.0", "raw_artifacts": [[":app", ["Foo Bar.app"]]]},
+  "old-thing": {"version": "5.0", "disable_args": {":date": "2025-01-01"}, "raw_artifacts": [[":app", ["Old Thing.app"]]]},
+  "self-app": {"version": "3.0", "auto_updates": true, "raw_artifacts": [[":app", ["SelfApp.app"]]]},
+  "microsoft-word": {"version": "99.0", "raw_artifacts": [[":app", ["Microsoft Word.app"]]]},
+  "telegram": {"version": "99.0", "raw_artifacts": [[":app", ["Telegram.app"]]]},
+  "google-chrome": {"version": "999.0", "auto_updates": true, "raw_artifacts": [[":app", ["Google Chrome.app"]]]}
+}}'
+fixtures_outdated
+cask_cache "$CASKS"
+make_app BambuStudio com.bambulab.bambu-studio 02.07.01.57
+make_app logioptionsplus com.logi.optionsplus 2.9.1
+make_app "Foo Bar" com.example.foobar 1.0
+make_app "Old Thing" com.example.oldthing 1.0
+make_app SelfApp com.example.selfapp 3.0
+run
+check "cask cache: app name differs from the token" contains "$out" "BambuStudio 02.07.01.57 → 02.08.02.61"
+check "cask cache: install hint with the real token" contains "$out" "brew install --cask --force bambu-studio"
+check "cask cache: still finds same-name apps" contains "$out" "KeePassXC 2.7.9 → 2.8.0"
+check "cask cache: app from uninstall delete, auto-updating -> Open to update" has "$(sed -n '/Open to update/,/Summary/p' <<< "$out")" "logioptionsplus 2.9.1 → 2.9.9"
+check "cask cache: auto-updating app has no install hint" lacks "$out" "--force logi-options+"
+check "cask cache: plain token preferred over @variant" contains "$out" "brew install --cask --force foo-bar"$'\n'
+check "cask cache: @variant not used" lacks "$out" "foo-bar@beta"
+check "cask cache: disabled cask ignored" lacks "$out" "Old Thing"
+check "cask cache: current auto-updating app not listed" lacks "$out" "SelfApp"
+check "cask cache: Microsoft app still excluded" lacks "$out" "--cask --force microsoft-word"
+check "cask cache: App Store app still excluded" lacks "$out" "--cask --force telegram"
+check "cask cache: self-updater still excluded" lacks "$out" "--cask --force google-chrome"
+check "cask cache: no brew info per app" no_match "$(calls)" '^brew info --cask --json=v2 [^-]'
+check "cask cache: progress" has "$out" "Apps without an updater \.+ 3 outdated$"
+# older brew: api/cask.jws.json, payload is the cask array
+rm -rf "$FIX/brew-cache"; mkdir -p "$FIX/brew-cache/api"
+jq -nc --arg b bambu-studio --arg l logi-options+ '{payload: ([{token: $b, version: "02.08.02.61,2026", artifacts: [{app: ["BambuStudio.app"], target: "/Applications/BambuStudio.app"}]},
+  {token: $l, version: "2.9.9", auto_updates: true, artifacts: [{uninstall: [{delete: "/Applications/logioptionsplus.app"}]}]}] | tojson)}' > "$FIX/brew-cache/api/cask.jws.json"
+run
+check "cask cache, old layout: app name differs from the token" contains "$out" "BambuStudio 02.07.01.57 → 02.08.02.61"
+check "cask cache, old layout: uninstall delete" contains "$out" "logioptionsplus 2.9.1 → 2.9.9"
+rm -rf "$FIX/brew-cache"
+run
+check "no cask cache: falls back to the app name" contains "$out" "KeePassXC 2.7.9 → 2.8.0"
+check "no cask cache: name differing from the token not found" lacks "$out" "BambuStudio"
 
 # ── test hooks: path overrides only with MAC_OUTDATED_TEST=1 ─────────────────
 paths() { /opt/homebrew/bin/bash -c 'source "$1"; printf "%s\n" "$PRIVILEGESCLI" "$MSUPDATE" "$RUM" "$APP_DIRS"' _ "$SCRIPT"; }

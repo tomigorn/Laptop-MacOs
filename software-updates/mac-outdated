@@ -32,6 +32,7 @@ SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian D
 MANAGED_IDS=('com.apple.*' 'com.microsoft.*' 'com.adobe.*' 'com.jamf*' '*ethz*' 'corp.sap.privileges' 'nl.root3.support')
 BREW_APPS=""
 CASK_TABLE=""  # token<TAB>app bundle name<TAB>auto_updates, from brew info --installed
+declare -A CASK_BY_APP=()  # lowercased app bundle name -> token|version|auto_updates, from Homebrew's API cache
 declare -A HINTS=(
   [brew]="mac-outdated --install" [msupdate]="mac-outdated --install" [adobe]="mac-outdated --install" [mas]="mac-outdated --install"
   [macos]="mac-outdated --install" [pipx]="mac-outdated --install" [vscode]="mac-outdated --install"
@@ -370,9 +371,63 @@ check_sparkle() {
 }
 
 cask_token() { printf '%s' "$1" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9.-'; }
+# shellcheck disable=SC2016
+CASK_MAP_JQ='
+  def norm: ascii_downcase | sub("\\.app$"; "") | gsub(" "; "-") | gsub("[^a-z0-9.-]"; "");
+  def list: if type == "array" then .[] else . end;
+  .payload | fromjson
+  | if type == "object" then
+      .casks | (if type == "object" then to_entries | map(.key as $k | .value | .token = $k) else . end) | .[]
+      | {token, version, auto: (.auto_updates == true), off: (.disable_args != null),
+         apps: [.raw_artifacts[]? | select(.[0] == ":app") | .[1][]? | strings],
+         dels: [.raw_artifacts[]? | select(.[0] == ":uninstall") | .[1] | list | objects | .[":delete"]? // empty | list | strings]}
+    else
+      .[] | {token, version, auto: (.auto_updates == true), off: (.disabled == true),
+         apps: [.artifacts[]? | objects | .app? // empty | .[] | strings],
+         dels: [.artifacts[]? | objects | .uninstall? // empty | list | objects | .delete? // empty | list | strings]}
+    end
+  | select(.off | not) | . as $c
+  | ([.apps[] | {app: ., rank: 0}] + [.dels[] | select(test("^/Applications/[^/]+\\.app$")) | {app: sub("^/Applications/"; ""), rank: 10}])[]
+  | .rank += (if $c.token == (.app | norm) then 0 elif ($c.token | contains("@")) then 2 else 1 end)
+  | {key: (.app | ascii_downcase), rank, v: "\($c.token)|\($c.version)|\($c.auto)"}
+'
+load_cask_map() {  # fills CASK_BY_APP from the newest API cache file; stays empty without one
+  command -v brew >/dev/null || return 0
+  local cache f="" p key v
+  cache=$(brew --cache 2>/dev/null) || return 0
+  for p in "$cache"/api/internal/packages.*.jws.json; do
+    [ -f "$p" ] && { [ -z "$f" ] || [ "$p" -nt "$f" ]; } && f=$p
+  done
+  [ -n "$f" ] || f="$cache/api/cask.jws.json"
+  [ -f "$f" ] || return 0
+  while IFS=$'\t' read -r key v; do
+    [ -n "$key" ] && CASK_BY_APP[$key]=$v
+  done < <(jq -r "[$CASK_MAP_JQ] | group_by(.key) | .[] | min_by(.rank) | [.key, .v] | @tsv" "$f" 2>/dev/null)
+}
+cask_for_app() {  # cask_for_app <app name>: prints "token|version|auto_updates" of the cask installing <app name>.app
+  local name=$1 token json
+  if [ "${#CASK_BY_APP[@]}" -gt 0 ]; then
+    [ -n "${CASK_BY_APP[${name,,}.app]:-}" ] && printf '%s\n' "${CASK_BY_APP[${name,,}.app]}"
+    return
+  fi
+  token=$(cask_token "$name")
+  [ -n "$token" ] || return 1
+  json=$(brew info --cask --json=v2 "$token" 2>/dev/null) || return 1
+  jq -r --arg a "$name.app" --arg t "$token" '.casks[0] | select([.artifacts[]? | objects | .app? // empty | .[] | strings] | index($a)) | "\(.token // $t)|\(.version)|\(.auto_updates == true)"' <<< "$json" 2>/dev/null
+}
+cask_item() {  # cask_item <src> <app name> <installed>: an item when the app's cask is newer; auto-updating casks open to update
+  local token version auto latest
+  IFS='|' read -r token version auto < <(cask_for_app "$2")
+  latest=${version%%,*}
+  [ -n "${token:-}" ] && [ -n "$latest" ] && [ "$latest" != latest ] || return 0
+  newer "$3" "$latest" || return 0
+  if [ "$auto" = true ]; then item "$1" "$2" "$3" "$latest" open
+  else item "$1" "$2" "$3" "$latest" "brew install --cask --force $token"
+  fi
+}
 check_unmanaged() {
   command -v brew >/dev/null || return 0
-  local app name id inst token version latest
+  local app name id inst
   while IFS= read -r app; do
     name=$(basename "$app" .app)
     [ -d "$app/Contents/Frameworks/Sparkle.framework" ] && continue
@@ -383,13 +438,7 @@ check_unmanaged() {
     is_managed_id "$id" && continue
     inst=$(app_version "$app")
     [ -n "$inst" ] || continue
-    token=$(cask_token "$name")
-    [ -n "$token" ] || continue
-    version=$(brew info --cask --json=v2 "$token" 2>/dev/null \
-      | jq -r --arg a "$name.app" '.casks[0] | select([.artifacts[]? | objects | .app? // empty | .[] | strings] | index($a)) | .version' 2>/dev/null)
-    latest=${version%%,*}
-    [ -n "$latest" ] && [ "$latest" != latest ] || continue
-    newer "$inst" "$latest" && item unmanaged "$name" "$inst" "$latest" "brew install --cask --force $token"
+    cask_item unmanaged "$name" "$inst"
   done < <(all_apps)
 }
 
@@ -503,6 +552,7 @@ detail_section() {  # detail_section <src> <lines>
 check_mode() {
   command -v jq >/dev/null || { echo "jq not found: brew install jq" >&2; exit 2; }
   load_brew_apps
+  load_cask_map
   header "mac-outdated"
   local src block
   declare -A LINES
