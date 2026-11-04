@@ -57,7 +57,13 @@ stub git '[ "$1" = -C ] && [ -f "$2/.ct" ] || exit 128; cat "$2/.ct"'
 stub msupdate '
 case "$1" in
   --list) cat "$FIX/msupdate-list.txt" ;;
-  --install) [ -f "$FIX/exit-msupdate" ] && exit "$(cat "$FIX/exit-msupdate")"; [ -f "$FIX/fail-msupdate" ] && exit 1; exit 0 ;;
+  --install)
+    if [ -f "$FIX/progress-msupdate" ]; then
+      printf "\r\n\r\033[2K\rDetecting and downloading updates...\r\n\n"
+      for i in $(seq "$(cat "$FIX/progress-msupdate")"); do printf "\r\033[2K\rUpdate Assistant: Updating, Installing: [MSWD2019: %d%%]\r\n\n" "$i"; done
+      printf "Update Assistant: Idle, Completed: [MSWD2019]\n\n"
+    fi
+    [ -f "$FIX/exit-msupdate" ] && exit "$(cat "$FIX/exit-msupdate")"; [ -f "$FIX/fail-msupdate" ] && exit 1; exit 0 ;;
 esac'
 stub RemoteUpdateManager '
 case "$1" in
@@ -902,6 +908,26 @@ run --install
 rm -f "$FIX/five-brew"
 check "fold: 5 similar lines all shown" contains "$(cat "$WORK/out")" "Warning: cask c5: not upgraded"
 check "fold: 5 similar lines no message" lacks "$(cat "$WORK/out")" "more similar lines"
+
+# progress lines with the same prefix: first, a count, last; blank lines dropped
+echo 90 > "$FIX/progress-msupdate"
+run --install
+rm -f "$FIX/progress-msupdate"
+term=$(cat "$WORK/out")
+ms=$(sed -n '/── Microsoft AutoUpdate/,/Microsoft AutoUpdate \.\./p' <<< "$term")
+check "progress fold: line before shown" contains "$ms" "Detecting and downloading updates..."
+check "progress fold: first line shown" contains "$ms" "Update Assistant: Updating, Installing: [MSWD2019: 1%]"
+check "progress fold: middle hidden" lacks "$ms" "[MSWD2019: 2%]"
+check "progress fold: message" has "$ms" "^    … 89 progress lines \(full output in log\)$"
+check "progress fold: last line after the message" has "$(grep -A1 '89 progress lines' <<< "$ms")" "^    Update Assistant: Idle, Completed: \[MSWD2019\]$"
+check "progress fold: no blank lines" no_match "$(sed '1d;$d' <<< "$ms")" $'^[ \t\033\[2K\r]*$'
+check "progress fold: log keeps every line" equals "$(grep -c 'Update Assistant: Updating, Installing' "$(logpath)")" 90
+check "progress fold: still installed" has "$out" "Microsoft AutoUpdate \\.+ installed"
+echo 4 > "$FIX/progress-msupdate"
+run --install
+rm -f "$FIX/progress-msupdate"
+check "progress fold: 5 lines all shown" contains "$(cat "$WORK/out")" "[MSWD2019: 4%]"
+check "progress fold: 5 lines no message" lacks "$(cat "$WORK/out")" "progress lines"
 
 # a prompt without a newline shows while the tool waits for an answer
 touch "$FIX/prompt-brew"

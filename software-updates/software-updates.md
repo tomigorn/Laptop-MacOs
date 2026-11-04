@@ -89,7 +89,13 @@ mac-outdated · 2026-11-03 11:20
 
 - brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.
 - `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS is not indented, its input stays the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
-- Repetitive tool output folds on the terminal: more than 5 lines in a row with the same first word and the same ending (e.g. 300 × `chown: …: Operation not permitted`) show the first 3, then `… N more similar lines (full output in log)`; the log keeps all.
+- Repetitive tool output folds on the terminal (blank lines dropped), the log keeps all:
+
+| More than 5 lines in a row with | Shows | Example |
+|---|---|---|
+| the same first word and ending | the first 3, `… N more similar lines (full output in log)` | 300 × `chown: …: Operation not permitted` |
+| the same text before the first `:` | the first, `… N progress lines (full output in log)`, the last | `Update Assistant: …` from `msupdate --install` |
+
 - Adobe exit 2 (an update could not be installed, often because an Adobe app is open; details in Adobe's RUM log) shows yellow `some updates failed (Adobe exit 2: …)`, still exit 1; exit 1 is `failed (exit 1)`.
 - Ctrl-C during `--install` stops the whole run: the current step ends, then `interrupted — remaining steps not run`, the summary so far (`interrupted` / `not run`), exit 130. A step ending with 130 counts the same.
 - Every run (check and `--install`) writes its full output without colour codes to `~/.local/state/mac-outdated/logs/<YYYY-MM-DD-HHMMSS>-<check|install>.log`; the newest 20 are kept. Last line on the terminal: `log: <path>`. sudo prompts go to the terminal only; `softwareupdate` output is in the log too, its prompts still work.

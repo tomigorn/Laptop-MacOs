@@ -846,40 +846,60 @@ install_vscode() {
   "$code" --update-extensions
 }
 
-FOLD_AFTER=5 FOLD_SHOW=3
-fold_line() {  # fold_line <line>: more than FOLD_AFTER similar lines in a row show the first FOLD_SHOW, the rest only in the log
-  local l=$1 key first suffix=$1
-  first=${l%% *}
-  [[ $l != *": "* ]] || suffix=${l##*: }
+FOLD_AFTER=5 FOLD_SHOW=3 FOLD_MODE="" FOLD_KEY="" FOLD_PREFIX="" FOLD_N=0 FOLD_PENDING=() FOLD_LAST=""
+# more than FOLD_AFTER lines in a row fold on the terminal, the log keeps them all:
+#   similar (same first word and ending): the first FOLD_SHOW, then a count
+#   progress (same text before the first ":", e.g. "Update Assistant: …"): the first, a count, the last
+fold_line() {  # fold_line <line>: blank lines are dropped
+  local l=$1 plain first key prefix="" suffix
+  plain=$l
+  while [[ $plain =~ $'\033'\[[0-9\;?]*[A-Za-z] ]]; do plain=${plain/"${BASH_REMATCH[0]}"/}; done
+  [[ $plain =~ [^[:space:]] ]] || return 0
+  first=${plain%% *} suffix=$plain
+  [[ $plain != *": "* ]] || suffix=${plain##*: }
   key="$first|$suffix"
-  if [ "$key" != "$FOLD_KEY" ]; then
-    fold_end
-    FOLD_KEY=$key FOLD_N=1
-    printf '    %s\n' "$l"
+  [[ $plain != *:* ]] || prefix=${plain%%:*}
+  if [ "$FOLD_MODE" = similar ] && [ "$key" = "$FOLD_KEY" ]; then
+    FOLD_N=$((FOLD_N + 1))
+    if [ "$FOLD_N" -le "$FOLD_SHOW" ]; then printf '    %s\n' "$l"
+    elif [ "$FOLD_N" -le "$FOLD_AFTER" ]; then FOLD_PENDING+=("$l")
+    else
+      for l in "${FOLD_PENDING[@]}" "$l"; do log_only "    $l"; done
+      FOLD_PENDING=()
+    fi
     return
   fi
-  FOLD_N=$((FOLD_N + 1))
-  if [ "$FOLD_N" -le "$FOLD_SHOW" ]; then printf '    %s\n' "$l"
-  elif [ "$FOLD_N" -le "$FOLD_AFTER" ]; then FOLD_PENDING+=("$l")
-  else
-    for l in "${FOLD_PENDING[@]}" "$l"; do log_only "    $l"; done
-    FOLD_PENDING=()
+  if [ -n "$prefix" ] && [ "$prefix" = "$FOLD_PREFIX" ] && { [ "$FOLD_MODE" = progress ] || [ "$FOLD_N" -eq 1 ]; }; then
+    FOLD_MODE=progress FOLD_N=$((FOLD_N + 1))
+    if [ "$FOLD_N" -le "$FOLD_AFTER" ]; then FOLD_PENDING+=("$l")
+    else
+      [ "${#FOLD_PENDING[@]}" -eq 0 ] || { for first in "${FOLD_PENDING[@]}"; do log_only "    $first"; done; FOLD_PENDING=(); }
+      [ -z "$FOLD_LAST" ] || log_only "    $FOLD_LAST"
+      FOLD_LAST=$l
+    fi
+    return
   fi
+  fold_end
+  FOLD_MODE=similar FOLD_KEY=$key FOLD_PREFIX=$prefix FOLD_N=1
+  printf '    %s\n' "$l"
 }
-fold_end() {  # ends a run of similar lines: the fold message, or the held-back lines when the run stayed short
-  if [ "${FOLD_N:-0}" -gt "$FOLD_AFTER" ]; then
-    printf '    %s\n' "$(c 2 "… $((FOLD_N - FOLD_SHOW)) more similar lines (full output in log)")"
-  else
-    local l
+fold_end() {  # ends a run: the fold message (and for progress the last line), or the held-back lines when the run stayed short
+  local l
+  if [ "${FOLD_N:-0}" -le "$FOLD_AFTER" ]; then
     for l in "${FOLD_PENDING[@]}"; do printf '    %s\n' "$l"; done
+  elif [ "$FOLD_MODE" = progress ]; then
+    printf '    %s\n' "$(c 2 "… $((FOLD_N - 2)) progress lines (full output in log)")"
+    printf '    %s\n' "$FOLD_LAST"
+  else
+    printf '    %s\n' "$(c 2 "… $((FOLD_N - FOLD_SHOW)) more similar lines (full output in log)")"
   fi
-  FOLD_KEY="" FOLD_N=0 FOLD_PENDING=()
+  FOLD_MODE="" FOLD_KEY="" FOLD_PREFIX="" FOLD_N=0 FOLD_PENDING=() FOLD_LAST=""
 }
 log_only() { [ -z "$LOG" ] || printf '\x1f%s\n' "$1"; }
 
 indent() {  # indents tool output as it arrives; a line without newline (a prompt) shows after a second
   local line rc mid=0 part
-  FOLD_KEY="" FOLD_N=0 FOLD_PENDING=()
+  FOLD_MODE="" FOLD_KEY="" FOLD_PREFIX="" FOLD_N=0 FOLD_PENDING=() FOLD_LAST=""
   while :; do
     IFS= read -r -t 1 line; rc=$?
     [ "$rc" -eq 0 ] && line=${line%$'\r'}
