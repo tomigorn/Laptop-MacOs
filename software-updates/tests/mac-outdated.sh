@@ -649,6 +649,8 @@ run
 check "xxh: store without VERSIONS" contains "$out" "x86_64: versions not recorded: run terminal/install.sh --refresh-remote"
 check "xxh: store without VERSIONS, by hand" has "$out" "^ xxh remote binaries \.+ 2 outdated · 1 by hand$"
 check "xxh: store without VERSIONS, summary row" has "$out" "^ xxh remote binaries by hand 1 terminal/install.sh --refresh-remote$"
+count_col() { awk -v re="$1" '$0 ~ re { print match($0, /[0-9]   [^ ]/); exit }' "$WORK/out"; }
+check "summary: longest label keeps the columns aligned" test "$(count_col "binaries by hand")" = "$(count_col "^  total")"
 touch "$FIX/fail-github"
 run
 check "xxh: GitHub API failing, release page used" contains "$out" "starship 1.27.0 → 1.28.0"

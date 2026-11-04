@@ -59,12 +59,12 @@ mac-outdated · 2026-11-03 11:20
 ══════════════════════════════════════════════════════════
  Summary
 ══════════════════════════════════════════════════════════
-  brew                        33   mac-outdated --install
-  brew taps by hand            1   brew untap arthurk/virt-manager
-  xxh remote binaries          1   terminal/install.sh --refresh-remote
-  open to update               2   open the app (updates on start)
+  brew                          33   mac-outdated --install
+  brew taps by hand              1   brew untap arthurk/virt-manager
+  xxh remote binaries            1   terminal/install.sh --refresh-remote
+  open to update                 2   open the app (updates on start)
   ────────────────────────────────
-  total                       37   33 via --install · 4 by hand
+  total                         37   33 via --install · 4 by hand
 
   next: mac-outdated --install
 ```
