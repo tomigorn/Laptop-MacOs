@@ -230,12 +230,19 @@ check "unmanaged: self-updater excluded" lacks "$out" "--cask --force google-chr
 check "unmanaged: App Store app excluded" lacks "$out" "--cask --force telegram"
 check "unmanaged: Jamf app excluded" lacks "$out" "--cask --force eth-self-service"
 check "unmanaged: no cask, no line" lacks "$out" "NoCask"
-check "self-updating listed once" equals "$(grep -c 'updates itself on launch' <<< "$out")" 1
-check "self-updating names the app" contains "$out" "Google Chrome"
-check "self-updating: iStat Menus listed" has "$out" "updates itself on launch:.*iStat Menus"
+check "self-updating listed once" equals "$(grep -c 'also update themselves on start' <<< "$out")" 1
+check "self-updating names the app" has "$out" "also update themselves on start:.*Google Chrome"
+check "self-updating: iStat Menus listed" has "$out" "also update themselves on start:.*iStat Menus"
 check "self-updating: iStat Menus has no updater warning" lacks "$out" "iStat Menus 7.0"
-check "self-updating: brew-managed Discord left out" lacks "$(grep 'updates itself on launch' <<< "$out")" "Discord"
-check "sparkle: open hint under the item" contains "$out" "open Fork to update"
+check "self-updating: brew-managed Discord left out" lacks "$(grep 'also update themselves on start' <<< "$out")" "Discord"
+check "self-updating: old wording gone" lacks "$out" "updates itself on launch"
+check "open to update: section" contains "$out" "Open to update · 1"
+check "open to update: says why" contains "$out" "These apps update themselves on start: open them by hand."
+check "open to update: sparkle app in it" has "$(sed -n '/Open to update/,/Summary/p' <<< "$out")" "Fork 2.70.2 → 2.71.1"
+check "open to update: no per-item hint" lacks "$out" "open Fork to update"
+check "open to update: Fork listed once" equals "$(grep -c "Fork 2.70.2" <<< "$out")" 1
+check "open to update: Sparkle section only for its note" contains "$out" "Sparkle apps · 1 note"
+check "open to update: also-line after the rows" has "$(sed -n '/Fork 2.70.2/,/Summary/p' <<< "$out")" "also update themselves on start"
 check "unmanaged: install hint under the item replaces the older app" contains "$out" "brew install --cask --force keepassxc"
 check "brew: formulae group" has "$out" "^ formulae$"
 check "brew: casks group" has "$out" "^ casks$"
@@ -243,7 +250,7 @@ check "brew: cask listed after casks header" has "$(sed -n '/^ casks$/,$p' <<< "
 check "progress: one line per source" equals "$(grep -cE '^ (brew|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|VS Code extensions|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 9
 check "progress: brew outdated count" has "$out" "brew \.+ 4 outdated"
 check "progress: msupdate outdated count" has "$out" "Microsoft AutoUpdate \.+ 2 outdated"
-check "progress: sparkle count" has "$out" "Sparkle apps \.+ 1 outdated"
+check "progress: sparkle count" has "$out" "Sparkle apps \.+ 1 to open$"
 check "progress: no carriage returns" no_match "$(cat "$WORK/out")" $'\r'
 check "progress: no escape sequences without colour" no_match "$(cat "$WORK/out")" $'\033'
 check "sections: brew" contains "$out" "brew · 4 outdated"
@@ -251,7 +258,8 @@ check "sections: up-to-date source has none" lacks "$out" "Sparkle apps · 2"
 check "summary: header" contains "$out" "Summary"
 check "summary: total split" has "$out" "total 16 14 via --install · 2 by hand"
 check "summary: brew row" has "$out" "brew 4 mac-outdated --install"
-check "summary: sparkle row" has "$out" "Sparkle apps 1 open the app"
+check "summary: open to update row" has "$out" "^ open to update 1 open the app \\(updates on start\\)$"
+check "summary: no Sparkle apps row" no_match "$out" "^ Sparkle apps [0-9]"
 check "summary: install hint" contains "$out" "next: mac-outdated --install"
 check "check runs no install command" equals "$(install_calls | grep -v '^brew update')" ""
 check "stamp written" grep -qE '^[0-9]{10}$' "$HOME/.local/state/mac-outdated/last-check"
@@ -342,11 +350,17 @@ run
 check "stale cask: dim note" contains "$out" "utm: app already at 5.0.8 (brew's record is stale)"
 check "stale cask: no row" lacks "$out" "utm 4.7.5"
 check "auto-updating cask: not in the casks group" lacks "$(sed -n '/^ casks$/,/updates itself/p' <<< "$out")" "discord"
-check "auto-updating cask: under updates itself on launch" has "$(sed -n '/updates itself on launch/,$p' <<< "$out")" "Discord 0.0.420 → 0.0.421"
-check "auto-updating cask: open hint" contains "$out" "open Discord to update"
+check "auto-updating cask: under Open to update" has "$(sed -n '/Open to update/,/Summary/p' <<< "$out")" "Discord 0.0.420 → 0.0.421"
+check "auto-updating cask: no per-item hint" lacks "$out" "open Discord to update"
+check "open to update: Sparkle and cask together" contains "$out" "Open to update · 2"
+check "open to update: sorted by name" equals "$(sed -n '/Open to update/,/Summary/p' <<< "$out" | grep -oE '^ +(Discord|Fork) ' | tr -d ' ' | tr '\n' ' ')" "Discord Fork "
 check "older non-auto cask: row" contains "$out" "betterdisplay 4.2.3 → 5.2.1"
-check "casks: brew progress" has "$out" "brew \\.+ 5 outdated · 1 by hand"
+check "casks: brew progress without the auto-updating cask" has "$out" "brew \\.+ 5 outdated$"
+check "casks: brew section without by hand" contains "$out" "brew · 5 outdated"
+check "casks: no brew by hand row" lacks "$out" "brew by hand"
+check "stale cask: in the brew section" has "$(sed -n '/brew · 5 outdated/,/Open to update/p' <<< "$out")" "utm: app already at 5.0.8"
 check "casks: total" has "$out" "total 14 11 via --install · 3 by hand"
+check "casks: open to update row" has "$out" "^ open to update 2 open the app"
 MAC_OUTDATED_COLOR=always run
 check "stale cask: note dim" grep -q $'\033\\[2mutm: app already at' "$WORK/out"
 admin_setup admin 20
@@ -383,7 +397,8 @@ check "colour: new version yellow" grep -q $'\033\\[33m1\\.4\\.0' "$WORK/out"
 check "colour: new version not green" no_match "$(cat "$WORK/out")" $'\033\\[32m[0-9]'
 check "colour: old version dim" grep -q $'\033\\[2m1\\.3\\.1' "$WORK/out"
 check "colour: informational dim" grep -q $'\033\\[2mchecked during --install' "$WORK/out"
-check "colour: open hint yellow" grep -q $'\033\\[33mopen Fork to update' "$WORK/out"
+check "colour: open to update line yellow" grep -q $'\033\\[33mThese apps update themselves on start' "$WORK/out"
+check "colour: to open yellow" grep -q $'\033\\[33m1 to open' "$WORK/out"
 check "colour: install hint yellow" grep -q $'\033\\[33mbrew install --cask --force keepassxc' "$WORK/out"
 check "colour: note dim" grep -q $'\033\\[2mbrew update failed' "$WORK/out"
 check "colour: summary count yellow" grep -qE $'brew +\033\\[33m4\033' "$WORK/out"
@@ -403,6 +418,41 @@ check "nothing outdated: stamp written" test -f "$HOME/.local/state/mac-outdated
 MAC_OUTDATED_COLOR=always run
 check "colour: up to date green" grep -q $'\033\\[32mup to date' "$WORK/out"
 check "colour: everything up to date green" grep -q $'\033\\[32meverything up to date' "$WORK/out"
+make_app "Google Chrome" com.google.Chrome 150.0
+run
+check "nothing outdated: self-updating line still shown" has "$out" "also update themselves on start: Google Chrome"
+check "nothing outdated: no Open to update section" lacks "$out" "Open to update"
+check "nothing outdated with self-updating apps: exit 0" equals "$rc" 0
+rm -rf "$APPS/Google Chrome.app"
+
+# only an auto-updating cask and a stale record: brew itself is up to date
+jq '.casks = [
+  {name: "utm", installed_versions: ["4.7.5"], current_version: "5.0.8", pinned: false},
+  {name: "discord", installed_versions: ["0.0.389"], current_version: "0.0.421", pinned: false}]' "$FIXTURES/brew-outdated-none.json" > "$FIX/brew-outdated.json"
+make_app UTM com.utmapp.UTM 5.0.8
+make_app Discord com.hammerandchisel.discord 0.0.420
+run
+check "open only: exit 1" equals "$rc" 1
+check "open only: brew progress up to date" has "$out" "^ brew \\.+ up to date$"
+check "open only: no brew section" lacks "$out" "brew · "
+check "open only: stale note still shown" contains "$out" "utm: app already at 5.0.8 (brew's record is stale)"
+check "open only: Discord to open" has "$(sed -n '/Open to update · 1/,/Summary/p' <<< "$out")" "Discord 0.0.420 → 0.0.421"
+check "open only: summary row" has "$out" "^ open to update 1 open the app \\(updates on start\\)$"
+check "open only: no brew row" no_match "$out" "^ brew [0-9]"
+check "open only: stale not by hand" has "$out" "^ total 1 0 via --install · 1 by hand$"
+check "open only: no install hint" lacks "$out" "next:"
+MAC_OUTDATED_COLOR=always run
+check "open only: brew up to date green" grep -qE $'brew \\.+ \033\\[32mup to date' "$WORK/out"
+cp "$FIX/brew-outdated-none.json" "$FIX/brew-outdated.json"
+rm -rf "$APPS/UTM.app" "$APPS/Discord.app"
+
+# a self-updating app reported by another source goes to Open to update too
+printf '{"adamID":1,"bundleID":"org.mozilla.firefox","name":"Firefox","newVersion":"151.0","version":"150.0"}\n' > "$FIX/mas-outdated.json"
+run
+check "self-updating from another source: in Open to update" has "$(sed -n '/Open to update · 1/,/Summary/p' <<< "$out")" "Firefox 150.0 → 151.0"
+check "self-updating from another source: not counted for its source" has "$out" "^ App Store \\.+ up to date$"
+check "self-updating from another source: by hand" has "$out" "^ total 1 0 via --install · 1 by hand$"
+: > "$FIX/mas-outdated.json"
 
 # ── check mode: failed checks ────────────────────────────────────────────────
 touch "$FIX/fail-brew-outdated"

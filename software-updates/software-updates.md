@@ -19,6 +19,7 @@ mac-outdated · 2026-11-03 11:20
   Microsoft AutoUpdate ......... up to date
   Adobe ........................ checked during --install
   App Store .................... skipped (mas not installed)
+  Sparkle apps ................. 1 to open
 
 ══════════════════════════════════════════════════════════
  brew · 33 outdated
@@ -27,11 +28,20 @@ mac-outdated · 2026-11-03 11:20
     openssl@3                3.6.3     →  3.5.9  (older version: brew moved to the 3.5 line)
 
 ══════════════════════════════════════════════════════════
+ Open to update · 2
+══════════════════════════════════════════════════════════
+  These apps update themselves on start: open them by hand.
+    Discord                  0.0.420  →  0.0.421
+    Fork                     2.70.2   →  2.71.0
+  also update themselves on start: Google Chrome, Brave Browser, Firefox, …
+
+══════════════════════════════════════════════════════════
  Summary
 ══════════════════════════════════════════════════════════
   brew                        33   mac-outdated --install
+  open to update               2   open the app (updates on start)
   ────────────────────────────────
-  total                       33   33 via --install · 0 by hand
+  total                       35   33 via --install · 2 by hand
 
   next: mac-outdated --install
 ```
@@ -40,13 +50,17 @@ mac-outdated · 2026-11-03 11:20
 - A source that could not be checked (`brew outdated`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding.
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - brew warns `The following taps are not trusted:` (in `brew update`/`brew outdated` stderr) -> yellow note `brew ignores untrusted tap <tap> (its formulae get no updates): brew trust --formula <tap>/<formula> …` with the installed formulae of that tap (also those installed under the tap's old name), counted by hand (`brew by hand` row).
-- "updates itself on launch" lists apps with their own updater, minus those managed by a brew cask.
+- "Open to update" (sorted by name, counted by hand, not under their source):
+  - outdated Sparkle apps (progress line `N to open`)
+  - outdated casks with `auto_updates` (not counted on the brew line)
+  - outdated apps from the self-updating list, from any source
+- "also update themselves on start" lists the other installed self-updating apps, minus those managed by a brew cask; shown also when nothing is outdated (then without the "Open to update" header).
 - Outdated casks are checked against the real app (`CFBundleShortVersionString` in `/Applications` or `~/Applications`):
 
 | Real app | Shown | Counts |
 |---|---|---|
-| at or above brew's latest | dim `<token>: app already at <ver> (brew's record is stale)` | no |
-| older, cask `auto_updates` | under "updates itself on launch": `open <App> to update` | by hand |
+| at or above brew's latest | dim `<token>: app already at <ver> (brew's record is stale)`, in the brew section, else under "Open to update" | no |
+| older, cask `auto_updates` | "Open to update" | by hand |
 | older (or unknown), no `auto_updates` | casks row | via `--install` |
 
 - brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.
@@ -76,9 +90,9 @@ mac-outdated · 2026-11-03 11:20
 | macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all`, never restarts; `restart required` only after a successful install |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | VS Code extensions | count only | `code --update-extensions` |
-| Sparkle apps | appcast from `SUFeedURL` (beta channel skipped) | none: open the app |
+| Sparkle apps | appcast from `SUFeedURL` (beta channel skipped) | none: "Open to update" |
 | Apps without an updater | cask with the same app name | none: `brew install --cask --force <token>` (replaces the older app, settings stay; `--adopt` only takes an identical version) |
-| Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion, iStat Menus) | listed once | none: update on launch |
+| Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion, iStat Menus) | listed once | none: update on start |
 
 Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, VS Code, macOS last (sudo, longest). A failing source does not stop the others; a summary follows.
 
