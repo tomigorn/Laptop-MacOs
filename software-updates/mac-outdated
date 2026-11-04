@@ -185,7 +185,8 @@ start_log() {  # start_log <check|install>: from here on stdout and stderr also 
 }
 finish_log() {  # waits up to 5 s for the log writer, then names the log as the last line
   [ -n "$LOG_PID" ] || return 0
-  exec >&"$OUT_FD" 2>&"$ERR_FD"
+  exec >&"$OUT_FD"
+  exec 2>&"$ERR_FD"
   local i=0
   while kill -0 "$LOG_PID" 2>/dev/null && [ "$i" -lt 250 ]; do sleep 0.02; i=$((i + 1)); done
   printf 'log: %s\n' "$LOG"
