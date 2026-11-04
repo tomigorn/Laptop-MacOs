@@ -3,10 +3,11 @@ ${custom.local}$username$hostname${env_var.XXH_SSH_ALIAS}$directory$git_branch$g
 $character"""
 
 [custom.local]
-command = "echo !! local MacOS !!"
+# sh, not fish: a busy Mac starts fish too slowly and starship drops the label
 when = "test -z \"$SSH_CONNECTION\""
+shell = ["sh"]
 style = "bold yellow"
-format = "[$output]($style) "
+format = "[!! local MacOS !!]($style) "
 
 [username]
 show_always = false

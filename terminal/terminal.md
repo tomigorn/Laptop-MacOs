@@ -65,7 +65,7 @@ fastfetch shows OS, CPU, memory, uptime. It auto-detects the system and shows th
 
 **`~/.config/starship.toml`:**
 Configures the prompt. Key design decisions:
-- `custom.local` shows a bold yellow label (currently `!! local MacOS !!`) only when `$SSH_CONNECTION` is unset — appears on the Mac, invisible on every remote host, making it immediately clear where you are
+- `custom.local` shows a bold yellow label (currently `!! local MacOS !!`) only when `$SSH_CONNECTION` is unset — appears on the Mac, invisible on every remote host, making it immediately clear where you are; checked with `sh`, not fish, so a busy Mac never drops it
 - `hostname` is `ssh_only = true` — the `@ hostname` part only appears on SSH sessions, not locally
 - `env_var.XXH_SSH_ALIAS` only renders when `$XXH_SSH_ALIAS` is set, which only happens via `xxhc` — so `(myserver)` never clutters the local prompt
 - `git_status` uses full-word labels (`!modified`, `?untracked`, etc.) instead of symbols alone for clarity
@@ -158,7 +158,7 @@ running 7 minutes fast reported `Connected in 422.3s` for a two-second connect).
 
 ### Tests
 
-Offline (greeting, xxhc, wrappers): `tests/test-all.sh`. Live:
+Offline (greeting, xxhc, wrappers, starship): `tests/test-all.sh`. Live:
 
 `terminal/tests/concurrent-sessions.fish <host>` is a live integration test — it
 needs a reachable host and takes about 90 seconds. It runs two overlapping
