@@ -158,7 +158,7 @@ running 7 minutes fast reported `Connected in 422.3s` for a two-second connect).
 
 ### Tests
 
-Offline (greeting, xxhc, wrappers, starship): `tests/test-all.sh`. Live:
+Offline (greeting, xxhc, wrappers, starship, remote-binaries): `tests/test-all.sh`. Live:
 
 `terminal/tests/concurrent-sessions.fish <host>` is a live integration test — it
 needs a reachable host and takes about 90 seconds. It runs two overlapping
@@ -262,6 +262,8 @@ All config lives in this directory and is **symlinked** from its real home path.
 terminal/
   terminal.md                             this file
   install.sh                                automated setup for a new Mac
+  remote-binaries.sh                      downloads the pinned remote binaries, sha256-checked
+  remote-binaries.conf                    pin file: version, asset, sha256 per tool and arch
 
   .config/
     xxh/config.xxhc                       xxh connection settings (all hosts)
@@ -279,7 +281,7 @@ terminal/
     xxh-config.fish                       fish session init on the remote
 
   SETUP_VERSION                           terminal setup version (shown in the greeting)
-  tests/                                  greeting, xxhc, wrapper tests; concurrent-sessions.fish is live
+  tests/                                  greeting, xxhc, wrapper, remote-binaries tests; concurrent-sessions.fish is live
   ghostty.icns                            Ghostty custom icon (referenced from ~/.config/ghostty/config)
 ```
 
@@ -520,26 +522,25 @@ ln -sf $BASE/.config/starship.toml ~/.xxh/.xxh/shells/xxh-shell-fish/build/stars
 
 ### 6. Download Linux static binaries (per architecture)
 
-`install.sh` does this automatically for both `x86_64` and `aarch64`, downloading fish (official `fish-shell` 4.x `linux-<arch>` single-binary build) plus starship/atuin/bat/fastfetch into `~/.xxh/arch/<arch>/`. The binaries are not in git (too large).
+`install.sh` runs `remote-binaries.sh`, which downloads fish, starship, atuin, bat and fastfetch for `x86_64` and `aarch64` into `~/.xxh/arch/<arch>/`. Not in git (too large).
 
-To do it by hand, run the `build_arch_store` helper from `install.sh` for each arch, or replicate its layout:
+| File | Role |
+|---|---|
+| `remote-binaries.conf` | pin file: one row per tool and arch: `tool repo tag arch asset binary sha256` |
+| `remote-binaries.sh` | downloads `releases/download/<tag>/<asset>`, checks `shasum -a 256`, extracts `binary`; mismatch → download deleted, exit 1 |
+
+Update a pin (new release): take the sha256 from the API, cross-check with the upstream `.sha256` file where one exists (starship, atuin):
 
 ```
-~/.xxh/arch/<arch>/fish-portable/bin/fish        # from fish-shell release linux-<arch>.tar.xz (single binary)
-~/.xxh/arch/<arch>/fish-portable/bin/fish.sh     # the 3-line TERMINFO wrapper the entrypoint launches
-~/.xxh/arch/<arch>/bin/starship                  # starship/starship, <triple>.tar.gz
-~/.xxh/arch/<arch>/bin/atuin                     # atuinsh/atuin, atuin-<triple>.tar.gz
-~/.xxh/arch/<arch>/bin/bat                        # sharkdp/bat, <triple>.tar.gz (version in dir name)
-~/.xxh/arch/<arch>/bin/fastfetch                  # fastfetch-cli/fastfetch, linux-<label>-polyfilled.tar.gz
+curl -fsSL https://api.github.com/repos/<repo>/releases/tags/<tag> | jq -r '.assets[] | "\(.name) \(.digest)"'
 ```
 
-where `<arch>`/`<triple>`/`<label>` are `x86_64`/`x86_64-unknown-linux-musl`/`amd64` and `aarch64`/`aarch64-unknown-linux-musl`/`aarch64`. The `fish.sh` wrapper is:
+Layout per arch:
 
-```sh
-#!/bin/sh
-export TERMINFO_DIRS=/lib/terminfo:/etc/terminfo:/usr/share/terminfo:$TERMINFO_DIRS
-CURRENT_DIR="$(cd "$(dirname "$0")" && pwd)"
-$CURRENT_DIR/fish "$@"
+```
+~/.xxh/arch/<arch>/fish-portable/bin/fish        # fish-shell, single binary
+~/.xxh/arch/<arch>/fish-portable/bin/fish.sh     # TERMINFO wrapper the entrypoint launches
+~/.xxh/arch/<arch>/bin/{starship,atuin,bat,fastfetch}
 ```
 
 ### 7. Stage a default arch in the xxh build dir

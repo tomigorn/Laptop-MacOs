@@ -18,16 +18,6 @@ symlink() {
     ok "$(basename "$dst") → $src"
 }
 
-gh_latest_url() {
-    local repo=$1 pattern=$2
-    curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
-        | grep "browser_download_url" \
-        | grep "$pattern" \
-        | grep -vE 'sha256|\.sig|\.asc|-update' \
-        | head -1 \
-        | cut -d'"' -f4
-}
-
 # ── 1. Homebrew ───────────────────────────────────────────────────────────────
 step "Homebrew"
 if command -v brew &>/dev/null; then
@@ -89,84 +79,10 @@ symlink "$SCRIPT_DIR/.config/starship.toml"  ~/.xxh/.xxh/shells/xxh-shell-fish/b
 
 # ── 6. Per-architecture binary stores ────────────────────────────────────────
 # One store per remote architecture; xxhc uploads the matching one on connect.
+# Versions and sha256 are pinned in remote-binaries.conf.
 step "Per-architecture binary stores (uploaded to remote on connect)"
 
-download_binary() {
-    local dest=$1 repo=$2 pattern=$3 binary_in_archive=$4
-    if [[ -f "$dest" ]]; then
-        skip "$(basename "$dest") [$(basename "$(dirname "$(dirname "$dest")")")]"
-        return
-    fi
-    mkdir -p "$(dirname "$dest")"
-    info "Fetching $repo ($pattern)..."
-    local url
-    url=$(gh_latest_url "$repo" "$pattern")
-    [[ -z "$url" ]] && die "Could not find download URL for $repo $pattern"
-    local tmp
-    tmp=$(mktemp -d)
-    curl -fsSL "$url" | tar -xz -C "$tmp"
-    if [[ "$binary_in_archive" == "find:"* ]]; then
-        # Some archives (e.g. bat) embed the version in the directory name.
-        # Use find to locate the binary instead of a fixed path.
-        local find_name=${binary_in_archive#find:}
-        local found
-        found=$(find "$tmp" -name "$find_name" -type f | head -1)
-        [[ -z "$found" ]] && die "Could not find $find_name in archive"
-        mv "$found" "$dest"
-    else
-        mv "$tmp/$binary_in_archive" "$dest"
-    fi
-    chmod +x "$dest"
-    rm -rf "$tmp"
-    ok "$dest"
-}
-
-# fish 4.x ships a single self-contained binary per arch (functions/completions
-# embedded — no share/ tree). dest_dir is <store>/fish-portable/bin.
-download_fish() {
-    local dest_dir=$1 fish_arch=$2
-    if [[ -f "$dest_dir/fish" ]]; then
-        skip "fish [$fish_arch]"
-    else
-        mkdir -p "$dest_dir"
-        info "Fetching fish-shell ($fish_arch)..."
-        local url
-        url=$(gh_latest_url "fish-shell/fish-shell" "linux-$fish_arch.tar.xz")
-        [[ -z "$url" ]] && die "Could not find fish download URL for $fish_arch"
-        local tmp
-        tmp=$(mktemp -d)
-        curl -fsSL "$url" | tar -xJf - -C "$tmp"
-        mv "$tmp/fish" "$dest_dir/fish"
-        chmod +x "$dest_dir/fish"
-        rm -rf "$tmp"
-        ok "fish [$fish_arch]"
-    fi
-    # TERMINFO wrapper that the xxh entrypoint launches (fish-portable/bin/fish.sh)
-    cat > "$dest_dir/fish.sh" <<'WRAP'
-#!/bin/sh
-export TERMINFO_DIRS=/lib/terminfo:/etc/terminfo:/usr/share/terminfo:$TERMINFO_DIRS
-CURRENT_DIR="$(cd "$(dirname "$0")" && pwd)"
-$CURRENT_DIR/fish "$@"
-WRAP
-    chmod +x "$dest_dir/fish.sh"
-}
-
-build_arch_store() {
-    local arch=$1 triple=$2 ff_label=$3
-    local store=~/.xxh/arch/$arch
-    info "── $arch ──"
-    download_fish   "$store/fish-portable/bin" "$arch"
-    download_binary "$store/bin/starship"  "starship/starship"        "$triple.tar.gz"         "starship"
-    download_binary "$store/bin/atuin"     "atuinsh/atuin"            "atuin-$triple.tar.gz"   "atuin-$triple/atuin"
-    download_binary "$store/bin/bat"       "sharkdp/bat"              "$triple.tar.gz"         "find:bat"
-    # -polyfilled is the same build with debug info stripped (11.1 MB -> 3.1 MB),
-    # same GLIBC_2.34 floor as the plain asset. Keep the suffix or the payload
-    # silently grows by 8 MB per connect.
-    download_binary "$store/bin/fastfetch" "fastfetch-cli/fastfetch"  "linux-$ff_label-polyfilled.tar.gz" "fastfetch-linux-$ff_label-polyfilled/usr/bin/fastfetch"
-}
-
-build_arch_store x86_64  "x86_64-unknown-linux-musl"  "amd64"
-build_arch_store aarch64 "aarch64-unknown-linux-musl" "aarch64"
+"$SCRIPT_DIR/remote-binaries.sh"
 
 # ── 7. Stage default (x86_64) binaries in xxh build dir ──────────────────────
 # This keeps a bare `xxh <host>` (without xxhc) working on x86_64 remotes. `xxhc`
