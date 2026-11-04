@@ -35,7 +35,7 @@ CASK_TABLE=""  # token<TAB>app bundle name<TAB>auto_updates, from brew info --in
 declare -A HINTS=(
   [brew]="mac-outdated --install" [msupdate]="mac-outdated --install" [adobe]="mac-outdated --install" [mas]="mac-outdated --install"
   [macos]="mac-outdated --install" [pipx]="mac-outdated --install" [vscode]="mac-outdated --install"
-  [sparkle]="open the app" [unmanaged]="brew install --cask --adopt …"
+  [sparkle]="open the app" [unmanaged]="brew install --cask --force …"
 )
 RULE=$(printf '═%.0s' {1..58})
 THIN=$(printf '─%.0s' {1..32})
@@ -389,7 +389,7 @@ check_unmanaged() {
       | jq -r --arg a "$name.app" '.casks[0] | select([.artifacts[]? | objects | .app? // empty | .[] | strings] | index($a)) | .version' 2>/dev/null)
     latest=${version%%,*}
     [ -n "$latest" ] && [ "$latest" != latest ] || continue
-    newer "$inst" "$latest" && item unmanaged "$name" "$inst" "$latest" "brew install --cask --adopt $token"
+    newer "$inst" "$latest" && item unmanaged "$name" "$inst" "$latest" "brew install --cask --force $token"
   done < <(all_apps)
 }
 

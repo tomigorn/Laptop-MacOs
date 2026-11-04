@@ -77,7 +77,7 @@ mac-outdated · 2026-11-03 11:20
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | VS Code extensions | count only | `code --update-extensions` |
 | Sparkle apps | appcast from `SUFeedURL` (beta channel skipped) | none: open the app |
-| Apps without an updater | cask with the same app name | none: `brew install --cask --adopt <token>` |
+| Apps without an updater | cask with the same app name | none: `brew install --cask --force <token>` (replaces the older app, settings stay; `--adopt` only takes an identical version) |
 | Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion, iStat Menus) | listed once | none: update on launch |
 
 Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, VS Code, macOS last (sudo, longest). A failing source does not stop the others; a summary follows.
