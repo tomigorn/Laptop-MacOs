@@ -62,7 +62,7 @@ if [ "${#missing[@]}" -eq 0 ]; then
 else
     for p in "${missing[@]}"; do
         case "$p" in
-            yabai|skhd) brew install "koekeishiya/formulae/$p" ;;
+            yabai|skhd) brew install "asmvik/formulae/$p" ;;
             *)          brew install "$p" ;;
         esac
     done

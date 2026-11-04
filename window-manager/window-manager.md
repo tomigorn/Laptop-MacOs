@@ -31,7 +31,7 @@ Protection on.
 ## Requirements
 
 - macOS (Apple Silicon or Intel), Homebrew.
-- That's it — `install.sh` pulls `yabai`, `skhd`, `jq`, `displayplacer`.
+- That's it — `install.sh` pulls `yabai`, `skhd` (tap `asmvik/formulae`), `jq`, `displayplacer`.
 
 ## Install
 
@@ -216,6 +216,7 @@ window-manager/
 ├── tests/model-fallback.sh     # tests for the model fallback, marks and safe rewrites (stubs yabai + ioreg)
 ├── tests/arrange.sh            # tests for arrange (stubs yabai, ioreg, displayplacer)
 ├── tests/bottom.sh             # tests for the fixed bottom gap (stubs yabai)
+├── tests/install.sh            # tests for install.sh: brew tap asmvik/formulae (stubs brew)
 └── config/
     ├── yabairc                 # → ~/.config/yabai/yabairc
     ├── yabai-snap.sh           # → ~/.config/yabai/yabai-snap.sh

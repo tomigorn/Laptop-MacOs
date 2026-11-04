@@ -17,7 +17,7 @@
 | `ssh/` | `ssh-why.fish` |
 | `terminal/` | `greeting.fish`, `xxhc.fish`, `wrappers.sh`, `starship.sh` |
 | `virt-manager/` | `launcher.sh` |
-| `window-manager/` | `arrange.sh`, `bottom.sh`, `launcher.sh`, `make-icon.sh`, `model-fallback.sh` |
+| `window-manager/` | `arrange.sh`, `bottom.sh`, `install.sh`, `launcher.sh`, `make-icon.sh`, `model-fallback.sh` |
 
 All stub external tools (ssh, curl, yabai, brew, sudo, ...) and use a temp `HOME`; nothing is installed or changed on the Mac.
 
