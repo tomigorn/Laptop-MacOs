@@ -301,29 +301,44 @@ check_scripts() {  # the repo's install scripts naming a tap that is not tapped:
   done < <(perl -ne "$TAP_REFS" "${files[@]}" | sort -u)
 }
 
-parse_msupdate() {
+declare -A MAU_APPS=(  # msupdate app ID -> app bundle name
+  [XCEL2019]="Microsoft Excel" [MSWD2019]="Microsoft Word" [PPT32019]="Microsoft PowerPoint" [OPIM2019]="Microsoft Outlook"
+  [ONMC2019]="Microsoft OneNote" [ONDR18]=OneDrive [MSAU04]="Microsoft AutoUpdate" [WDAV00]="Microsoft Defender"
+  [WDAVCONSUMER]="Microsoft Defender" [TEAMS21]="Microsoft Teams" [TEAMS10]="Microsoft Teams classic" [EDGE01]="Microsoft Edge"
+  [IMCP01]="Company Portal" [MSCP10]="Microsoft Copilot" [MSRD10]="Windows App"
+)
+parse_msupdate() {  # prints name|latest|app ID; entries are "<ID>  <title> Update <version> (<build>)", "<name> (<version>)" or "<name>" with a "Version:" line
   sed -e $'s/\033\\[[0-9;]*[A-Za-z]//g' | tr '\r' '\n' | awk '
-    function flush() { if (name != "") print name "|" (v == "" ? "?" : v); name = ""; v = "" }
+    function flush() {
+      if (name != "") print name "|" (tv != "" ? tv : fv != "" ? fv : build != "" ? build : "?") "|" id
+      name = ""; tv = ""; fv = ""; build = ""; id = ""
+    }
     /Updates available:/ { on = 1; next }
     !on { next }
     { sub(/^[ \t]+/, ""); sub(/[ \t]+$/, "") }
     $0 == "" || /^Update Assistant/ || /^No updates/ { next }
-    /^Version:/ { sub(/^Version:[ \t]*/, ""); split($0, f, " "); v = f[1]; next }
+    /^Version:/ { sub(/^Version:[ \t]*/, ""); split($0, f, " "); fv = f[1]; next }
+    /^Application ID:/ { if (id == "") { id = $0; sub(/^Application ID:[ \t]*/, "", id) } next }
     /^[A-Za-z][A-Za-z ]*:/ { next }
     {
       flush(); name = $0
-      if (match(name, / \([^)]*\)$/)) { v = substr(name, RSTART + 2, RLENGTH - 3); name = substr(name, 1, RSTART - 1) }
+      if (match(name, /^[A-Z][A-Za-z0-9]+(\t|  )[ \t]*/)) { id = substr(name, 1, RLENGTH); sub(/[ \t]+$/, "", id); name = substr(name, RLENGTH + 1) }
+      if (match(name, / \([^)]*\)$/)) { build = substr(name, RSTART + 2, RLENGTH - 3); name = substr(name, 1, RSTART - 1) }
+      if (match(name, / Update [0-9][0-9.]*$/)) { tv = substr(name, RSTART + 8); name = substr(name, 1, RSTART - 1) }
     }
     END { flush() }'
 }
 check_msupdate() {
   [ -x "$MSUPDATE" ] || { note msupdate "Microsoft AutoUpdate not installed" "skipped (msupdate not installed)" – "install Microsoft AutoUpdate"; return; }
-  local out name version app inst
+  local out name version id app inst
   out=$("$MSUPDATE" --list 2>&1) || { check_failed msupdate "msupdate --list failed"; return; }
-  while IFS='|' read -r name version; do
+  while IFS='|' read -r name version id; do
     [ -n "$name" ] || continue
+    name=${MAU_APPS[${id^^}]:-$name}
     inst=""
-    app=$(find_app "$name") && inst=$(app_version "$app")
+    if [ "${id^^}" = MSAU04 ]; then inst=$(app_version "${MSUPDATE%/Contents/MacOS/*}")
+    elif app=$(find_app "$name"); then inst=$(app_version "$app")
+    fi
     item msupdate "$name" "${inst:-?}" "$version"
   done < <(parse_msupdate <<< "$out")
 }

@@ -224,8 +224,11 @@ check "brew: formula" contains "$out" "bash 5.3.15 → 5.3.20"
 check "brew: cask" contains "$out" "ghostty 1.3.1 → 1.4.0"
 check "brew: pinned formula skipped" lacks "$out" "node@20"
 check "brew: update first" equals "$(grep -E '^brew (update|outdated)' "$CALLS" | head -1 | cut -d' ' -f1-2)" "brew update"
-check "msupdate: Word with installed app version" contains "$out" "Microsoft Word 16.114.3 → 16.115.26110212"
-check "msupdate: Excel without app" contains "$out" "Microsoft Excel ? → 16.115.26110212"
+check "msupdate: Word with installed app version" contains "$out" "Microsoft Word 16.114.3 → 16.115.0"
+check "msupdate: Excel without app" contains "$out" "Microsoft Excel ? → 16.115.0"
+check "msupdate: no app ID in the name" lacks "$out" "MSWD2019"
+check "msupdate: no update title in the name" lacks "$out" "Word Update"
+check "msupdate: build number not shown" lacks "$out" "26110212"
 check "adobe: product update" contains "$out" "PHSP ? → 27.1"
 check "adobe: second product" contains "$out" "AEFT ? → 26.0.1"
 check "adobe: Acrobat update" contains "$out" "AcrobatDC ? → update"
@@ -307,6 +310,25 @@ run
 check "log: pruned to 20" equals "$(find "$LOGS" -name '*.log' | wc -l | tr -d ' ')" 20
 check "log: oldest deleted" test ! -e "$LOGS/2000-01-01-000001-check.log"
 check "log: newest kept" test -s "$(logpath)"
+
+# msupdate "Name" + "Version:" lines layout
+printf 'Updates available:\nMicrosoft Word\n\t Version: 16.115.26110212\n\t Application ID: MSWD2019\n\t Size: 1.32 GB\n' > "$FIX/msupdate-list.txt"
+run
+check "msupdate: Version: line layout" contains "$out" "Microsoft Word 16.114.3 → 16.115.26110212"
+
+# msupdate "<app ID>  <title> Update <version> (<build>)" layout: app found by its ID
+make_app "Microsoft PowerPoint" com.microsoft.Powerpoint 16.113.2
+make_app OneDrive com.microsoft.OneDrive 26.180.0914
+printf 'Updates available:\n\tPPT32019  Microsoft PowerPoint Update 16.114.4 (26110224)\n\tONDR18  OneDrive Update 26.190.1001 (26100104)\n\tZZZZ01  Contoso Widget Update 2.1.0 (26110224)\n\tYYYY02  Contoso Helper (26110224)\n' > "$FIX/msupdate-list.txt"
+run
+check "msupdate: app ID mapped, version from the app" contains "$out" "Microsoft PowerPoint 16.113.2 → 16.114.4"
+check "msupdate: OneDrive by its ID" contains "$out" "OneDrive 26.180.0914 → 26.190.1001"
+check "msupdate: unknown ID keeps a readable name" contains "$out" "Contoso Widget ? → 2.1.0"
+check "msupdate: no version in the title, build number" contains "$out" "Contoso Helper ? → 26110224"
+check "msupdate: unknown ID not shown" lacks "$out" "ZZZZ01"
+check "msupdate: count" has "$out" "Microsoft AutoUpdate \\.+ 4 outdated"
+rm -rf "$APPS/Microsoft PowerPoint.app" "$APPS/OneDrive.app"
+cp "$FIXTURES/msupdate-list.txt" "$FIX/msupdate-list.txt"
 
 # msupdate "Name (version)" layout
 printf 'Updates available:\n\tMicrosoft Outlook (16.115.26110212)\n' > "$FIX/msupdate-list.txt"
