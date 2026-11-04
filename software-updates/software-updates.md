@@ -90,7 +90,7 @@ mac-outdated · 2026-11-03 11:20
 | macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all`, never restarts; `restart required` only after a successful install |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | VS Code extensions | count only | `code --update-extensions` |
-| Sparkle apps | appcast from `SUFeedURL` (beta channel skipped) | none: "Open to update" |
+| Sparkle apps | appcast from `SUFeedURL` (beta channel skipped); no `SUFeedURL` (VLC, TeamViewer): the cask that installs the app, as for apps without an updater | none: "Open to update"; no feed and cask without `auto_updates`: `brew install --cask --force <token>` |
 | Apps without an updater | cask that installs the app (see below) | none: `brew install --cask --force <token>` (replaces the older app, settings stay; `--adopt` only takes an identical version); `auto_updates` cask -> "Open to update" |
 | Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion, iStat Menus) | listed once | none: update on start |
 

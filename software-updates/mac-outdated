@@ -356,7 +356,11 @@ check_sparkle() {
     is_self_updating "$name" && continue
     plist="$app/Contents/Info.plist"
     feed=$(plist_get "$plist" SUFeedURL)
-    [ -n "$feed" ] || continue
+    if [ -z "$feed" ]; then
+      inst=$(app_version "$app")
+      [ -n "$inst" ] && command -v brew >/dev/null && cask_item sparkle "$name" "$inst"
+      continue
+    fi
     xml=$(curl -fsSL --max-time 10 "$feed" 2>/dev/null) || { note sparkle "$name: appcast not reachable"; continue; }
     short="" build=""
     while read -r kind value; do

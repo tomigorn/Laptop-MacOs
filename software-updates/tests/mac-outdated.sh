@@ -549,6 +549,31 @@ run
 check "no cask cache: falls back to the app name" contains "$out" "KeePassXC 2.7.9 → 2.8.0"
 check "no cask cache: name differing from the token not found" lacks "$out" "BambuStudio"
 
+# Sparkle apps without SUFeedURL: the cask decides
+fixtures_outdated
+cask_cache '{"casks": {
+  "vlc": {"version": "3.0.24", "auto_updates": true, "raw_artifacts": [[":app", ["VLC.app"]]]},
+  "teamviewer": {"version": "15.82.6", "auto_updates": true, "raw_artifacts": [[":pkg", ["TeamViewer.pkg"]], [":uninstall", {":delete": ["/Applications/TeamViewer.app"]}]]},
+  "plain-app": {"version": "2.0", "raw_artifacts": [[":app", ["Plain.app"]]]}
+}}'
+make_app VLC org.videolan.vlc 3.0.20 "" sparkle
+make_app TeamViewer com.teamviewer.TeamViewer 15.83.3 "" sparkle
+make_app Plain com.example.plain 1.0 "" sparkle
+make_app NoFeed com.example.nofeed 1.0 "" sparkle
+run
+check "sparkle without feed: auto-updating cask -> Open to update" has "$(sed -n '/Open to update/,/Summary/p' <<< "$out")" "VLC 3.0.20 → 3.0.24"
+check "sparkle without feed: app newer than the cask not listed" lacks "$out" "TeamViewer"
+check "sparkle without feed: other cask, install hint" has "$(sed -n '/Sparkle apps ·/,/Open to update/p' <<< "$out")" "Plain 1.0 → 2.0"
+check "sparkle without feed: hint text" contains "$out" "brew install --cask --force plain-app"
+check "sparkle without feed: no cask, no line" lacks "$out" "NoFeed"
+check "sparkle without feed: not under apps without an updater" no_match "$out" "Apps without an updater · "
+check "sparkle without feed: open count" contains "$out" "Open to update · 2"
+rm -rf "$FIX/brew-cache"
+cask_like vlc VLC 3.0.24
+jq '.casks[0].auto_updates = true' "$FIX/brew-info-vlc.json" > "$FIX/x" && mv "$FIX/x" "$FIX/brew-info-vlc.json"
+run
+check "sparkle without feed, no cache: cask named like the app" has "$(sed -n '/Open to update/,/Summary/p' <<< "$out")" "VLC 3.0.20 → 3.0.24"
+
 # ── test hooks: path overrides only with MAC_OUTDATED_TEST=1 ─────────────────
 paths() { /opt/homebrew/bin/bash -c 'source "$1"; printf "%s\n" "$PRIVILEGESCLI" "$MSUPDATE" "$RUM" "$APP_DIRS"' _ "$SCRIPT"; }
 check "hooks: overrides used in tests" equals "$(paths)" "$BIN/PrivilegesCLI
