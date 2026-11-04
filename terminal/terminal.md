@@ -490,9 +490,9 @@ pipx ensurepath
 
 ```sh
 pipx install xxh-xxh
-xxh +I xxh-shell-fish
 ```
-`+I` installs the plugin locally into `~/.xxh/.xxh/shells/xxh-shell-fish/`. This must happen before the build-dir symlinks in step 5, since the directory doesn't exist yet.
+
+The plugin is pinned: `install.sh` clones `xxh/xxh-shell-fish` at `XXH_SHELL_FISH_COMMIT` into `~/.xxh/.xxh/shells/xxh-shell-fish/` and each `~/.xxh-homes/<arch>`, then copies `entrypoint.sh` and `xxh-config.fish` into `build/`. Not `xxh +I`: it can only clone a branch head, and its `build.sh` downloads an unverified fish-portable 3.4.1 we never use. A home at another commit is reinstalled. This must happen before the build-dir symlinks in step 5.
 
 ### 4. Create symlinks for local config
 
@@ -569,7 +569,7 @@ cp -R ~/.xxh/arch/x86_64/bin "$build/bin"
 ```sh
 home=~/.xxh-homes/<arch>
 build="$home/.xxh/shells/xxh-shell-fish/build"
-xxh +I xxh-shell-fish +lh "$home"                         # one-time: install the shell into this home
+install_shell_fish "$home"                                # one-time: pinned plugin clone (install.sh)
 ln -sf $BASE/.xxh/xxh-config.fish  "$build/xxh-config.fish"
 ln -sf $BASE/.config/starship.toml "$build/starship.toml"
 rm -rf "$build/fish-portable" "$build/bin"
@@ -589,7 +589,9 @@ cp -R ~/.xxh/arch/<arch>/bin           "$build/bin"
 
 **Config files** (`starship.toml`, `xxh-config.fish`, `config.xxhc`, `xxhc.fish`, etc.) — edit the file in this repo. Symlinks make the change live immediately. The remote picks it up on the next connect.
 
-**Binaries** — re-run `install.sh`. It skips binaries that already exist, so to pick up a newer version first delete the ones you want refreshed (e.g. `rm ~/.xxh/arch/*/bin/starship`), then run `install.sh` again. It repopulates both architecture stores **and** restages them into the per-arch homes (`~/.xxh-homes/<arch>`), which is what `xxhc` uploads. (To force a clean home rebuild, `rm -rf ~/.xxh-homes` first, then re-run `install.sh`.) **Upgrading from ≤1.1.2:** run `rm ~/.xxh/arch/*/bin/fastfetch` once before `install.sh`, or the old unstripped 11 MB binary is skipped and kept — the greeting will read v1.2.0 while the fat binary is still being uploaded.
+**Binaries** — bump the pin in `remote-binaries.conf` (tag, asset, sha256; see step 6), then re-run `install.sh`: it fetches every tool whose `VERSIONS` entry differs and restages the per-arch homes (`~/.xxh-homes/<arch>`), which is what `xxhc` uploads. `install.sh --refresh-remote` fetches all of them again. Clean home rebuild: `rm -rf ~/.xxh-homes`, then `install.sh`.
+
+**xxh-shell-fish** — set `XXH_SHELL_FISH_COMMIT` in `install.sh` to the new commit, re-run `install.sh`.
 
 ---
 

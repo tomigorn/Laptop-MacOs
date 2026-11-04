@@ -27,6 +27,26 @@ symlink() {
     ok "$(basename "$dst") → $src"
 }
 
+# xxh +I can only clone a branch head, so the plugin is cloned here at a pinned commit.
+XXH_SHELL_FISH_REPO=https://github.com/xxh/xxh-shell-fish
+XXH_SHELL_FISH_COMMIT=f2c72898ea8338c51e9110b5302bf43baa9f2873
+
+install_shell_fish() {  # install_shell_fish <xxh home>
+    local pkg=$1/.xxh/shells/xxh-shell-fish
+    if [[ "$(git -C "$pkg" rev-parse HEAD 2>/dev/null)" == "$XXH_SHELL_FISH_COMMIT" ]]; then
+        skip "xxh-shell-fish ${XXH_SHELL_FISH_COMMIT:0:7} [$1]"
+        return
+    fi
+    rm -rf "$pkg"
+    mkdir -p "$(dirname "$pkg")"
+    git clone -q "$XXH_SHELL_FISH_REPO" "$pkg"
+    git -C "$pkg" -c advice.detachedHead=false checkout -q "$XXH_SHELL_FISH_COMMIT"
+    [[ "$(git -C "$pkg" rev-parse HEAD)" == "$XXH_SHELL_FISH_COMMIT" ]] || die "xxh-shell-fish is not at $XXH_SHELL_FISH_COMMIT"
+    mkdir -p "$pkg/build"
+    cp "$pkg/entrypoint.sh" "$pkg/xxh-config.fish" "$pkg/build/"
+    ok "xxh-shell-fish ${XXH_SHELL_FISH_COMMIT:0:7} [$1]"
+}
+
 # ── 1. Homebrew ───────────────────────────────────────────────────────────────
 step "Homebrew"
 if command -v brew &>/dev/null; then
@@ -53,12 +73,7 @@ else
     ok "xxh installed"
 fi
 
-if [[ -d ~/.xxh/.xxh/shells/xxh-shell-fish ]]; then
-    skip "xxh-shell-fish"
-else
-    xxh +I xxh-shell-fish
-    ok "xxh-shell-fish installed"
-fi
+install_shell_fish ~/.xxh
 
 # ── 4. Symlinks: local config files ──────────────────────────────────────────
 step "Symlinks — local config"
@@ -118,10 +133,7 @@ build_arch_home() {
     local arch=$1
     local home=~/.xxh-homes/$arch
     local hbuild="$home/.xxh/shells/xxh-shell-fish/build"
-    if [[ ! -d "$home/.xxh/shells/xxh-shell-fish" ]]; then
-        info "Installing xxh-shell-fish into $home..."
-        xxh +I xxh-shell-fish +lh "$home" >/dev/null
-    fi
+    install_shell_fish "$home"
     # Same config symlinks as the default build dir (point at the repo).
     ln -sf "$SCRIPT_DIR/.xxh/xxh-config.fish"  "$hbuild/xxh-config.fish"
     ln -sf "$SCRIPT_DIR/.config/starship.toml" "$hbuild/starship.toml"
