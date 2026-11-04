@@ -89,6 +89,17 @@ mac-outdated · 2026-11-03 11:20
 
 - brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.
 - `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS is not indented, its input stays the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
+- `up to date` instead of `installed` when nothing was updated:
+
+| Source | Signal |
+|---|---|
+| Adobe | `No new applicable Updates` |
+| App Store | `mas outdated` lists nothing (then no `mas upgrade`, no admin check) |
+| pipx | `No packages upgraded` |
+| uv tools | `Nothing to upgrade` |
+| VS Code extensions | `No extension to update` |
+| Microsoft AutoUpdate, macOS | `--list` finds nothing |
+
 - Repetitive tool output folds on the terminal (blank lines dropped), the log keeps all:
 
 | More than 5 lines in a row with | Shows | Example |
@@ -118,7 +129,7 @@ mac-outdated · 2026-11-03 11:20
 | Install scripts | `*.sh` and `install*` files of this repo (found from the script's real path; `.git`, `tests`, `fixtures` skipped) naming `brew install <owner>/<tap>/<name>` or `brew tap <owner>/<tap>` for a tap that is not tapped (comments and `homebrew/*` skipped) | none: fix the script |
 | Microsoft AutoUpdate | `msupdate --list`, lines `<app ID>  <title> Update <version> (<build>)`: app ID -> app (`MSWD2019` Word, `XCEL2019` Excel, `PPT32019` PowerPoint, `OPIM2019` Outlook, `ONMC2019` OneNote, `ONDR18` OneDrive, `MSau04` AutoUpdate, Teams, Defender, Edge, …; unknown ID: the title), installed = the app's `CFBundleShortVersionString`, latest = the title's version (the build only without one) | `msupdate --list` first: no updates -> `up to date`; else `msupdate --install --wait 600` (without a wait it can hang until the MAU window is clicked) |
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
-| App Store | `mas outdated --json` (note if `mas` is missing) | `sudo mas upgrade` (mas needs root to update apps) |
+| App Store | `mas outdated --json` (note if `mas` is missing) | `mas outdated` first: nothing -> `up to date`; else `sudo mas upgrade` (mas needs root to update apps) |
 | macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all`, never restarts; `restart required` only after a successful install |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | uv tools | `uv tool list --outdated` (`none installed` without tools; skipped when uv is missing) | `uv tool upgrade --all` |

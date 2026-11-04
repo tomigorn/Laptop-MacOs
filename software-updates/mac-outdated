@@ -792,10 +792,20 @@ install_macos() {  # runs on the terminal, not through a pipe: softwareupdate ma
   [ "$rc" -eq 0 ] && grep -q 'Action: restart' <<< "$list" && echo "    restart required: restart the Mac when it suits you"
   return "$rc"
 }
+run_noting() {  # run_noting <pattern> <command…>: the command's exit code; on success, output matching <pattern> (nothing updated) marks the step up to date
+  local pattern=$1 out rc
+  shift
+  out=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX") || { "$@"; return; }
+  "$@" 2>&1 | tee -i "$out"
+  rc=${PIPESTATUS[0]}
+  [ "$rc" -ne 0 ] || ! grep -qE "$pattern" "$out" || STEP_STATUS=uptodate
+  rm -f "$out"
+  return "$rc"
+}
 install_adobe() {
   [ -x "$RUM" ] || { STEP_STATUS=missing; return 0; }
   still_admin || return 0
-  sudo "$RUM" --action=install
+  run_noting 'No new applicable Updates' sudo "$RUM" --action=install
 }
 install_brew() {
   command -v brew >/dev/null || { STEP_STATUS=missing; return 0; }
@@ -829,21 +839,23 @@ install_msupdate() {
 install_mas() {
   local mas
   mas=$(command -v mas) || { STEP_STATUS=missing; return 0; }
+  local list
+  if list=$("$mas" outdated --json 2>/dev/null) && ! grep -q newVersion <<< "$list"; then STEP_STATUS=uptodate; return 0; fi
   still_admin || return 0
   sudo "$mas" upgrade
 }
 install_pipx() {
   command -v pipx >/dev/null || { STEP_STATUS=missing; return 0; }
-  pipx upgrade-all
+  run_noting 'No packages upgraded' pipx upgrade-all
 }
 install_uv() {
   command -v uv >/dev/null || { STEP_STATUS=missing; return 0; }
-  uv tool upgrade --all
+  run_noting 'Nothing to upgrade' uv tool upgrade --all
 }
 install_vscode() {
   local code
   code=$(code_cmd) || { STEP_STATUS=missing; return 0; }
-  "$code" --update-extensions
+  run_noting 'No extension to update' "$code" --update-extensions
 }
 
 FOLD_AFTER=5 FOLD_SHOW=3 FOLD_MODE="" FOLD_KEY="" FOLD_PREFIX="" FOLD_N=0 FOLD_PENDING=() FOLD_LAST=""

@@ -68,7 +68,7 @@ esac'
 stub RemoteUpdateManager '
 case "$1" in
   --action=list) cat "$FIX/rum-list.txt" ;;
-  --action=install) echo "Successfully installed (AdobeAcrobatDC)"; [ -f "$FIX/exit-rum" ] && exit "$(cat "$FIX/exit-rum")"; [ -f "$FIX/fail-rum" ] && exit 1; exit 0 ;;
+  --action=install) if [ -f "$FIX/rum-install.txt" ]; then cat "$FIX/rum-install.txt"; else echo "Successfully installed (AdobeAcrobatDC)"; fi; [ -f "$FIX/exit-rum" ] && exit "$(cat "$FIX/exit-rum")"; [ -f "$FIX/fail-rum" ] && exit 1; exit 0 ;;
 esac'
 stub mas '
 case "$1" in
@@ -85,17 +85,17 @@ stub pipx '
 case "$1" in
   list) cat "$FIX/pipx-list.json"; [ -f "$FIX/fail-pipx-list" ] && exit 1; exit 0 ;;
   runpip) f="$FIX/pip-index-$2.txt"; [ -f "$f" ] || exit 1; cat "$f"; grep -q ERROR "$f" && exit 1; exit 0 ;;
-  upgrade-all) [ -f "$FIX/fail-pipx" ] && exit 1; exit 0 ;;
+  upgrade-all) [ -f "$FIX/pipx-upgrade.txt" ] && cat "$FIX/pipx-upgrade.txt"; [ -f "$FIX/fail-pipx" ] && exit 1; exit 0 ;;
 esac'
 stub uv '
 case "$1 $2" in
   "tool list") [ -f "$FIX/fail-uv" ] && { echo "error: Failed to fetch" >&2; exit 2; }; [ -f "$FIX/uv-tool-list.txt" ] && cat "$FIX/uv-tool-list.txt" || echo "No tools installed" >&2; exit 0 ;;
-  "tool upgrade") [ -f "$FIX/fail-uv-upgrade" ] && exit 1; exit 0 ;;
+  "tool upgrade") [ -f "$FIX/uv-upgrade.txt" ] && cat "$FIX/uv-upgrade.txt"; [ -f "$FIX/fail-uv-upgrade" ] && exit 1; exit 0 ;;
 esac'
 stub code '
 case "$1" in
   --list-extensions) cat "$FIX/code-extensions.txt" ;;
-  --update-extensions) [ -f "$FIX/fail-code" ] && exit 1; exit 0 ;;
+  --update-extensions) [ -f "$FIX/code-update.txt" ] && cat "$FIX/code-update.txt"; [ -f "$FIX/fail-code" ] && exit 1; exit 0 ;;
 esac'
 stub curl '
 for a; do url=$a; done
@@ -1070,6 +1070,36 @@ run --install
 check "unknown time before a sudo step: exit 0" equals "$rc" 0
 check "unknown time before a sudo step: Adobe runs" contains "$(calls)" "RemoteUpdateManager --action=install"
 rm -f "$FIX/privileges-expire-after" "$FIX/privileges-status-later.txt"
+
+# nothing updated: "up to date" from the tool's own words or an empty App Store list, not "installed"
+admin_setup admin 20
+printf 'No new updates are available for Acrobat/Reader\nNo new applicable Updates. Seems like all products are up-to-date.\nRemoteUpdateManager exiting with Return Code (0)\n' > "$FIX/rum-install.txt"
+printf "No packages upgraded after running 'pipx upgrade-all' 😴\n" > "$FIX/pipx-upgrade.txt"
+printf 'Nothing to upgrade\n' > "$FIX/uv-upgrade.txt"
+printf 'No extension to update\n' > "$FIX/code-update.txt"
+: > "$FIX/mas-outdated.json"
+run --install
+check "nothing updated: exit 0" equals "$rc" 0
+check "nothing updated: Adobe up to date" has "$out" "^ Adobe \\.+ up to date$"
+check "nothing updated: App Store up to date" has "$out" "^ App Store \\.+ up to date$"
+check "nothing updated: no mas upgrade" lacks "$(calls)" "mas upgrade"
+check "nothing updated: pipx up to date" has "$out" "^ pipx \\.+ up to date$"
+check "nothing updated: uv tools up to date" has "$out" "^ uv tools \\.+ up to date$"
+check "nothing updated: VS Code extensions up to date" has "$out" "^ VS Code extensions \\.+ up to date$"
+check "nothing updated: tool output still shown" contains "$out" "Nothing to upgrade"
+check "nothing updated: brew still installed" has "$out" "^ brew \\.+ installed$"
+check "nothing updated: summary row" has "$out" "^ pipx up to date$"
+check "nothing updated: total" has "$out" "^ total 3 installed · 5 up to date$"
+MAC_OUTDATED_COLOR=always run --install
+check "nothing updated: green" grep -q $'pipx \\.* \033\\[32mup to date' "$WORK/out"
+touch "$FIX/fail-pipx" "$FIX/fail-mas-outdated"
+cp "$FIXTURES/mas-outdated.json" "$FIX/mas-outdated.json"
+run --install
+rm -f "$FIX/fail-pipx" "$FIX/fail-mas-outdated"
+check "nothing updated but failing: still failed" has "$out" "^ pipx \\.+ failed \\(exit 1\\)$"
+check "App Store list failing: upgrade still runs" contains "$(calls)" "mas upgrade"
+check "App Store list failing: installed" has "$out" "^ App Store \\.+ installed$"
+rm -f "$FIX/rum-install.txt" "$FIX/pipx-upgrade.txt" "$FIX/uv-upgrade.txt" "$FIX/code-update.txt"
 
 # a missing tool is skipped, not a failure
 mkdir -p "$WORK/nomas"
