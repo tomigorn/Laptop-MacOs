@@ -81,6 +81,11 @@ case "$1" in
   runpip) f="$FIX/pip-index-$2.txt"; [ -f "$f" ] || exit 1; cat "$f"; grep -q ERROR "$f" && exit 1; exit 0 ;;
   upgrade-all) [ -f "$FIX/fail-pipx" ] && exit 1; exit 0 ;;
 esac'
+stub uv '
+case "$1 $2" in
+  "tool list") [ -f "$FIX/fail-uv" ] && { echo "error: Failed to fetch" >&2; exit 2; }; [ -f "$FIX/uv-tool-list.txt" ] && cat "$FIX/uv-tool-list.txt" || echo "No tools installed" >&2; exit 0 ;;
+  "tool upgrade") [ -f "$FIX/fail-uv-upgrade" ] && exit 1; exit 0 ;;
+esac'
 stub code '
 case "$1" in
   --list-extensions) cat "$FIX/code-extensions.txt" ;;
@@ -192,7 +197,7 @@ out="" rc=0
 run() { : > "$CALLS"; rm -f "$FIX/privileges-count"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 < /dev/null; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
 run_input() { local input="$1"; shift; : > "$CALLS"; rm -f "$FIX/privileges-count"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 <<< "$input"; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
 calls() { cat "$CALLS"; }
-install_calls() { grep -E '^(sudo|softwareupdate --install|RemoteUpdateManager --action=install|brew (update|upgrade)|msupdate --install|mas upgrade|pipx upgrade-all|code --update-extensions)' "$CALLS"; }
+install_calls() { grep -E '^(sudo|softwareupdate --install|RemoteUpdateManager --action=install|brew (update|upgrade)|msupdate --install|mas upgrade|pipx upgrade-all|uv tool upgrade|code --update-extensions)' "$CALLS"; }
 
 fails=0
 check() {  # check <name> <condition...>
@@ -235,6 +240,7 @@ check "pipx: outdated package" contains "$out" "xxh-xxh 0.8.14 → 0.8.15"
 check "pipx: lookup failure is a note" contains "$out" "example-tool: latest version lookup failed"
 check "pipx: local path install not looked up" no_match "$out" "local-tool"
 check "vscode: extension count on the progress line" has "$out" "VS Code extensions \.+ 3 extensions, updated during --install"
+check "uv: no tools" has "$out" "^ uv tools \.+ none installed$"
 check "vscode: section with the extensions" contains "$out" "VS Code extensions · 3 installed"
 check "vscode: name and version" has "$out" "^ catppuccin.catppuccin-vsc 3.19.0$"
 check "vscode: every extension" has "$out" "^ mechatroner.rainbow-csv 3.24.1$"
@@ -266,7 +272,7 @@ check "unmanaged: install hint under the item replaces the older app" contains "
 check "brew: formulae group" has "$out" "^ formulae$"
 check "brew: casks group" has "$out" "^ casks$"
 check "brew: cask listed after casks header" has "$(sed -n '/^ casks$/,$p' <<< "$out")" "ghostty 1.3.1"
-check "progress: one line per source" equals "$(grep -cE '^ (brew|brew taps|Install scripts|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|VS Code extensions|xxh remote binaries|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 12
+check "progress: one line per source" equals "$(grep -cE '^ (brew|brew taps|Install scripts|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|uv tools|VS Code extensions|xxh remote binaries|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 13
 check "progress: brew outdated count" has "$out" "brew \.+ 4 outdated"
 check "progress: msupdate outdated count" has "$out" "Microsoft AutoUpdate \.+ 2 outdated"
 check "progress: sparkle count" has "$out" "Sparkle apps \.+ 1 to open$"
@@ -421,6 +427,7 @@ check "colour: to open yellow" grep -q $'\033\\[33m1 to open' "$WORK/out"
 check "colour: install hint yellow" grep -q $'\033\\[33mbrew install --cask --force keepassxc' "$WORK/out"
 check "colour: note dim" grep -q $'\033\\[2mbrew update failed' "$WORK/out"
 check "colour: summary count yellow" grep -qE $'brew +\033\\[33m4\033' "$WORK/out"
+check "colour: uv none installed green" grep -q $'\033\\[32mnone installed' "$WORK/out"
 check "colour: extension version dim" grep -q $'\033\\[2m3\\.19\\.0' "$WORK/out"
 NO_COLOR=1 run
 check "colour: NO_COLOR none" no_match "$(cat "$WORK/out")" $'\033'
@@ -517,6 +524,7 @@ check "missing pipx: note" contains "$out" "skipped (pipx not installed)"
 check "missing code: note" contains "$out" "skipped (code not found)"
 check "missing brew: taps skipped" has "$out" "^ brew taps \\.+ skipped \\(brew not installed\\)$"
 check "missing brew: install scripts skipped" has "$out" "^ Install scripts \\.+ skipped \\(brew not installed\\)$"
+check "missing uv: note" has "$out" "^ uv tools \\.+ skipped \\(uv not installed\\)$"
 check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 → 2.71.1"
 
 # ── check mode: casks found by app name in Homebrew's API cache ─────────────
@@ -726,6 +734,26 @@ MAC_OUTDATED_REPO="$WORK/no-repo" run
 check "scripts: repo not found" has "$out" "^ Install scripts \.+ repo not found$"
 rm -rf "$REPO" "$FIX/brew-tap.txt" "$FIX/brew-list-full.txt"; mkdir -p "$REPO"
 
+# ── uv tools ────────────────────────────────────────────────────────────────
+fixtures_outdated
+printf 'cowsay v5.0 [latest: 6.1]\n- cowsay\npyfiglet v1.0.4\n- pyfiglet\n' > "$FIX/uv-tool-list.txt"
+run
+check "uv: outdated tool" contains "$out" "cowsay 5.0 → 6.1"
+check "uv: current tool not listed" lacks "$out" "pyfiglet 1.0.4 →"
+check "uv: entry points not listed" lacks "$out" "- cowsay"
+check "uv: asks for the latest versions" contains "$(calls)" "uv tool list --outdated"
+check "uv: progress" has "$out" "^ uv tools \.+ 1 outdated$"
+check "uv: section" contains "$out" "uv tools · 1 outdated"
+check "uv: summary row" has "$out" "^ uv tools 1 mac-outdated --install$"
+check "uv: via --install" has "$out" "total 17 15 via --install · 2 by hand"
+printf 'pyfiglet v1.0.4\n- pyfiglet\n' > "$FIX/uv-tool-list.txt"
+run
+check "uv: all current" has "$out" "^ uv tools \.+ up to date$"
+touch "$FIX/fail-uv"
+run
+check "uv: list failing" has "$out" "^ uv tools \.+ check failed$"
+rm -f "$FIX/fail-uv" "$FIX/uv-tool-list.txt"
+
 # ── test hooks: path overrides only with MAC_OUTDATED_TEST=1 ─────────────────
 paths() { /opt/homebrew/bin/bash -c 'source "$1"; printf "%s\n" "$PRIVILEGESCLI" "$MSUPDATE" "$RUM" "$APP_DIRS"' _ "$SCRIPT"; }
 check "hooks: overrides used in tests" equals "$(paths)" "$BIN/PrivilegesCLI
@@ -779,6 +807,7 @@ brew upgrade --formula
 brew upgrade --cask ghostty
 msupdate --install --wait 600
 pipx upgrade-all
+uv tool upgrade --all
 code --update-extensions
 sudo softwareupdate --install --all
 softwareupdate --install --all"
@@ -792,7 +821,7 @@ check "admin 20 min: summary" has "$out" "pipx \\.+ installed"
 check "admin 20 min: header" has "$out" "^mac-outdated --install · [0-9-]+ [0-9:]+"
 check "admin 20 min: subheader per source" contains "$out" "── brew"
 check "admin 20 min: summary section" contains "$out" "Summary"
-check "admin 20 min: summary total" has "$out" "total 7 installed"
+check "admin 20 min: summary total" has "$out" "total 8 installed"
 check "admin 20 min: tool output indented" has "$out" "^ +==> Upgrading 1 outdated package"
 check "admin 20 min: carriage return becomes a new indented line" has "$out" "^ +100%"
 check "admin 20 min: no carriage returns in install output" no_match "$(cat "$WORK/out")" $'\r'
@@ -803,7 +832,7 @@ check "admin: time read from PrivilegesCLI --status" contains "$(calls)" 'Privil
 log=$(logpath)
 check "install log: named install" has "$log" "[0-9]{6}-install\\.log$"
 check "install log: softwareupdate output captured" contains "$(cat "$log" 2>/dev/null)" "Restart is required to complete installation"
-check "install log: has the summary" has "$(cat "$log" 2>/dev/null)" "total +7 installed"
+check "install log: has the summary" has "$(cat "$log" 2>/dev/null)" "total +8 installed"
 check "install log: log line last on the terminal" has "$(tail -n 1 "$WORK/out")" "^log: "
 
 cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
@@ -812,7 +841,7 @@ check "no restart update: no restart line" lacks "$out" "restart required"
 check "no macOS update: up to date" has "$out" "macOS \\.+ up to date"
 check "no macOS update: no install" lacks "$(calls)" "softwareupdate --install"
 check "no macOS update: no admin check for it" equals "$(grep -c '^PrivilegesCLI --status' "$CALLS")" 3
-check "no macOS update: total" has "$out" "total 6 installed · 1 up to date"
+check "no macOS update: total" has "$out" "total 7 installed · 1 up to date"
 cp "$FIX/msupdate-none.txt" "$FIX/msupdate-list.txt"
 run --install
 check "no Microsoft update: --list first" contains "$(calls)" "msupdate --list"
@@ -895,7 +924,7 @@ check "brew failing: exit 1" equals "$rc" 1
 check "brew failing: later sources still run" contains "$(calls)" "code --update-extensions"
 check "brew failing: step line" has "$out" "brew \\.+ failed \\(exit 1\\)"
 check "brew failing: others installed" has "$out" "Microsoft AutoUpdate \\.+ installed"
-check "brew failing: total" has "$out" "total 6 installed · 1 failed"
+check "brew failing: total" has "$out" "total 7 installed · 1 failed"
 rm -f "$FIX/fail-brew"
 
 # Ctrl-C: a step ending with 130 stops the run
@@ -951,7 +980,7 @@ run --install
 rm -f "$FIX/exit-msupdate"
 check "tool exit 3: exit 1" equals "$rc" 1
 check "tool exit 3: failed, not skipped" has "$out" "Microsoft AutoUpdate \\.+ failed \\(exit 3\\)"
-check "tool exit 3: total" has "$out" "total 6 installed · 1 failed"
+check "tool exit 3: total" has "$out" "total 7 installed · 1 failed"
 
 touch "$FIX/fail-softwareupdate"
 run --install
@@ -971,7 +1000,7 @@ check "admin expired: macOS not installed" lacks "$(calls)" "softwareupdate --in
 check "admin expired: non-sudo steps still run" contains "$(calls)" "code --update-extensions"
 check "admin expired: App Store step skipped" has "$out" "App Store \\.+ skipped \\(admin expired: click Privileges and rerun\\)"
 check "admin expired: macOS step skipped" has "$out" "macOS \\.+ skipped \\(admin expired: click Privileges and rerun\\)"
-check "admin expired: total" has "$out" "total 5 installed · 2 skipped"
+check "admin expired: total" has "$out" "total 6 installed · 2 skipped"
 
 # admin about to run out before the sudo steps: under 2 min left is skipped, 2 min or unknown still runs
 echo 1 > "$FIX/privileges-expire-after"
@@ -998,6 +1027,17 @@ for f in "$BIN"/*; do [ "$(basename "$f")" = mas ] || ln -sf "$f" "$WORK/nomas/"
 PATH="$WORK/nomas:/usr/bin:/bin" run --install
 check "mas missing: install exit 0" equals "$rc" 0
 check "mas missing: skipped" has "$out" "App Store \\.+ skipped \\(mas not installed\\)"
+
+mkdir -p "$WORK/nouv"
+for f in "$BIN"/*; do [ "$(basename "$f")" = uv ] || ln -sf "$f" "$WORK/nouv/"; done
+PATH="$WORK/nouv:/usr/bin:/bin" run --install
+check "uv missing: install exit 0" equals "$rc" 0
+check "uv missing: skipped" has "$out" "uv tools \\.+ skipped \\(uv not installed\\)"
+touch "$FIX/fail-uv-upgrade"
+run --install
+rm -f "$FIX/fail-uv-upgrade"
+check "uv upgrade failing: failed" has "$out" "uv tools \\.+ failed \\(exit 1\\)"
+check "uv upgrade failing: later steps still run" contains "$(calls)" "code --update-extensions"
 
 mkdir -p "$WORK/asroot"
 for f in "$BIN"/*; do ln -sf "$f" "$WORK/asroot/"; done

@@ -23,11 +23,11 @@ MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
 STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N"
 
-SOURCES=(brew taps scripts msupdate adobe mas macos pipx vscode xxh sparkle unmanaged)
-INSTALL_ORDER=(adobe mas brew msupdate pipx vscode macos)
+SOURCES=(brew taps scripts msupdate adobe mas macos pipx uv vscode xxh sparkle unmanaged)
+INSTALL_ORDER=(adobe mas brew msupdate pipx uv vscode macos)
 declare -A LABELS=(
   [brew]="brew" [taps]="brew taps" [scripts]="Install scripts" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
-  [pipx]="pipx" [vscode]="VS Code extensions" [xxh]="xxh remote binaries" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
+  [pipx]="pipx" [uv]="uv tools" [vscode]="VS Code extensions" [xxh]="xxh remote binaries" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
 )
 MANUAL_SOURCES=" xxh sparkle unmanaged "
 SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian Docker Steam zoom.us Element "Autodesk Fusion" "iStat Menus")
@@ -37,7 +37,7 @@ CASK_TABLE=""  # token<TAB>app bundle name<TAB>auto_updates, from brew info --in
 declare -A CASK_BY_APP=()  # lowercased app bundle name -> token|version|auto_updates, from Homebrew's API cache
 declare -A HINTS=(
   [brew]="mac-outdated --install" [msupdate]="mac-outdated --install" [adobe]="mac-outdated --install" [mas]="mac-outdated --install"
-  [macos]="mac-outdated --install" [pipx]="mac-outdated --install" [vscode]="mac-outdated --install"
+  [macos]="mac-outdated --install" [pipx]="mac-outdated --install" [uv]="mac-outdated --install" [vscode]="mac-outdated --install"
   [sparkle]="open the app" [unmanaged]="brew install --cask --force …" [xxh]="terminal/install.sh --refresh-remote"
 )
 declare -A XXH_REPOS=([fish]=fish-shell/fish-shell [starship]=starship/starship [atuin]=atuinsh/atuin [bat]=sharkdp/bat [fastfetch]=fastfetch-cli/fastfetch)
@@ -383,6 +383,14 @@ check_pipx() {
   done < <(jq -r '.venvs | to_entries[] | [.key, .value.metadata.main_package.package, .value.metadata.main_package.package_version, (.value.metadata.main_package.package_or_url // "")] | @tsv' <<< "$json")
 }
 
+check_uv() {
+  command -v uv >/dev/null || { note uv "uv not installed" "skipped (uv not installed)" – "brew install uv"; return; }
+  local out
+  out=$(uv tool list --outdated 2>/dev/null) || { check_failed uv "uv tool list --outdated failed"; return; }
+  grep -q '^[^- ]' <<< "$out" || { note uv "no uv tools installed" "none installed" =; return; }
+  sed -nE 's/^([^ -][^ ]*) v([^ ]+) \[latest: ([^]]+)\]$/uv|\1|\2|\3|/p' <<< "$out"
+}
+
 check_vscode() {
   local code n
   code=$(code_cmd) || { note vscode "VS Code CLI not found" "skipped (code not found)" – "install the code CLI"; return; }
@@ -608,6 +616,7 @@ result_text() {  # result_text <src>: the coloured short result for the progress
   elif [ -n "${SHORT[$src]}" ]; then
     case ${KIND[$src]} in
       "!") c 31 "${SHORT[$src]}" ;;
+      =) c 32 "${SHORT[$src]}" ;;
       "") c 2 "${SHORT[$src]}" ;;
       *) c 33 "${SHORT[$src]}" ;;
     esac
@@ -811,6 +820,10 @@ install_mas() {
 install_pipx() {
   command -v pipx >/dev/null || { STEP_STATUS=missing; return 0; }
   pipx upgrade-all
+}
+install_uv() {
+  command -v uv >/dev/null || { STEP_STATUS=missing; return 0; }
+  uv tool upgrade --all
 }
 install_vscode() {
   local code

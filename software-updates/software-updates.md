@@ -16,9 +16,14 @@ Exit: `0` nothing outdated / all installed, `1` something outdated / a check or 
 mac-outdated · 2026-11-03 11:20
 
   brew ......................... 33 outdated
+  brew taps .................... 1 by hand
+  Install scripts .............. up to date
   Microsoft AutoUpdate ......... up to date
   Adobe ........................ checked during --install
   App Store .................... skipped (mas not installed)
+  uv tools ..................... none installed
+  VS Code extensions ........... 3 extensions, updated during --install
+  xxh remote binaries .......... 1 outdated
   Sparkle apps ................. 1 to open
 
 ══════════════════════════════════════════════════════════
@@ -26,6 +31,22 @@ mac-outdated · 2026-11-03 11:20
 ══════════════════════════════════════════════════════════
   formulae
     openssl@3                3.6.3     →  3.5.9  (older version: brew moved to the 3.5 line)
+
+══════════════════════════════════════════════════════════
+ brew taps · 1 by hand
+══════════════════════════════════════════════════════════
+  arthurk/virt-manager: nothing installed from it, no commit since 2021-05-11: brew untap arthurk/virt-manager
+
+══════════════════════════════════════════════════════════
+ VS Code extensions · 3 installed
+══════════════════════════════════════════════════════════
+    catppuccin.catppuccin-vsc  3.19.0
+
+══════════════════════════════════════════════════════════
+ xxh remote binaries · 1 outdated
+══════════════════════════════════════════════════════════
+    starship                 1.27.0  →  1.28.0
+  bump the pin in terminal/remote-binaries.conf, then terminal/install.sh --refresh-remote
 
 ══════════════════════════════════════════════════════════
  Open to update · 2
@@ -39,15 +60,17 @@ mac-outdated · 2026-11-03 11:20
  Summary
 ══════════════════════════════════════════════════════════
   brew                        33   mac-outdated --install
+  brew taps by hand            1   brew untap arthurk/virt-manager
+  xxh remote binaries          1   terminal/install.sh --refresh-remote
   open to update               2   open the app (updates on start)
   ────────────────────────────────
-  total                       35   33 via --install · 2 by hand
+  total                       37   33 via --install · 4 by hand
 
   next: mac-outdated --install
 ```
 
 - One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped, `!` check failed). Adobe is only listed with admin, so check mode shows `checked during --install`.
-- A source that could not be checked (`brew outdated`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding.
+- A source that could not be checked (`brew outdated`, `brew tap`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `uv tool list`, GitHub for xxh, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding.
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - brew warns `The following taps are not trusted:` (in `brew update`/`brew outdated` stderr) -> yellow note `brew ignores untrusted tap <tap> (its formulae get no updates): brew trust --formula <tap>/<formula> …` with the installed formulae of that tap (also those installed under the tap's old name), counted by hand (`brew by hand` row).
 - xxh remote binaries are outdated items counted by hand (`N outdated` on the progress line, not via `--install`): the pins are bumped deliberately.
@@ -75,7 +98,7 @@ mac-outdated · 2026-11-03 11:20
 
 | Colour | Means |
 |---|---|
-| green | `up to date`, `installed` |
+| green | `up to date`, `installed`, `none installed` (uv tools) |
 | yellow | outdated: count, name, new version, `(older version …)`, by-hand hints, `skipped (…)`, `some updates failed (…)`, summary counts |
 | red | `check failed`, `failed (exit N)`, `interrupted`, `not run`, `!` rows |
 | dim | installed version, notes, informational lines |
@@ -92,6 +115,7 @@ mac-outdated · 2026-11-03 11:20
 | App Store | `mas outdated --json` (note if `mas` is missing) | `sudo mas upgrade` (mas needs root to update apps) |
 | macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all`, never restarts; `restart required` only after a successful install |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
+| uv tools | `uv tool list --outdated` (`none installed` without tools; skipped when uv is missing) | `uv tool upgrade --all` |
 | VS Code extensions | count on the progress line, then a section with every extension and its version (`code --list-extensions --show-versions`), shown also when nothing is outdated; no outdated check | `code --update-extensions` (all) |
 | xxh remote binaries | `~/.xxh/arch/<arch>/VERSIONS` (`tool version` per line, written by `terminal/install.sh`) vs GitHub's latest release (API, then the `releases/latest` page redirect when the API is rate limited); one row per tool, `tool (<arch>)` when the stores differ; no `VERSIONS` -> by hand `run terminal/install.sh --refresh-remote`; no store -> `none stored` | none: bump the pin in `terminal/remote-binaries.conf`, then `terminal/install.sh --refresh-remote` |
 | Sparkle apps | appcast from `SUFeedURL` (beta channel skipped); no `SUFeedURL` (VLC, TeamViewer): the cask that installs the app, as for apps without an updater | none: "Open to update"; no feed and cask without `auto_updates`: `brew install --cask --force <token>` |
@@ -107,7 +131,7 @@ App -> cask lookup (no network, no `brew info` per app):
 | 3 | several casks for one app: the token named like the app, then one without `@` (`firefox` before `firefox@beta`); disabled casks skipped |
 | no cache | the cask named like the app (`brew info --cask <name>`) |
 
-Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, VS Code, macOS last (sudo, longest). A failing source does not stop the others; a summary follows.
+Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, uv tools, VS Code, macOS last (sudo, longest). A failing source does not stop the others; a summary follows.
 
 `brew upgrade --cask` runs each cask's own uninstall/quit steps: it may quit running apps and show macOS Automation/App Management prompts, and pkg casks (e.g. XQuartz) call sudo themselves. Quit Discord, BetterDisplay, Hiddenbar, UTM, XQuartz and apps launched from Ghostty before running.
 
