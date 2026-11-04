@@ -21,6 +21,9 @@ export MAC_OUTDATED_PRIVILEGESCLI="$BIN/PrivilegesCLI"
 export MAC_OUTDATED_MSUPDATE="$BIN/msupdate"
 export MAC_OUTDATED_RUM="$BIN/RemoteUpdateManager"
 export MAC_OUTDATED_APP_DIRS="$APPS"
+export REPO="$WORK/repo"
+export MAC_OUTDATED_REPO="$REPO"
+mkdir -p "$REPO"
 
 # stub <name> <body>: every call is logged as "<name> <args>"; a file $FIX/fail-<name> makes install actions fail
 stub() {
@@ -259,7 +262,7 @@ check "unmanaged: install hint under the item replaces the older app" contains "
 check "brew: formulae group" has "$out" "^ formulae$"
 check "brew: casks group" has "$out" "^ casks$"
 check "brew: cask listed after casks header" has "$(sed -n '/^ casks$/,$p' <<< "$out")" "ghostty 1.3.1"
-check "progress: one line per source" equals "$(grep -cE '^ (brew|brew taps|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|VS Code extensions|xxh remote binaries|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 11
+check "progress: one line per source" equals "$(grep -cE '^ (brew|brew taps|Install scripts|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|VS Code extensions|xxh remote binaries|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 12
 check "progress: brew outdated count" has "$out" "brew \.+ 4 outdated"
 check "progress: msupdate outdated count" has "$out" "Microsoft AutoUpdate \.+ 2 outdated"
 check "progress: sparkle count" has "$out" "Sparkle apps \.+ 1 to open$"
@@ -507,6 +510,7 @@ check "missing softwareupdate: note" contains "$out" "skipped (softwareupdate no
 check "missing pipx: note" contains "$out" "skipped (pipx not installed)"
 check "missing code: note" contains "$out" "skipped (code not found)"
 check "missing brew: taps skipped" has "$out" "^ brew taps \\.+ skipped \\(brew not installed\\)$"
+check "missing brew: install scripts skipped" has "$out" "^ Install scripts \\.+ skipped \\(brew not installed\\)$"
 check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 → 2.71.1"
 
 # ── check mode: casks found by app name in Homebrew's API cache ─────────────
@@ -680,6 +684,42 @@ run
 check "taps: brew tap failing" has "$out" "^ brew taps \.+ check failed$"
 rm -rf "$FIX/taps" "$FIX/brew-tap.txt" "$FIX/brew-list-full.txt" "$FIX/fail-brew-tap"
 
+# ── install scripts in the repo naming a tap that is not tapped ─────────────
+fixtures_outdated
+run
+check "scripts: nothing found -> up to date" has "$out" "^ Install scripts \.+ up to date$"
+mkdir -p "$REPO/a" "$REPO/b" "$REPO/c/tests" "$REPO/d/fixtures" "$REPO/e" "$REPO/.git"
+printf '#!/bin/sh\nfor p in yabai skhd; do\n  brew install "koekeishiya/formulae/$p"\ndone\n' > "$REPO/a/install.sh"
+printf '#!/bin/sh\nbrew tap asmvik/formulae\nbrew install asmvik/formulae/yabai\n' > "$REPO/b/setup.sh"
+printf 'brew install evil/tap/x\n' > "$REPO/c/tests/x.sh"
+printf 'brew install fixture/tap/x\n' > "$REPO/d/fixtures/install.sh"
+printf 'brew install --cask other/tap/thing 2>/dev/null\n' > "$REPO/d/install-tools"
+printf 'brew install z/y/x\n' > "$REPO/d/README.md"
+printf 'brew install foo 2>/dev/null && cp a/b c\n  # brew install commented/out/x\nbrew tap Homebrew/cask-fonts\n' > "$REPO/e/run.sh"
+printf 'brew install git/hook/x\n' > "$REPO/.git/x.sh"
+printf 'asmvik/formulae\n' > "$FIX/brew-tap.txt"
+printf 'asmvik/formulae/yabai\n' > "$FIX/brew-list-full.txt"
+run
+check "scripts: untapped tap in a quoted install" contains "$out" "a/install.sh names tap koekeishiya/formulae, which is not tapped: fix the script"
+check "scripts: install* file, after an option" contains "$out" "d/install-tools names tap other/tap, which is not tapped: fix the script"
+check "scripts: tapped tap not listed" lacks "$out" "asmvik/formulae, which"
+check "scripts: tests skipped" lacks "$out" "evil/tap"
+check "scripts: fixtures skipped" lacks "$out" "fixture/tap"
+check "scripts: only scripts scanned" lacks "$out" "z/y"
+check "scripts: paths after && not taps" lacks "$out" "names tap a/b"
+check "scripts: comments skipped" lacks "$out" "commented/out"
+check "scripts: homebrew taps skipped" lacks "$out" "names tap homebrew"
+check "scripts: .git skipped" lacks "$out" "git/hook"
+check "scripts: progress" has "$out" "^ Install scripts \.+ 2 by hand$"
+check "scripts: summary row" has "$out" "^ Install scripts by hand 2 fix the script$"
+check "scripts: total" has "$out" "total 18 14 via --install · 4 by hand"
+printf 'asmvik/formulae\nkoekeishiya/formulae\nother/tap\n' > "$FIX/brew-tap.txt"
+run
+check "scripts: all tapped -> up to date" has "$out" "^ Install scripts \.+ up to date$"
+MAC_OUTDATED_REPO="$WORK/no-repo" run
+check "scripts: repo not found" has "$out" "^ Install scripts \.+ repo not found$"
+rm -rf "$REPO" "$FIX/brew-tap.txt" "$FIX/brew-list-full.txt"; mkdir -p "$REPO"
+
 # ── test hooks: path overrides only with MAC_OUTDATED_TEST=1 ─────────────────
 paths() { /opt/homebrew/bin/bash -c 'source "$1"; printf "%s\n" "$PRIVILEGESCLI" "$MSUPDATE" "$RUM" "$APP_DIRS"' _ "$SCRIPT"; }
 check "hooks: overrides used in tests" equals "$(paths)" "$BIN/PrivilegesCLI
@@ -690,6 +730,9 @@ check "hooks: overrides ignored without MAC_OUTDATED_TEST=1" equals "$(MAC_OUTDA
 /Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate
 /usr/local/bin/RemoteUpdateManager
 /Applications:$HOME/Applications"
+check "hooks: repo override used in tests" equals "$(/opt/homebrew/bin/bash -c 'source "$1"; echo "$REPO_ROOT"' _ "$SCRIPT")" "$REPO"
+mkdir -p "$WORK/linked"; ln -sf "$SCRIPT" "$WORK/linked/mac-outdated"
+check "hooks: repo root from the script's real path" equals "$(MAC_OUTDATED_TEST='' /opt/homebrew/bin/bash -c 'source "$1"; echo "$REPO_ROOT"' _ "$WORK/linked/mac-outdated")" "$(cd "$HERE/../.." && pwd -P)"
 check "hooks: sourcing runs nothing" equals "$(: > "$CALLS"; paths >/dev/null; calls)" ""
 
 # ── usage ────────────────────────────────────────────────────────────────────

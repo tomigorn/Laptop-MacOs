@@ -7,11 +7,13 @@ PRIVILEGESCLI=/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI
 MSUPDATE="/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate"
 RUM=/usr/local/bin/RemoteUpdateManager
 APP_DIRS=/Applications:$HOME/Applications
+REPO_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." 2>/dev/null && pwd -P)
 if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; never honoured otherwise, RUM runs under sudo
   PRIVILEGESCLI=${MAC_OUTDATED_PRIVILEGESCLI:-$PRIVILEGESCLI}
   MSUPDATE=${MAC_OUTDATED_MSUPDATE:-$MSUPDATE}
   RUM=${MAC_OUTDATED_RUM:-$RUM}
   APP_DIRS=${MAC_OUTDATED_APP_DIRS:-$APP_DIRS}
+  REPO_ROOT=${MAC_OUTDATED_REPO:-$REPO_ROOT}
 fi
 STAMP="$HOME/.local/state/mac-outdated/last-check"
 LOG_DIR="$HOME/.local/state/mac-outdated/logs"
@@ -21,10 +23,10 @@ MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
 STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N"
 
-SOURCES=(brew taps msupdate adobe mas macos pipx vscode xxh sparkle unmanaged)
+SOURCES=(brew taps scripts msupdate adobe mas macos pipx vscode xxh sparkle unmanaged)
 INSTALL_ORDER=(adobe mas brew msupdate pipx vscode macos)
 declare -A LABELS=(
-  [brew]="brew" [taps]="brew taps" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
+  [brew]="brew" [taps]="brew taps" [scripts]="Install scripts" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
   [pipx]="pipx" [vscode]="VS Code extensions" [xxh]="xxh remote binaries" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
 )
 MANUAL_SOURCES=" xxh sparkle unmanaged "
@@ -270,6 +272,33 @@ check_taps() {  # third-party taps nothing is installed from or without a commit
     [[ $ct =~ ^[0-9]+$ ]] && [ $((now - ct)) -gt $((2 * 365 * 86400)) ] && why+="${why:+, }no commit since $(date -r "$ct" +%Y-%m-%d)"
     [ -z "$why" ] || note taps "$tap: $why: brew untap $tap" "" + "brew untap $tap"
   done <<< "$taps"
+}
+
+# shellcheck disable=SC2016
+TAP_REFS='
+  next if /^\s*#/;
+  for my $seg (split /&&|\|\||[;|)]/) {
+    next unless $seg =~ /\bbrew\s+(?:install|reinstall|upgrade|tap)\b(.*)/;
+    my $rest = $1;
+    while ($rest =~ m{(?:^|[\s"\x27])([A-Za-z0-9][\w.-]*)/([\w.-]+)(?:/[\w.@+\$-]+)?(?=[\s"\x27]|$)}g) {
+      my ($o, $t) = (lc $1, lc $2);
+      $t =~ s/^homebrew-//;
+      print "$ARGV\t$o/$t\n" unless $o eq "homebrew";
+    }
+  }
+'
+check_scripts() {  # the repo's install scripts naming a tap that is not tapped: brew install <owner>/<tap>/<name> or brew tap <owner>/<tap>
+  command -v brew >/dev/null || { note scripts "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
+  [ -d "$REPO_ROOT" ] || { note scripts "repo not found: $REPO_ROOT" "repo not found"; return; }
+  local taps f file tap files=()
+  taps=$(brew tap 2>/dev/null | tr '[:upper:]' '[:lower:]') || { check_failed scripts "brew tap failed"; return; }
+  while IFS= read -r -d '' f; do files+=("$f"); done < <(find "$REPO_ROOT" \( -name .git -o -name tests -o -name fixtures -o -name node_modules \) -prune \
+    -o -type f \( -name '*.sh' -o -name 'install*' \) -print0)
+  [ "${#files[@]}" -gt 0 ] || return 0
+  while IFS=$'\t' read -r file tap; do
+    grep -qxF "$tap" <<< "$taps" && continue
+    note scripts "${file#"$REPO_ROOT"/} names tap $tap, which is not tapped: fix the script" "" + "fix the script"
+  done < <(perl -ne "$TAP_REFS" "${files[@]}" | sort -u)
 }
 
 parse_msupdate() {
