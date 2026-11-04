@@ -627,21 +627,54 @@ install_vscode() {
   "$code" --update-extensions
 }
 
+FOLD_AFTER=5 FOLD_SHOW=3
+fold_line() {  # fold_line <line>: more than FOLD_AFTER similar lines in a row show the first FOLD_SHOW, the rest only in the log
+  local l=$1 key first suffix=$1
+  first=${l%% *}
+  [[ $l != *": "* ]] || suffix=${l##*: }
+  key="$first|$suffix"
+  if [ "$key" != "$FOLD_KEY" ]; then
+    fold_end
+    FOLD_KEY=$key FOLD_N=1
+    printf '    %s\n' "$l"
+    return
+  fi
+  FOLD_N=$((FOLD_N + 1))
+  if [ "$FOLD_N" -le "$FOLD_SHOW" ]; then printf '    %s\n' "$l"
+  elif [ "$FOLD_N" -le "$FOLD_AFTER" ]; then FOLD_PENDING+=("$l")
+  else
+    for l in "${FOLD_PENDING[@]}" "$l"; do log_only "    $l"; done
+    FOLD_PENDING=()
+  fi
+}
+fold_end() {  # ends a run of similar lines: the fold message, or the held-back lines when the run stayed short
+  if [ "${FOLD_N:-0}" -gt "$FOLD_AFTER" ]; then
+    printf '    %s\n' "$(c 2 "… $((FOLD_N - FOLD_SHOW)) more similar lines (full output in log)")"
+  else
+    local l
+    for l in "${FOLD_PENDING[@]}"; do printf '    %s\n' "$l"; done
+  fi
+  FOLD_KEY="" FOLD_N=0 FOLD_PENDING=()
+}
+log_only() { [ -z "$LOG" ] || printf '\x1f%s\n' "$1"; }
+
 indent() {  # indents tool output as it arrives; a line without newline (a prompt) shows after a second
-  local line rc mid=0
+  local line rc mid=0 part
+  FOLD_KEY="" FOLD_N=0 FOLD_PENDING=()
   while :; do
     IFS= read -r -t 1 line; rc=$?
     [ "$rc" -eq 0 ] && line=${line%$'\r'}
-    line=${line//$'\r'/$'\n'    }
     if [ "$rc" -eq 0 ]; then
-      [ "$mid" -eq 1 ] || printf '    '
-      printf '%s\n' "$line"; mid=0
+      if [ "$mid" -eq 1 ]; then printf '%s\n' "${line//$'\r'/$'\n'    }"; mid=0; continue; fi
+      while IFS= read -r part; do fold_line "$part"; done <<< "${line//$'\r'/$'\n'}"
     elif [ "$rc" -gt 128 ]; then
       [ -n "$line" ] || continue
+      fold_end
       [ "$mid" -eq 1 ] || printf '    '
-      printf '%s' "$line"; mid=1
+      printf '%s' "${line//$'\r'/$'\n'    }"; mid=1
     else
-      if [ -n "$line" ]; then [ "$mid" -eq 1 ] || printf '    '; printf '%s\n' "$line"
+      fold_end
+      if [ -n "$line" ]; then [ "$mid" -eq 1 ] || printf '    '; printf '%s\n' "${line//$'\r'/$'\n'    }"
       elif [ "$mid" -eq 1 ]; then printf '\n'
       fi
       return 0

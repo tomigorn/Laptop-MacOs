@@ -42,6 +42,8 @@ case "$1" in
       printf "Proceed? "; i=0
       while [ ! -f "$FIX/go" ] && [ "$i" -lt 60 ]; do sleep 0.1; i=$((i + 1)); done; echo
     fi
+    [ -f "$FIX/chown-brew" ] && for i in $(seq 300); do echo "chown: /Applications/Example.app/Contents/f$i: Operation not permitted"; done
+    [ -f "$FIX/five-brew" ] && for i in 1 2 3 4 5; do echo "Warning: cask c$i: not upgraded"; done
     printf "==> Upgrading 1 outdated package\n50%%\r100%%\n"
     [ -f "$FIX/exit-brew" ] && exit "$(cat "$FIX/exit-brew")"; [ -f "$FIX/fail-brew" ] && exit 1; exit 0 ;;
 esac'
@@ -546,6 +548,24 @@ check "macOS list failing: exit 1" equals "$rc" 1
 check "macOS list failing: failed" has "$out" "macOS \\.+ failed \\(exit 1\\)"
 check "macOS list failing: no install" lacks "$(calls)" "softwareupdate --install"
 cp "$FIXTURES/softwareupdate-list.txt" "$FIX/softwareupdate-list.txt"
+
+# repetitive tool output: more than 5 similar lines fold on the terminal, the log keeps them
+touch "$FIX/chown-brew"
+run --install
+rm -f "$FIX/chown-brew"
+term=$(cat "$WORK/out")
+check "fold: first 3 lines shown" contains "$term" "Example.app/Contents/f3: Operation not permitted"
+check "fold: 4th line hidden" lacks "$term" "Example.app/Contents/f4: "
+check "fold: last line hidden" lacks "$term" "Example.app/Contents/f300: "
+check "fold: message" contains "$term" "… 297 more similar lines (full output in log)"
+check "fold: message before the next line" has "$(grep -A1 '297 more similar' <<< "$term")" "==> Upgrading 1 outdated package"
+check "fold: log keeps every line" equals "$(grep -c 'chown: /Applications/Example.app' "$(logpath)")" 600
+check "fold: log has the message" contains "$(cat "$(logpath)")" "297 more similar lines"
+touch "$FIX/five-brew"
+run --install
+rm -f "$FIX/five-brew"
+check "fold: 5 similar lines all shown" contains "$(cat "$WORK/out")" "Warning: cask c5: not upgraded"
+check "fold: 5 similar lines no message" lacks "$(cat "$WORK/out")" "more similar lines"
 
 # a prompt without a newline shows while the tool waits for an answer
 touch "$FIX/prompt-brew"
