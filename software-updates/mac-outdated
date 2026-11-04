@@ -21,13 +21,13 @@ MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
 STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N"
 
-SOURCES=(brew msupdate adobe mas macos pipx vscode sparkle unmanaged)
+SOURCES=(brew msupdate adobe mas macos pipx vscode xxh sparkle unmanaged)
 INSTALL_ORDER=(adobe mas brew msupdate pipx vscode macos)
 declare -A LABELS=(
   [brew]="brew" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
-  [pipx]="pipx" [vscode]="VS Code extensions" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
+  [pipx]="pipx" [vscode]="VS Code extensions" [xxh]="xxh remote binaries" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
 )
-MANUAL_SOURCES=" sparkle unmanaged "
+MANUAL_SOURCES=" xxh sparkle unmanaged "
 SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian Docker Steam zoom.us Element "Autodesk Fusion" "iStat Menus")
 MANAGED_IDS=('com.apple.*' 'com.microsoft.*' 'com.adobe.*' 'com.jamf*' '*ethz*' 'corp.sap.privileges' 'nl.root3.support')
 BREW_APPS=""
@@ -36,8 +36,10 @@ declare -A CASK_BY_APP=()  # lowercased app bundle name -> token|version|auto_up
 declare -A HINTS=(
   [brew]="mac-outdated --install" [msupdate]="mac-outdated --install" [adobe]="mac-outdated --install" [mas]="mac-outdated --install"
   [macos]="mac-outdated --install" [pipx]="mac-outdated --install" [vscode]="mac-outdated --install"
-  [sparkle]="open the app" [unmanaged]="brew install --cask --force …"
+  [sparkle]="open the app" [unmanaged]="brew install --cask --force …" [xxh]="terminal/install.sh --refresh-remote"
 )
+declare -A XXH_REPOS=([fish]=fish-shell/fish-shell [starship]=starship/starship [atuin]=atuinsh/atuin [bat]=sharkdp/bat [fastfetch]=fastfetch-cli/fastfetch)
+XXH_HINT="bump the pin in terminal/remote-binaries.conf, then terminal/install.sh --refresh-remote"
 RULE=$(printf '═%.0s' {1..58})
 THIN=$(printf '─%.0s' {1..32})
 COLOR=0
@@ -332,6 +334,44 @@ check_vscode() {
   note vscode "$n extensions, mac-outdated --install updates them" "$n extensions, updated during --install"
 }
 
+github_latest() {  # github_latest <owner/repo>: tag of the latest release; the API first, then the release page redirect (no API rate limit)
+  local tag
+  tag=$(curl -fsSL --max-time 10 "https://api.github.com/repos/$1/releases/latest" 2>/dev/null | jq -r '.tag_name // empty' 2>/dev/null)
+  [ -n "$tag" ] || tag=$(curl -fsSL --max-time 10 -o /dev/null -w '%{url_effective}' "https://github.com/$1/releases/latest" 2>/dev/null | sed -n 's|.*/releases/tag/||p')
+  printf '%s' "$tag"
+}
+check_xxh() {  # the VERSIONS file of each store under ~/.xxh/arch (written by terminal/install.sh) vs GitHub's latest release
+  local d arch tool ver repo latest n out="" rows="" stores=()
+  for d in "$HOME"/.xxh/arch/*/; do [ -d "$d" ] && stores+=("${d%/}"); done
+  [ "${#stores[@]}" -gt 0 ] || { note xxh "no remote binaries under ~/.xxh/arch" "none stored"; return; }
+  for d in "${stores[@]}"; do
+    arch=${d##*/}
+    if [ ! -f "$d/VERSIONS" ]; then
+      out+=$(note xxh "$arch: versions not recorded: run terminal/install.sh --refresh-remote" "" + "terminal/install.sh --refresh-remote")$'\n'
+      continue
+    fi
+    while read -r tool ver _; do
+      [ -n "$tool" ] && [ -n "${ver:-}" ] && rows+="$tool $ver $arch"$'\n'
+    done < "$d/VERSIONS"
+  done
+  while read -r tool; do
+    [ -n "$tool" ] || continue
+    repo=${XXH_REPOS[$tool]:-}
+    [ -n "$repo" ] || { out+=$(note xxh "$tool: no release source known" "" i)$'\n'; continue; }
+    latest=$(github_latest "$repo")
+    [ -n "$latest" ] || { check_failed xxh "GitHub release lookup failed for $repo (offline or rate limited)"; return; }
+    latest=${latest#v}
+    n=$(awk -v t="$tool" '$1 == t { print $2 }' <<< "$rows" | sort -u | grep -c .)
+    while read -r _ ver arch; do
+      newer "$ver" "$latest" || continue
+      if [ "$n" -gt 1 ]; then out+=$(item xxh "$tool ($arch)" "$ver" "$latest")$'\n'
+      else out+=$(item xxh "$tool" "$ver" "$latest")$'\n'; break
+      fi
+    done < <(awk -v t="$tool" '$1 == t' <<< "$rows")
+  done < <(awk '!seen[$1]++ { print $1 }' <<< "$rows")
+  printf '%s' "$out"
+}
+
 appcast_latest() {  # prints "S <newest shortVersionString>" and "V <newest version>" lines, beta channels skipped
   awk '
     { buf = buf " " $0 }
@@ -548,6 +588,7 @@ detail_section() {  # detail_section <src> <lines>
       case $src in sparkle|unmanaged) [ -z "$extra" ] || printf '      %s\n' "$(c 33 "$extra")" ;; esac
     done <<< "$block"
   done
+  [ "$src" != xxh ] || [ "${N_ITEMS[$src]}" -eq 0 ] || printf '  %s\n' "$(c 33 "$XXH_HINT")"
   while IFS='|' read -r s name inst latest extra hint; do
     [ -z "$latest" ] && [ -n "$s" ] && printf '  %s\n' "$(c "$([ "$inst" = + ] && echo 33 || echo 2)" "$extra")"
   done <<< "$block"

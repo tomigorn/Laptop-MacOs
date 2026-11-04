@@ -83,6 +83,14 @@ esac'
 stub curl '
 for a; do url=$a; done
 case "$url" in
+  https://api.github.com/repos/*/releases/latest)
+    [ -f "$FIX/fail-github" ] && { echo "curl: (22) The requested URL returned error: 403" >&2; exit 22; }
+    r=${url#https://api.github.com/repos/}; f="$FIX/gh/$(echo "${r%/releases/latest}" | tr / _).json"
+    [ -f "$f" ] || exit 22; cat "$f" ;;
+  https://github.com/*/releases/latest)
+    [ -f "$FIX/fail-github-web" ] && exit 22
+    r=${url#https://github.com/}; r=${r%/releases/latest}; f="$FIX/gh/$(echo "$r" | tr / _).json"
+    [ -f "$f" ] || exit 22; printf "https://github.com/%s/releases/tag/%s" "$r" "$(sed -E "s/.*\"tag_name\": \"([^\"]*)\".*/\\1/" "$f")" ;;
   https://example.com/*) cat "$FIX/appcast.xml" ;;
   *) exit 6 ;;
 esac'
@@ -248,7 +256,7 @@ check "unmanaged: install hint under the item replaces the older app" contains "
 check "brew: formulae group" has "$out" "^ formulae$"
 check "brew: casks group" has "$out" "^ casks$"
 check "brew: cask listed after casks header" has "$(sed -n '/^ casks$/,$p' <<< "$out")" "ghostty 1.3.1"
-check "progress: one line per source" equals "$(grep -cE '^ (brew|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|VS Code extensions|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 9
+check "progress: one line per source" equals "$(grep -cE '^ (brew|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|VS Code extensions|xxh remote binaries|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 10
 check "progress: brew outdated count" has "$out" "brew \.+ 4 outdated"
 check "progress: msupdate outdated count" has "$out" "Microsoft AutoUpdate \.+ 2 outdated"
 check "progress: sparkle count" has "$out" "Sparkle apps \.+ 1 to open$"
@@ -573,6 +581,63 @@ cask_like vlc VLC 3.0.24
 jq '.casks[0].auto_updates = true' "$FIX/brew-info-vlc.json" > "$FIX/x" && mv "$FIX/x" "$FIX/brew-info-vlc.json"
 run
 check "sparkle without feed, no cache: cask named like the app" has "$(sed -n '/Open to update/,/Summary/p' <<< "$out")" "VLC 3.0.20 → 3.0.24"
+
+# ── xxh remote binaries: VERSIONS of each store vs GitHub's latest release ──
+fixtures_outdated
+run
+check "xxh: no store" has "$out" "^ xxh remote binaries \.+ none stored$"
+check "xxh: no store, no GitHub lookup" lacks "$(calls)" "api.github.com"
+gh_release() { mkdir -p "$FIX/gh"; printf '{"tag_name": "%s", "name": "x"}\n' "$2" > "$FIX/gh/$(tr / _ <<< "$1").json"; }
+gh_release fish-shell/fish-shell 4.9.3
+gh_release starship/starship v1.28.0
+gh_release atuinsh/atuin v18.24.5
+gh_release sharkdp/bat v0.26.1
+gh_release fastfetch-cli/fastfetch 2.71.0
+XXH="$HOME/.xxh/arch"
+mkdir -p "$XXH/aarch64/bin" "$XXH/x86_64/bin" "$HOME/.xxh/arch.bak-1/x86_64"
+VERSIONS='fish 4.9.3
+starship 1.27.0
+atuin 18.24.5
+bat 0.26.1
+fastfetch 2.70.0'
+printf '%s\n' "$VERSIONS" > "$XXH/aarch64/VERSIONS"
+printf '%s\n' "$VERSIONS" > "$XXH/x86_64/VERSIONS"
+printf 'starship 1.0.0\n' > "$HOME/.xxh/arch.bak-1/x86_64/VERSIONS"
+run
+check "xxh: outdated tool" contains "$out" "starship 1.27.0 → 1.28.0"
+check "xxh: tag without v" contains "$out" "fastfetch 2.70.0 → 2.71.0"
+check "xxh: same version in both stores listed once" equals "$(grep -c 'starship 1.27.0' <<< "$out")" 1
+check "xxh: current tool not listed" lacks "$out" "fish 4.9.3 →"
+check "xxh: backup store ignored" lacks "$out" "1.0.0"
+check "xxh: progress" has "$out" "^ xxh remote binaries \.+ 2 outdated$"
+check "xxh: section" contains "$out" "xxh remote binaries · 2 outdated"
+check "xxh: section hint" contains "$out" "bump the pin in terminal/remote-binaries.conf, then terminal/install.sh --refresh-remote"
+check "xxh: summary row" has "$out" "^ xxh remote binaries 2 terminal/install.sh --refresh-remote$"
+check "xxh: by hand, not via --install" has "$out" "total 18 14 via --install · 4 by hand"
+check "xxh: GitHub latest release asked" contains "$(calls)" "https://api.github.com/repos/starship/starship/releases/latest"
+MAC_OUTDATED_COLOR=always run
+check "xxh: hint yellow" grep -q $'\033\\[33mbump the pin' "$WORK/out"
+printf '%s\n' "$VERSIONS" | sed 's/^starship .*/starship 1.26.0/' > "$XXH/x86_64/VERSIONS"
+run
+check "xxh: stores differ, arch named" contains "$out" "starship (aarch64) 1.27.0 → 1.28.0"
+check "xxh: stores differ, second arch" contains "$out" "starship (x86_64) 1.26.0 → 1.28.0"
+check "xxh: stores agree on the other tools" contains "$out" "fastfetch 2.70.0 → 2.71.0"
+rm "$XXH/x86_64/VERSIONS"
+run
+check "xxh: store without VERSIONS" contains "$out" "x86_64: versions not recorded: run terminal/install.sh --refresh-remote"
+check "xxh: store without VERSIONS, by hand" has "$out" "^ xxh remote binaries \.+ 2 outdated · 1 by hand$"
+check "xxh: store without VERSIONS, summary row" has "$out" "^ xxh remote binaries by hand 1 terminal/install.sh --refresh-remote$"
+touch "$FIX/fail-github"
+run
+check "xxh: GitHub API failing, release page used" contains "$out" "starship 1.27.0 → 1.28.0"
+check "xxh: GitHub API failing, release page asked" contains "$(calls)" "https://github.com/starship/starship/releases/latest"
+touch "$FIX/fail-github-web"
+rm -f "$HOME/.local/state/mac-outdated/last-check"
+run
+check "xxh: GitHub failing, check failed" has "$out" "^ xxh remote binaries \.+ check failed$"
+check "xxh: GitHub failing, summary row" has "$out" "^ xxh remote binaries ! check failed$"
+check "xxh: GitHub failing, no stamp" test ! -e "$HOME/.local/state/mac-outdated/last-check"
+rm -rf "$HOME/.xxh" "$FIX/fail-github" "$FIX/fail-github-web"
 
 # ── test hooks: path overrides only with MAC_OUTDATED_TEST=1 ─────────────────
 paths() { /opt/homebrew/bin/bash -c 'source "$1"; printf "%s\n" "$PRIVILEGESCLI" "$MSUPDATE" "$RUM" "$APP_DIRS"' _ "$SCRIPT"; }

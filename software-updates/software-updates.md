@@ -50,6 +50,7 @@ mac-outdated · 2026-11-03 11:20
 - A source that could not be checked (`brew outdated`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding.
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
 - brew warns `The following taps are not trusted:` (in `brew update`/`brew outdated` stderr) -> yellow note `brew ignores untrusted tap <tap> (its formulae get no updates): brew trust --formula <tap>/<formula> …` with the installed formulae of that tap (also those installed under the tap's old name), counted by hand (`brew by hand` row).
+- xxh remote binaries are outdated items counted by hand (`N outdated` on the progress line, not via `--install`): the pins are bumped deliberately.
 - "Open to update" (sorted by name, counted by hand, not under their source):
   - outdated Sparkle apps (progress line `N to open`)
   - outdated casks with `auto_updates` (not counted on the brew line)
@@ -90,6 +91,7 @@ mac-outdated · 2026-11-03 11:20
 | macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all`, never restarts; `restart required` only after a successful install |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | VS Code extensions | count only | `code --update-extensions` |
+| xxh remote binaries | `~/.xxh/arch/<arch>/VERSIONS` (`tool version` per line, written by `terminal/install.sh`) vs GitHub's latest release (API, then the `releases/latest` page redirect when the API is rate limited); one row per tool, `tool (<arch>)` when the stores differ; no `VERSIONS` -> by hand `run terminal/install.sh --refresh-remote`; no store -> `none stored` | none: bump the pin in `terminal/remote-binaries.conf`, then `terminal/install.sh --refresh-remote` |
 | Sparkle apps | appcast from `SUFeedURL` (beta channel skipped); no `SUFeedURL` (VLC, TeamViewer): the cask that installs the app, as for apps without an updater | none: "Open to update"; no feed and cask without `auto_updates`: `brew install --cask --force <token>` |
 | Apps without an updater | cask that installs the app (see below) | none: `brew install --cask --force <token>` (replaces the older app, settings stay; `--adopt` only takes an identical version); `auto_updates` cask -> "Open to update" |
 | Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion, iStat Menus) | listed once | none: update on start |
