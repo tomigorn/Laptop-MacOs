@@ -30,6 +30,8 @@ stub() {
 stub brew '
 case "$1" in
   --cache) echo "$FIX/brew-cache" ;;
+  --repo) echo "$FIX/taps/$2" ;;
+  tap) [ -f "$FIX/fail-brew-tap" ] && exit 1; cat "$FIX/brew-tap.txt" 2>/dev/null; exit 0 ;;
   update) [ -f "$FIX/brew-update-stderr.txt" ] && cat "$FIX/brew-update-stderr.txt" >&2; [ -f "$FIX/fail-brew-update" ] && exit 1; exit 0 ;;
   outdated) [ -f "$FIX/brew-outdated-stderr.txt" ] && cat "$FIX/brew-outdated-stderr.txt" >&2; [ -f "$FIX/fail-brew-outdated" ] && { echo "Error: brew outdated failed" >&2; exit 1; }; cat "$FIX/brew-outdated.json" ;;
   list) cat "$FIX/brew-list-full.txt" 2>/dev/null ;;
@@ -48,6 +50,7 @@ case "$1" in
     printf "==> Upgrading 1 outdated package\n50%%\r100%%\n"
     [ -f "$FIX/exit-brew" ] && exit "$(cat "$FIX/exit-brew")"; [ -f "$FIX/fail-brew" ] && exit 1; exit 0 ;;
 esac'
+stub git '[ "$1" = -C ] && [ -f "$2/.ct" ] || exit 128; cat "$2/.ct"'
 stub msupdate '
 case "$1" in
   --list) cat "$FIX/msupdate-list.txt" ;;
@@ -256,7 +259,7 @@ check "unmanaged: install hint under the item replaces the older app" contains "
 check "brew: formulae group" has "$out" "^ formulae$"
 check "brew: casks group" has "$out" "^ casks$"
 check "brew: cask listed after casks header" has "$(sed -n '/^ casks$/,$p' <<< "$out")" "ghostty 1.3.1"
-check "progress: one line per source" equals "$(grep -cE '^ (brew|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|VS Code extensions|xxh remote binaries|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 10
+check "progress: one line per source" equals "$(grep -cE '^ (brew|brew taps|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|VS Code extensions|xxh remote binaries|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 11
 check "progress: brew outdated count" has "$out" "brew \.+ 4 outdated"
 check "progress: msupdate outdated count" has "$out" "Microsoft AutoUpdate \.+ 2 outdated"
 check "progress: sparkle count" has "$out" "Sparkle apps \.+ 1 to open$"
@@ -503,6 +506,7 @@ check "missing RemoteUpdateManager: note" contains "$out" "skipped (RemoteUpdate
 check "missing softwareupdate: note" contains "$out" "skipped (softwareupdate not found)"
 check "missing pipx: note" contains "$out" "skipped (pipx not installed)"
 check "missing code: note" contains "$out" "skipped (code not found)"
+check "missing brew: taps skipped" has "$out" "^ brew taps \\.+ skipped \\(brew not installed\\)$"
 check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 → 2.71.1"
 
 # ── check mode: casks found by app name in Homebrew's API cache ─────────────
@@ -638,6 +642,43 @@ check "xxh: GitHub failing, check failed" has "$out" "^ xxh remote binaries \.+ 
 check "xxh: GitHub failing, summary row" has "$out" "^ xxh remote binaries ! check failed$"
 check "xxh: GitHub failing, no stamp" test ! -e "$HOME/.local/state/mac-outdated/last-check"
 rm -rf "$HOME/.xxh" "$FIX/fail-github" "$FIX/fail-github-web"
+
+# ── brew taps: third-party taps nothing comes from, or without a commit in 2 years ──
+fixtures_outdated
+run
+check "taps: none -> up to date" has "$out" "^ brew taps \.+ up to date$"
+old_ct=$(( $(date +%s) - 3 * 365 * 86400 )) new_ct=$(( $(date +%s) - 86400 ))
+old_day=$(date -r "$old_ct" +%Y-%m-%d)
+printf 'arthurk/virt-manager\nasmvik/formulae\nfresh/tap\nnogit/tap\nhomebrew/core\nhomebrew/cask\n' > "$FIX/brew-tap.txt"
+mkdir -p "$FIX/taps/arthurk/virt-manager" "$FIX/taps/asmvik/formulae" "$FIX/taps/fresh/tap/Formula" "$FIX/taps/nogit/tap" "$FIX/taps/homebrew/core"
+touch "$FIX/taps/arthurk/virt-manager/virt-manager.rb" "$FIX/taps/asmvik/formulae/skhd.rb" "$FIX/taps/fresh/tap/Formula/tool.rb"
+echo "$old_ct" > "$FIX/taps/arthurk/virt-manager/.ct"
+echo "$new_ct" > "$FIX/taps/asmvik/formulae/.ct"
+echo "$new_ct" > "$FIX/taps/fresh/tap/.ct"
+echo "$old_ct" > "$FIX/taps/homebrew/core/.ct"
+printf 'bash\nkoekeishiya/formulae/skhd\nfresh/tap/tool\nnogit/tap-other/x\n' > "$FIX/brew-list-full.txt"
+run
+check "taps: unused and old" contains "$out" "arthurk/virt-manager: nothing installed from it, no commit since $old_day: brew untap arthurk/virt-manager"
+check "taps: installed under the tap's old owner counts as used" lacks "$out" "asmvik/formulae:"
+check "taps: used and recent not listed" lacks "$out" "fresh/tap:"
+check "taps: unused, no git date" contains "$out" "nogit/tap: nothing installed from it: brew untap nogit/tap"
+check "taps: core and cask left out" lacks "$out" "homebrew/core"
+check "taps: progress" has "$out" "^ brew taps \.+ 2 by hand$"
+check "taps: section" contains "$out" "brew taps · 2 by hand"
+check "taps: summary row" has "$out" "^ brew taps by hand 2 brew untap arthurk/virt-manager · brew untap nogit/tap$"
+check "taps: total" has "$out" "total 18 14 via --install · 4 by hand"
+check "taps: no formula loaded from a tap" no_match "$(calls)" "^brew (tap-info|info [^-])"
+MAC_OUTDATED_COLOR=always run
+check "taps: note yellow" grep -q $'\033\\[33marthurk/virt-manager: nothing installed' "$WORK/out"
+printf 'fresh/tap\n' > "$FIX/brew-tap.txt"
+echo "$old_ct" > "$FIX/taps/fresh/tap/.ct"
+run
+check "taps: used but old" contains "$out" "fresh/tap: no commit since $old_day: brew untap fresh/tap"
+check "taps: used, not called unused" lacks "$out" "fresh/tap: nothing installed"
+touch "$FIX/fail-brew-tap"
+run
+check "taps: brew tap failing" has "$out" "^ brew taps \.+ check failed$"
+rm -rf "$FIX/taps" "$FIX/brew-tap.txt" "$FIX/brew-list-full.txt" "$FIX/fail-brew-tap"
 
 # ── test hooks: path overrides only with MAC_OUTDATED_TEST=1 ─────────────────
 paths() { /opt/homebrew/bin/bash -c 'source "$1"; printf "%s\n" "$PRIVILEGESCLI" "$MSUPDATE" "$RUM" "$APP_DIRS"' _ "$SCRIPT"; }

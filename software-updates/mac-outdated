@@ -21,10 +21,10 @@ MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
 STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N"
 
-SOURCES=(brew msupdate adobe mas macos pipx vscode xxh sparkle unmanaged)
+SOURCES=(brew taps msupdate adobe mas macos pipx vscode xxh sparkle unmanaged)
 INSTALL_ORDER=(adobe mas brew msupdate pipx vscode macos)
 declare -A LABELS=(
-  [brew]="brew" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
+  [brew]="brew" [taps]="brew taps" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
   [pipx]="pipx" [vscode]="VS Code extensions" [xxh]="xxh remote binaries" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
 )
 MANUAL_SOURCES=" xxh sparkle unmanaged "
@@ -243,6 +243,33 @@ check_brew() {
     fi
     item brew "$name" "$inst" "$latest" "$kind"
   done <<< "$lines"
+}
+
+starts_with() { awk -v p="$2" 'index($0, p) == 1 { f = 1 } END { exit !f }' <<< "$1"; }  # starts_with <lines> <prefix>: a line starts with it
+moved_tap_used() {  # moved_tap_used <installed full names> <taps> <tap dir>: installed under a tap name no longer tapped (renamed owner), file in <tap dir>
+  local name
+  while IFS= read -r name; do
+    [[ $name == */*/* ]] || continue
+    grep -qxF "${name%/*}" <<< "$2" && continue
+    [ -n "$(find "$3" -maxdepth 2 -name "${name##*/}.rb" -print -quit 2>/dev/null)" ] && return 0
+  done <<< "$1"
+  return 1
+}
+check_taps() {  # third-party taps nothing is installed from or without a commit in 2 years; reads the tap's files only, never loads a formula
+  command -v brew >/dev/null || { note taps "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
+  local taps installed tap dir ct why now
+  taps=$(brew tap 2>/dev/null | tr '[:upper:]' '[:lower:]') || { check_failed taps "brew tap failed"; return; }
+  installed=$({ brew list --formula --full-name; brew list --cask --full-name; } 2>/dev/null | tr '[:upper:]' '[:lower:]')
+  now=$(date +%s)
+  while IFS= read -r tap; do
+    case $tap in ""|homebrew/core|homebrew/cask) continue ;; esac
+    dir=$(brew --repo "$tap" 2>/dev/null)
+    why=""
+    starts_with "$installed" "$tap/" || moved_tap_used "$installed" "$taps" "$dir" || why="nothing installed from it"
+    ct=$(git -C "$dir" log -1 --format=%ct 2>/dev/null)
+    [[ $ct =~ ^[0-9]+$ ]] && [ $((now - ct)) -gt $((2 * 365 * 86400)) ] && why+="${why:+, }no commit since $(date -r "$ct" +%Y-%m-%d)"
+    [ -z "$why" ] || note taps "$tap: $why: brew untap $tap" "" + "brew untap $tap"
+  done <<< "$taps"
 }
 
 parse_msupdate() {
