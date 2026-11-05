@@ -25,11 +25,16 @@ ZONES_FILE="${YABAI_ZONES_FILE:-$HOME/.config/yabai/zones.conf}"
 ZONES_REAL="$(readlink -f "$ZONES_FILE" 2>/dev/null || echo "$ZONES_FILE")"
 CONNECTED_DIR="$(dirname "$ZONES_FILE")"
 FILL_GRID="1:1:0:0:1:1"
+SNAP_LOG="${YABAI_SNAP_LOG:-/tmp/yabai-snap_${USER:-$(id -un)}.log}"
+
+note() { { printf '%s %s: %s\n' "$(date '+%F %T')" "$cmd" "$*" >> "$SNAP_LOG"; } 2>/dev/null || true; }
 
 displays="$("$YABAI" -m query --displays 2>/dev/null || true)"
 if [ -z "$displays" ]; then                      # yabai not running / not answering
   if [ "$cmd" = "connected" ]; then
     echo "yabai is not running — connected-monitor list not refreshed" >&2
+  elif [ "$cmd" != "arrange" ]; then
+    note "yabai not answering"
   fi
   exit 0
 fi
@@ -43,10 +48,19 @@ fi
 # "connected" and "arrange" work on displays only, so they skip this guard —
 # otherwise they would silently do nothing whenever no window is focusable.
 if [ "$cmd" != "connected" ] && [ "$cmd" != "arrange" ]; then
-  win="$("$YABAI" -m query --windows --window 2>/dev/null || true)"
+  # skhd has no terminal to show errors in; keep them until the next reboot
+  case "$cmd" in
+    left|right|fill|extend-left|extend-right)
+      exec 2>>"$SNAP_LOG" || true
+      set -E
+      trap 'note "failed at line $LINENO: $BASH_COMMAND"' ERR
+      ;;
+  esac
+  win="$("$YABAI" -m query --windows --window || true)"
   wid="$(printf '%s' "$win" | "$JQ" -r '.id // empty' 2>/dev/null || true)"
-  [ -n "$wid" ] || exit 0
+  if [ -z "$wid" ]; then note "no window to act on"; exit 0; fi
   di="$(printf '%s' "$win" | "$JQ" -r '.display' 2>/dev/null || true)"
+  app="$(printf '%s' "$win" | "$JQ" -r '.app // "?"' 2>/dev/null || true)"
 fi
 
 disp_json() { echo "$displays" | "$JQ" "map(select(.index==$1))[0]"; }
@@ -407,22 +421,28 @@ case "$cmd" in
     read_zones "$di"; ci="$(current_zone_index)"; last=$(( ${#ZONES[@]} - 1 ))
     if   [ "$ci" -eq -1 ];      then snap "${ZONES[$last]}"        # filled/none -> right zone here
     elif [ "$ci" -lt "$last" ]; then snap "${ZONES[$((ci + 1))]}"  # next zone here
-    elif "$YABAI" -m window "$wid" --display east >/dev/null 2>&1; then
+    elif err="$("$YABAI" -m window "$wid" --display east 2>&1)"; then
       ndi="$("$YABAI" -m query --windows --window "$wid" | "$JQ" '.display')"
+      [ "$ndi" != "$di" ] || note "window $wid ($app) still on display $di after --display east"
       read_zones "$ndi"; snap "${ZONES[0]}"                        # crossed east -> its left zone
       "$YABAI" -m window --focus "$wid" || true
-    else snap "${ZONES[$ci]}"                                      # rightmost, no display east
+    else
+      note "window $wid ($app) --display east failed: $err"
+      snap "${ZONES[$ci]}"                                         # rightmost, no display east
     fi
     ;;
   left)
     read_zones "$di"; ci="$(current_zone_index)"
     if   [ "$ci" -eq -1 ]; then snap "${ZONES[0]}"                 # filled/none -> left zone here
     elif [ "$ci" -gt 0 ];  then snap "${ZONES[$((ci - 1))]}"       # previous zone here
-    elif "$YABAI" -m window "$wid" --display west >/dev/null 2>&1; then
+    elif err="$("$YABAI" -m window "$wid" --display west 2>&1)"; then
       ndi="$("$YABAI" -m query --windows --window "$wid" | "$JQ" '.display')"
+      [ "$ndi" != "$di" ] || note "window $wid ($app) still on display $di after --display west"
       read_zones "$ndi"; snap "${ZONES[$(( ${#ZONES[@]} - 1 ))]}"  # crossed west -> its right zone
       "$YABAI" -m window --focus "$wid" || true
-    else snap "${ZONES[0]}"                                        # leftmost, no display west
+    else
+      note "window $wid ($app) --display west failed: $err"
+      snap "${ZONES[0]}"                                           # leftmost, no display west
     fi
     ;;
   extend-right)

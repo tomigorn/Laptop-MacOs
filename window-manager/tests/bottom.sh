@@ -24,7 +24,7 @@ chmod +x "$WORK/bin/yabai" "$WORK/bin/ioreg"
 
 export PATH="$WORK/bin:$PATH"
 export FIXTURE_DISPLAYS="$WORK/displays.json" FIXTURE_WINDOW="$WORK/window.json" FIXTURE_LOG="$WORK/log"
-export YABAI_ZONES_FILE="$WORK/zones.conf"
+export YABAI_ZONES_FILE="$WORK/zones.conf" YABAI_SNAP_LOG="$WORK/snap.log"
 
 LAPTOP=37D8832A-2D66-02CA-B9F7-8F30A301B230
 

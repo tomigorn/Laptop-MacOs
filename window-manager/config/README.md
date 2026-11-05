@@ -135,7 +135,7 @@ To change the modifier everywhere, swap `ctrl + alt` for e.g. `cmd + alt`.
 - `yabairc`     → `yabai --restart-service`
 
 Check they're alive: `pgrep -x yabai; pgrep -x skhd`.
-Logs: `/tmp/yabai_$USER.err.log`, `/tmp/skhd_$USER.err.log`.
+Logs (until the next reboot): `/tmp/yabai_$USER.err.log`, `/tmp/skhd_$USER.err.log`, `/tmp/yabai-snap_$USER.log` (failed window moves).
 
 ## Source of truth
 
