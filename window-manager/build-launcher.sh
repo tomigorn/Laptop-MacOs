@@ -45,7 +45,6 @@ build_app() {
     echo "==> Refreshing Launch Services registration"
     /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
         -f "${app_dir}" || true
-    xattr -dr com.apple.quarantine "${app_dir}" 2>/dev/null || true
 }
 
 build_app "yabai window manager"           launcher.sh         yabai-window-manager         Info.plist         AppIcon.icns

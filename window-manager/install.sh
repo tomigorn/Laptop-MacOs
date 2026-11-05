@@ -4,14 +4,15 @@
 #   1. Installs yabai, skhd, jq, displayplacer from Homebrew (only what's missing)
 #   2. Symlinks the configs into ~/.config (yabairc, yabai-snap.sh, keys.conf, zones.conf)
 #   3. Starts / restarts the yabai + skhd LaunchAgents
+#   4. Builds the Spotlight launcher apps
 #
 # Flags:
 #   --skip-services   don't start/restart services (useful for testing)
 #
 # NOTE: this setup does NOT use yabai's scripting addition, so SIP stays enabled.
 # After a fresh install you must grant Accessibility to yabai and skhd once
-# (System Settings → Privacy & Security → Accessibility), then re-run with --skip
-# nothing, or just `yabai --restart-service && skhd --restart-service`.
+# (System Settings → Privacy & Security → Accessibility), then run
+# `yabai --restart-service && skhd --restart-service`.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -29,7 +30,7 @@ SKIP_SERVICES=0
 for a in "$@"; do
     case "$a" in
         --skip-services) SKIP_SERVICES=1 ;;
-        -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
         *) die "unknown flag: $a" ;;
     esac
 done
@@ -56,7 +57,7 @@ link() {  # $1 = source, $2 = destination
 step "Homebrew packages: yabai, skhd, jq, displayplacer"
 command -v brew >/dev/null || die "Homebrew not found — install from https://brew.sh first"
 missing=()
-for p in yabai skhd jq displayplacer; do command -v "$p" >/dev/null 2>&1 || missing+=("$p"); done
+for p in yabai skhd jq displayplacer; do brew list --formula "$p" >/dev/null 2>&1 || missing+=("$p"); done
 if [ "${#missing[@]}" -eq 0 ]; then
     skip "yabai, skhd, jq, displayplacer all present"
 else
@@ -98,14 +99,14 @@ else
     fi
 fi
 
-# ── 5. Spotlight launcher apps ───────────────────────────────────────────────
+# ── 4. Spotlight launcher apps ───────────────────────────────────────────────
 step "Spotlight launchers (\"yabai window manager\" + \"… - restart\")"
 "$SCRIPT_DIR/build-launcher.sh" | sed 's/^/   /'
 ok "type 'yabai' in Spotlight: open the config in VS Code, or restart the services"
 
 step "Done"
-info "Shortcuts:  ⌃⌥ ←/→  walk window left/right (crosses displays)"
-info "            ⌃⌥ ↑    fill the display"
+info "Shortcuts:  ⌥⌘ ←/→  walk window left/right (crosses displays)"
+info "            ⌥⌘ ↑    fill the display"
 info "Edit sizes: $CONFIG_HOME/yabai/zones.conf   (no restart needed)"
 info "Spotlight:  'yabai window manager' → open config in VS Code"
 info "            'yabai window manager - restart' → restart yabai + skhd"

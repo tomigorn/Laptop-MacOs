@@ -2,7 +2,7 @@
 # Remove the yabai + skhd window-manager setup. Safe to re-run.
 #
 #   1. Stops the yabai + skhd services
-#   2. Removes the config symlinks (zones.conf stays in the repo) and connected.txt
+#   2. Removes the config symlinks (zones.conf stays in the repo), connected.txt and the Spotlight launcher apps
 #
 # Flags:
 #   --uninstall     also `brew uninstall` yabai, skhd, displayplacer (jq is left alone)

@@ -13,6 +13,7 @@ printf '#!/bin/sh\n' > "$WORK/app/build-launcher.sh"
 cat > "$WORK/bin/brew" <<'STUB'
 #!/bin/sh
 echo "brew $*" >> "$LOG"
+[ "$1" != list ] || exit 1
 STUB
 chmod +x "$WORK/bin/brew" "$WORK/app/build-launcher.sh"
 export HOME="$WORK/home" XDG_CONFIG_HOME="$WORK/home/.config" LOG="$WORK/log"
@@ -32,6 +33,10 @@ check "install.sh exits 0" eq 0 $?
 check "yabai from asmvik/formulae" contains "$(log)" "brew install asmvik/formulae/yabai"
 check "skhd from asmvik/formulae" contains "$(log)" "brew install asmvik/formulae/skhd"
 check "displayplacer from core" contains "$(log)" "brew install displayplacer"
+check "Homebrew's jq, even though macOS ships one" contains "$(log)" "brew install jq"
+check "prints the bound shortcuts" contains "$(cat "$WORK/out")" "⌥⌘ ←/→"
+check "prints no old shortcuts" test -z "$(grep '⌃⌥' "$WORK/out")"
+check "launcher apps keep their quarantine flag" test -z "$(grep quarantine "$DIR/build-launcher.sh")"
 
 old="koekei""shiya"
 check "window-manager never names the old tap owner" test -z "$(grep -rl "$old" "$DIR" 2>/dev/null)"
