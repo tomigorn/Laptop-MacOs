@@ -53,3 +53,7 @@ credentials.json
 tmp/
 *.tmp
 window-manager/config/zones.conf.*
+
+# ── Xcode ────────────────────────────────────────────────────────────────────
+network-control/build/
+xcuserdata/

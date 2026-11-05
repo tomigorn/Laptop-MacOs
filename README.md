@@ -9,6 +9,7 @@ Reproducible blueprint for configuring a Mac to my preferences. One folder per t
 | Terminal | [terminal/](terminal/terminal.md) | fish, starship, atuin, xxh for portable remote shells. Install: `terminal/install.sh` |
 | SSH | [ssh/](ssh/ssh.md) | ssh config, `ssh-why`, waking the sleeping homelab host. Install: `ssh/install.sh` |
 | Homelab DNS | [homelab-dns/](homelab-dns/homelab-dns.md) | DNS auto-switcher for home LAN and VPN |
+| Network control | [network-control/](network-control/network-control.md) | Control Center button: Wi-Fi or Ethernet in use. Install: `network-control/install.sh` |
 | USB-C docking station | [docking-station/](docking-station/docking-station.md) | dock guide, [ethernet NAC](docking-station/ethernet-nac.md), `net-diag.sh` |
 | Virtualization | [virt-manager/](virt-manager/virt-manager.md) | virt-manager / libvirt / QEMU, launchable from Spotlight. Install: `virt-manager/install.sh` |
 | Obsidian | [obsidian/](obsidian/obsidian.md) | CSS snippet for completed tasks |
