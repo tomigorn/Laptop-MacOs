@@ -20,6 +20,7 @@ EOF
 cat > "$WORK/bin/ioreg" <<'EOF'
 #!/bin/sh
 echo ioreg >> "$FIXTURE_LOG"
+[ -z "${IOREG_ADDS:-}" ] || echo "$IOREG_ADDS" >> "$YABAI_ZONES_FILE"
 cat "$FIXTURE_IOREG"
 EOF
 chmod +x "$WORK/bin/yabai" "$WORK/bin/ioreg"
@@ -249,6 +250,12 @@ zones < /dev/null
 chmod 644 "$YABAI_ZONES_FILE"
 run connected
 check "18 mode kept" [ "$(stat -f %Lp "$YABAI_ZONES_FILE")" = 644 ]
+
+# 19. another run registers the same screen while this one reads ioreg
+setup "$(dell_disp)"
+zones < /dev/null
+IOREG_ADDS="monitor $DELL  mon-BBBBBBBB  unknown" "$SNAP" connected >/dev/null 2>&1
+check "19 one line per screen" [ "$(monitor_lines "$DELL")" = 1 ]
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

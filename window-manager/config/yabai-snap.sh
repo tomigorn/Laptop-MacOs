@@ -142,9 +142,13 @@ register_displays() {
   [ -n "$new" ] || return 0
   tmp="$(mktemp "$ZONES_REAL.XXXXXX")" || return 0
   if NEW="$new" awk '
-      FNR==NR { sub(/^\* +/, ""); if ($1=="monitor") last=FNR; next }
-      { print } FNR==last { printf "%s", ENVIRON["NEW"] }
-      END { if (!last) printf "%s", ENVIRON["NEW"] }' "$ZONES_FILE" "$ZONES_FILE" > "$tmp"; then
+      function add(   n, i, l, f) {
+        n = split(ENVIRON["NEW"], l, "\n")
+        for (i = 1; i <= n; i++) { split(l[i], f, " "); if (f[2] != "" && !(f[2] in seen)) print l[i] }
+      }
+      FNR==NR { sub(/^\* +/, ""); if ($1=="monitor") { last=FNR; seen[$2]=1 } next }
+      { print } FNR==last { add() }
+      END { if (!last) add() }' "$ZONES_FILE" "$ZONES_FILE" > "$tmp"; then
     save_zones "$tmp"
   fi
   rm -f "$tmp"
@@ -220,7 +224,7 @@ connected_block() {
     printf "$fmt" "$mark" "$idx" "$uuid" "${w}pt" "$name" "$loc" "$sizes" "${model:--}"
   done < <(echo "$displays" | "$JQ" -r '.[] | "\(.index) \(.uuid) \(.frame.w|floor) \(.frame.h|floor) \(.["has-focus"])"')
   echo "#"
-  echo "#   * = display with keyboard focus.  name/location \"-\" = not named below yet."
+  echo "#   * = display with keyboard focus.  name/location \"-\" = no monitor line (a model rule covers it)."
   echo "# --- end currently connected ------------------------------------------------"
 }
 
