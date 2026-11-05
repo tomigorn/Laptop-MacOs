@@ -279,6 +279,7 @@ instead of erroring out.
 | Nothing happens on a shortcut | Grant **skhd** Accessibility **and** Input Monitoring, then `skhd --restart-service`. |
 | Windows don't move | Grant **yabai** Accessibility; `yabai --restart-service`. Check `/tmp/yabai_$USER.err.log`. |
 | A window won't change screen | `tail /tmp/yabai-snap_$USER.log`: the direction tried and yabai's message. No screen on that side: check the arrangement, or add an `arrange` line to `zones.conf`. |
+| Screens not arranged | `tail /tmp/yabai_$USER.err.log`: `no arrange line` lists the names and locations of the connected screens. The `arrange` line must have exactly those names and one of those locations, case included. |
 | A specific window won't snap | Likely a window with no Accessibility handle (e.g. **Steam**, some overlays/dialogs, a **fullscreen YouTube/video window**) — yabai can't move it without the scripting addition. Exit the video's fullscreen, or launch **yabai window manager - restart** to have yabai re-acquire it. See [Known limitations](#known-limitations). |
 | Window-manager just "bugged out" | Launch **yabai window manager - restart** from Spotlight (or `yabai --restart-service && skhd --restart-service`). |
 | Ratios look wrong on a monitor | Check its `monitor` line is named and has a matching `layout` line in `zones.conf`, or a `model` rule for its model. |

@@ -277,7 +277,10 @@ arrange_screens() {
     [ "$(sorted_words $names)" = "$have" ] || continue
     found=1; break
   done < "$ZONES_FILE"
-  if [ -z "$found" ]; then echo "no arrange line for the connected screens" >&2; return 0; fi
+  if [ -z "$found" ]; then
+    echo "no arrange line for the connected screens (names: ${have% }; locations: ${S_LOC[*]})" >&2
+    return 0
+  fi
 
   # screen index per listed name, left to right (equal names take the next unused screen)
   # shellcheck disable=SC2086

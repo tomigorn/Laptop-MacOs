@@ -123,6 +123,10 @@ EOF
 run arrange
 check "3 exit 0" same "$RC" 0
 check "3 note on stderr" contains "$ERR" "no arrange line for the connected screens"
+check "3 note names the screens" contains "$ERR" "names: MacBook Work-HP-Ultrawide"
+check "3 note names the locations" contains "$ERR" "locations: "
+check "3 note has the laptop location" contains "$ERR" "laptop"
+check "3 note has the model location" contains "$ERR" "open-office"
 check "3 displayplacer not called" not_applied
 
 # 4. already arranged
