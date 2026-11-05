@@ -170,6 +170,16 @@ macOS keeps Ethernet above Wi-Fi even behind a login page. [`net-priority.sh`](n
 2026-11-05 09:17:12  change  priority  [USB 10/100/1000 LAN]=fail wifi=ok  changed=[USB 10/100/1000 LAN]below-wifi
 ```
 
+### Open the log from Spotlight
+
+Type `ethernet`, `wifi` or `network log`: **ethernet wifi network log** opens `/var/log/homelab-dns.log` in VS Code.
+
+```sh
+homelab-dns/build-log-launcher.sh   # no sudo, builds it into ~/Applications
+```
+
+Remove: delete `~/Applications/ethernet wifi network log.app`.
+
 ## Install
 
 ```sh
@@ -181,7 +191,7 @@ Installs the three scripts to `/usr/local/sbin/` and two daemons to
 `com.tomigorn.homelab-dns-timer.plist`, the 5-min safety net), then loads both.
 Runs at boot, on every network change, and every 5 minutes. Safe to re-run.
 
-Tests: `homelab-dns/tests/homelab-dns.sh` and `homelab-dns/tests/net-priority.sh` (stubbed, no system changes), or all via `tests/test-all.sh`.
+Tests: `homelab-dns/tests/homelab-dns.sh`, `homelab-dns/tests/net-priority.sh` and `homelab-dns/tests/log-launcher.sh` (stubbed, no system changes), or all via `tests/test-all.sh`.
 
 ## Verify / operate
 
