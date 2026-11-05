@@ -53,12 +53,23 @@ case "$1" in
   *) /bin/date "$@" ;;
 esac
 STUB
+cat > "$WORK/bin/netstat" <<'STUB'
+#!/bin/sh
+n=$(cat "$STATE/netstatcount" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$STATE/netstatcount"
+[ -f "$STATE/stable" ] && n=0
+printf 'default            192.0.2.%s         UGScg                 en0\n' "$n"
+STUB
+cat > "$WORK/bin/ifconfig" <<'STUB'
+#!/bin/sh
+printf 'en0: flags=8863\n\tinet 192.0.2.50 netmask 0xffffff00\n'
+STUB
 chmod +x "$WORK/bin/"*
 
 sed "s|^LOG=.*|LOG=\"$WORK/homelab-dns.log\"|" "$DNS_SRC" > "$WORK/homelab-dns.sh"
 grep -q "^LOG=\"$WORK/homelab-dns.log\"" "$WORK/homelab-dns.sh" || { echo "FAIL  LOG substitution"; exit 1; }
-sed "s|^ACTOR=\"[^\"]*\"|ACTOR=\"$WORK/actor.sh\"|" "$WATCH_SRC" > "$WORK/watch.sh"
+sed -e "s|^ACTOR=\"[^\"]*\"|ACTOR=\"$WORK/actor.sh\"|" -e "s|^PRIORITY=\"[^\"]*\"|PRIORITY=\"$WORK/priority.sh\"|" "$WATCH_SRC" > "$WORK/watch.sh"
 grep -q "^ACTOR=\"$WORK/actor.sh\"" "$WORK/watch.sh" || { echo "FAIL  ACTOR substitution"; exit 1; }
+grep -q "^PRIORITY=\"$WORK/priority.sh\"" "$WORK/watch.sh" || { echo "FAIL  PRIORITY substitution"; exit 1; }
 chmod +x "$WORK/homelab-dns.sh" "$WORK/watch.sh"
 LOG="$WORK/homelab-dns.log"
 
@@ -169,6 +180,25 @@ check "watch: RTM_NEWADDR triggers a run" contains "$(calls)" "actor change"
 printf '%s\n' "RTM_DELADDR: a" > "$STATE/events"; rm -f "$CALLS"
 "$WORK/watch.sh"
 check "watch: RTM_DELADDR triggers a run" contains "$(calls)" "actor change"
+
+# route event without a real change (same default routes and addresses): nothing runs
+rm -f "$CALLS"; touch "$STATE/stable"
+printf '%s\n' "RTM_IFINFO: a" > "$STATE/events"
+"$WORK/watch.sh"
+check "watch: event without a network change runs nothing" eq "$(calls)" $'actor boot\nsleep 3'
+rm -f "$STATE/stable"
+
+# the priority check runs before the DNS actor, at startup and on a real change
+cat > "$WORK/priority.sh" <<'STUB'
+#!/bin/sh
+echo "priority $1" >> "$CALLS"
+STUB
+chmod +x "$WORK/priority.sh"
+rm -f "$CALLS"
+printf '%s\n' "RTM_ADD: a" > "$STATE/events"
+"$WORK/watch.sh"
+check "watch: priority check before actor" eq "$(calls)" $'priority boot\nactor boot\nsleep 3\npriority change\nactor change'
+rm -f "$WORK/priority.sh"
 
 rm -f "$CALLS" "$WORK/actor.sh"
 printf '%s\n' "RTM_ADD: a" > "$STATE/events"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install the homelab-dns auto-switcher. Safe to re-run.
 #
-#   1. Copies homelab-dns.sh + homelab-dns-watch.sh to /usr/local/sbin (root)
+#   1. Copies homelab-dns.sh + homelab-dns-watch.sh + net-priority.sh to /usr/local/sbin (root)
 #   2. Installs the LaunchDaemon to /Library/LaunchDaemons
 #   3. (Re)loads the daemon so it takes effect immediately
 #
@@ -16,6 +16,7 @@ LABEL="com.tomigorn.homelab-dns"
 TIMER_LABEL="com.tomigorn.homelab-dns-timer"
 BIN_DEST="/usr/local/sbin/homelab-dns.sh"
 WATCH_DEST="/usr/local/sbin/homelab-dns-watch.sh"
+PRIORITY_DEST="/usr/local/sbin/net-priority.sh"
 PLIST_DEST="/Library/LaunchDaemons/${LABEL}.plist"
 TIMER_PLIST_DEST="/Library/LaunchDaemons/${TIMER_LABEL}.plist"
 
@@ -32,7 +33,8 @@ step "Scripts -> /usr/local/sbin"
 install -d -m 755 /usr/local/sbin
 install -m 755 -o root -g wheel "${SCRIPT_DIR}/homelab-dns.sh"       "${BIN_DEST}"
 install -m 755 -o root -g wheel "${SCRIPT_DIR}/homelab-dns-watch.sh" "${WATCH_DEST}"
-ok "installed actor + watcher"
+install -m 755 -o root -g wheel "${SCRIPT_DIR}/net-priority.sh"      "${PRIORITY_DEST}"
+ok "installed actor + watcher + network priority"
 
 # ── 2. LaunchDaemons ─────────────────────────────────────────────────────────
 step "LaunchDaemons -> /Library/LaunchDaemons"

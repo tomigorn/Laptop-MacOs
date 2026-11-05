@@ -146,18 +146,42 @@ network hasn't changed, so the job fired every few seconds. `route -n monitor`
 is a true network-change event source — verified to emit **0 events in 25 s** on
 a network where file-watching fired every 5 s.
 
+## Network priority
+
+macOS keeps Ethernet above Wi-Fi even behind a login page. [`net-priority.sh`](net-priority.sh) fixes the order, run by the watcher at boot and on real network changes. No timer.
+
+| Ethernet | Wi-Fi | Action |
+|---|---|---|
+| fails | works | Ethernet directly below Wi-Fi |
+| fails | fails | nothing, a login page stays usable |
+| works | not checked | Ethernet directly above Wi-Fi |
+| no address | not checked | nothing, no log line |
+
+- **Test:** the reply must contain `NetworkManager is online`.
+- **Sites, in order:** `nmcheck.gnome.org`, `ping.archlinux.org`, `network-test.debian.org`. One answer is enough.
+- **Failed:** all sites fail in 2 rounds, 2s apart.
+- **Plain HTTP on purpose:** a login page must be able to intercept it.
+- **DNS:** each connection resolves through its own DHCP server, because a captive network can hijack DNS.
+- **Coming back:** only on the next network change, for example replugging the cable.
+- **Real change:** a route event counts only if the default routes or addresses differ. Some networks send route events non-stop.
+- **Not covered:** the 5-minute timer runs only the DNS check.
+
+```
+2026-11-05 09:17:12  change  priority  [USB 10/100/1000 LAN]=fail wifi=ok  changed=[USB 10/100/1000 LAN]below-wifi
+```
+
 ## Install
 
 ```sh
 sudo ./install.sh
 ```
 
-Installs the scripts to `/usr/local/sbin/` and two daemons to
+Installs the three scripts to `/usr/local/sbin/` and two daemons to
 `/Library/LaunchDaemons/` (`com.tomigorn.homelab-dns.plist`, the watcher, and
 `com.tomigorn.homelab-dns-timer.plist`, the 5-min safety net), then loads both.
 Runs at boot, on every network change, and every 5 minutes. Safe to re-run.
 
-Tests: `homelab-dns/tests/homelab-dns.sh` (stubbed, no system changes), or all via `tests/test-all.sh`.
+Tests: `homelab-dns/tests/homelab-dns.sh` and `homelab-dns/tests/net-priority.sh` (stubbed, no system changes), or all via `tests/test-all.sh`.
 
 ## Verify / operate
 
@@ -198,7 +222,7 @@ so it never grows unbounded — no `newsyslog`/logrotate needed.
 sudo ./uninstall.sh
 ```
 
-Unloads + deletes **both** daemons (watcher + 5-min timer) and both scripts, then
+Unloads + deletes **both** daemons (watcher + 5-min timer) and the three scripts (the service order stays as it is), then
 reverts every interface's DNS to DHCP — but **only the ones still set to the
 `192.168.1.2` we set**. Any interface that's already DHCP, or that something else
 has since pointed at a custom resolver, is left untouched. Safe to re-run. (Leaves

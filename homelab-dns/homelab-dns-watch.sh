@@ -1,6 +1,6 @@
 #!/bin/sh
-# homelab-dns-watch — long-running watcher that re-evaluates the Wi-Fi DNS only
-# when the network PATH actually changes.
+# homelab-dns-watch — long-running watcher that re-evaluates the network priority
+# and the DNS only when the network PATH actually changes.
 #
 # Why not WatchPaths? Watching files like /etc/resolv.conf or the
 # SystemConfiguration directory fires on every config rewrite — and VPN/DNS
@@ -12,14 +12,25 @@
 # it produces no output, so this watcher sleeps indefinitely and never polls.
 set -u
 
-ACTOR="/usr/local/sbin/homelab-dns.sh"   # the decide+act script
-SETTLE=3                                  # seconds to let routes/DHCP settle
-MIN_GAP=4                                 # min seconds between evaluations
+ACTOR="/usr/local/sbin/homelab-dns.sh"     # the DNS decide+act script
+PRIORITY="/usr/local/sbin/net-priority.sh" # the Ethernet/Wi-Fi order script
+SETTLE=3                                    # seconds to let routes/DHCP settle
+MIN_GAP=4                                   # min seconds between evaluations
 
-run() { [ -x "${ACTOR}" ] && "${ACTOR}" "$1"; }
+run() {
+    [ -x "${PRIORITY}" ] && "${PRIORITY}" "$1"
+    [ -x "${ACTOR}" ] && "${ACTOR}" "$1"
+}
+
+# Some networks emit route events non-stop; only default routes and addresses count as a change.
+fingerprint() {
+    netstat -rnf inet 2>/dev/null | awk '$1 == "default" { print $2, $4 }'
+    ifconfig 2>/dev/null | awk '/^[a-z]/ { i = $1 } /inet / { print i, $2 }'
+}
 
 # Evaluate once at startup (covers boot and daemon (re)load).
 run boot
+state=$(fingerprint)
 
 last=0
 route -n monitor 2>/dev/null | while read -r line; do
@@ -34,6 +45,9 @@ route -n monitor 2>/dev/null | while read -r line; do
     [ $((now - last)) -lt "${MIN_GAP}" ] && continue   # coalesce bursts
 
     sleep "${SETTLE}"     # let the new network settle before probing
-    run change
+    if [ "$(fingerprint)" != "${state}" ]; then
+        run change
+        state=$(fingerprint)
+    fi
     last=$(date +%s)
 done

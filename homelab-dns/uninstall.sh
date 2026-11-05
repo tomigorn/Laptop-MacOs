@@ -2,7 +2,7 @@
 # Remove the homelab-dns auto-switcher. Safe to re-run.
 #
 #   1. Unloads + deletes both LaunchDaemons (watcher + 5-min timer schedule)
-#   2. Deletes both scripts from /usr/local/sbin
+#   2. Deletes the scripts from /usr/local/sbin (the network service order stays as it is)
 #   3. Reverts the Wi-Fi DNS to DHCP — but ONLY if it's still the one we set;
 #      a DNS someone/something else configured is left untouched
 #
@@ -15,6 +15,7 @@ LABEL="com.tomigorn.homelab-dns"
 TIMER_LABEL="com.tomigorn.homelab-dns-timer"
 BIN_DEST="/usr/local/sbin/homelab-dns.sh"
 WATCH_DEST="/usr/local/sbin/homelab-dns-watch.sh"
+PRIORITY_DEST="/usr/local/sbin/net-priority.sh"
 PLIST_DEST="/Library/LaunchDaemons/${LABEL}.plist"
 TIMER_PLIST_DEST="/Library/LaunchDaemons/${TIMER_LABEL}.plist"
 DNS_SERVER="192.168.1.2"      # the only DNS this tool ever sets — see actor
@@ -48,7 +49,7 @@ done
 
 # ── 2. Scripts ───────────────────────────────────────────────────────────────
 step "Scripts"
-for f in "${BIN_DEST}" "${WATCH_DEST}"; do
+for f in "${BIN_DEST}" "${WATCH_DEST}" "${PRIORITY_DEST}"; do
     if [ -f "${f}" ]; then
         rm -f "${f}"
         ok "removed ${f}"
