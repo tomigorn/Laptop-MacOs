@@ -23,10 +23,10 @@ MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
 STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N"
 
-SOURCES=(brew taps scripts msupdate adobe mas macos pipx uv vscode xxh sparkle unmanaged)
+SOURCES=(brew taps vulns scripts msupdate adobe mas macos pipx uv vscode xxh sparkle unmanaged)
 INSTALL_ORDER=(adobe mas brew msupdate pipx uv vscode macos)
 declare -A LABELS=(
-  [brew]="brew" [taps]="brew taps" [scripts]="Install scripts" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
+  [brew]="brew" [taps]="brew taps" [vulns]="brew vulnerabilities" [scripts]="Install scripts" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
   [pipx]="pipx" [uv]="uv tools" [vscode]="VS Code extensions" [xxh]="xxh remote binaries" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
 )
 MANUAL_SOURCES=" xxh sparkle unmanaged "
@@ -218,6 +218,23 @@ tap_formulae() {  # tap_formulae <tap>: installed formulae of the tap as <tap>/<
     brew tap-info --json "$tap" 2>/dev/null | jq -r '.[0].formula_names[]?' 2>/dev/null \
       | while IFS= read -r f; do grep -qxE "([^/]+/[^/]+/)?${f##*/}" <<< "$installed" && printf '%s\n' "$f"; done
   } | sort -u
+}
+check_vulns() {
+  command -v brew >/dev/null || { note vulns "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
+  local json line
+  json=$(brew vulns --json 2>/dev/null)  # exits 1 when it finds something
+  jq -e '.findings | type == "array"' <<< "$json" >/dev/null 2>&1 || { note vulns "brew vulns gave no result" "could not check" "?" "run brew vulns"; return; }
+  local found=""
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    found=1
+    note vulns "$line"
+  done < <(jq -r '.findings | map(select(.vulnerabilities | length > 0)) | sort_by(.formula) | .[]
+    | (.vulnerabilities | map(.severity | ascii_downcase)) as $s
+    | "\(.formula) \(.version): " + (["critical", "high", "medium", "low", "unknown"]
+        | map(. as $l | ($s | map(select(. == $l)) | length) as $n | select($n > 0) | "\($n) \($l)") | join(", "))' <<< "$json")
+  [ -n "$found" ] || { note vulns "no known vulnerabilities" "none known" =; return; }
+  note vulns "details: brew vulns · $(jq '((.skipped_formulae // []) | length) + ((.unscanned_formulae // {}) | length)' <<< "$json") packages not scanned · not counted as outdated" "" i
 }
 check_brew() {
   command -v brew >/dev/null || { note brew "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
@@ -653,7 +670,7 @@ detail_section() {  # detail_section <src> <lines>
     [ "${#name}" -le "$nw" ] || nw=${#name}
     [ "${#inst}" -le "$vw" ] || vw=${#inst}
   done <<< "$block"
-  if [ "${N_ITEMS[$src]}" -gt 0 ] || [ "${N_HAND[$src]}" -gt 0 ]; then n=$(counts_text "$src"); else n="${N_NOTES[$src]} note"; fi
+  if [ "${N_ITEMS[$src]}" -gt 0 ] || [ "${N_HAND[$src]}" -gt 0 ]; then n=$(counts_text "$src"); else n="${N_NOTES[$src]} note$([ "${N_NOTES[$src]}" -gt 1 ] && echo s)"; fi
   section "${LABELS[$src]}" "$n"
   local groups=("")
   [ "$src" = brew ] && groups=(formula cask)

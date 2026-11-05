@@ -38,6 +38,10 @@ case "$1" in
   update) [ -f "$FIX/brew-update-stderr.txt" ] && cat "$FIX/brew-update-stderr.txt" >&2; [ -f "$FIX/fail-brew-update" ] && exit 1; exit 0 ;;
   outdated) [ -f "$FIX/brew-outdated-stderr.txt" ] && cat "$FIX/brew-outdated-stderr.txt" >&2; [ -f "$FIX/fail-brew-outdated" ] && { echo "Error: brew outdated failed" >&2; exit 1; }; cat "$FIX/brew-outdated.json" ;;
   list) cat "$FIX/brew-list-full.txt" 2>/dev/null ;;
+  vulns)
+    [ -f "$FIX/fail-brew-vulns" ] && { echo "Error: Unknown command: vulns" >&2; exit 1; }
+    [ -f "$FIX/brew-vulns.json" ] && { cat "$FIX/brew-vulns.json"; exit 1; }
+    echo "{\"findings\": [], \"skipped_formulae\": [], \"unscanned_formulae\": []}" ;;
   tap-info) [ -f "$FIX/brew-tap-info.json" ] || exit 1; cat "$FIX/brew-tap-info.json" ;;
   info)
     if [ "$4" = --installed ]; then cat "$FIX/brew-info-installed.json"; exit 0; fi
@@ -281,7 +285,7 @@ check "unmanaged: install hint under the item replaces the older app" contains "
 check "brew: formulae group" has "$out" "^ formulae$"
 check "brew: casks group" has "$out" "^ casks$"
 check "brew: cask listed after casks header" has "$(sed -n '/^ casks$/,$p' <<< "$out")" "ghostty 1.3.1"
-check "progress: one line per source" equals "$(grep -cE '^ (brew|brew taps|Install scripts|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|uv tools|VS Code extensions|xxh remote binaries|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 13
+check "progress: one line per source" equals "$(grep -cE '^ (brew|brew taps|brew vulnerabilities|Install scripts|Microsoft AutoUpdate|Adobe|App Store|macOS|pipx|uv tools|VS Code extensions|xxh remote binaries|Sparkle apps|Apps without an updater) \.+ ' <<< "$out")" 14
 check "progress: brew outdated count" has "$out" "brew \.+ 4 outdated"
 check "progress: msupdate outdated count" has "$out" "Microsoft AutoUpdate \.+ 2 outdated"
 check "progress: sparkle count" has "$out" "Sparkle apps \.+ 1 to open$"
@@ -551,6 +555,7 @@ check "missing softwareupdate: note" contains "$out" "skipped (softwareupdate no
 check "missing pipx: note" contains "$out" "skipped (pipx not installed)"
 check "missing code: note" contains "$out" "skipped (code not found)"
 check "missing brew: taps skipped" has "$out" "^ brew taps \\.+ skipped \\(brew not installed\\)$"
+check "missing brew: vulnerabilities skipped" has "$out" "^ brew vulnerabilities \\.+ skipped \\(brew not installed\\)$"
 check "missing brew: install scripts skipped" has "$out" "^ Install scripts \\.+ skipped \\(brew not installed\\)$"
 check "missing uv: note" has "$out" "^ uv tools \\.+ skipped \\(uv not installed\\)$"
 check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 → 2.71.1"
@@ -727,6 +732,37 @@ touch "$FIX/fail-brew-tap"
 run
 check "taps: brew tap failing" has "$out" "^ brew taps \.+ check failed$"
 rm -rf "$FIX/taps" "$FIX/brew-tap.txt" "$FIX/brew-list-full.txt" "$FIX/fail-brew-tap"
+
+# ── brew vulnerabilities: info only, never counted as outdated ──────────────
+fixtures_current
+run
+check "vulns: none" has "$out" "^ brew vulnerabilities \.+ none known$"
+check "vulns: none, no section" lacks "$out" "brew vulnerabilities ·"
+
+cp "$FIX/vulns-findings.json" "$FIX/brew-vulns.json"
+run
+check "vulns: progress" has "$out" "^ brew vulnerabilities \.+ 2 notes$"
+check "vulns: section" contains "$out" "brew vulnerabilities · 2 notes"
+check "vulns: counts by severity, highest first" contains "$out" "libexample 1.2.2: 2 high, 1 medium, 1 unknown"
+check "vulns: other package" contains "$out" "anotherlib 3.0: 1 low"
+check "vulns: fixed by a formula patch left out" lacks "$out" "patchedlib"
+check "vulns: details and blind spot" contains "$out" "details: brew vulns · 3 packages not scanned · not counted as outdated"
+check "vulns: brew's exit 1 is not outdated" equals "$rc" 0
+check "vulns: not in the total" contains "$out" "everything up to date"
+check "vulns: no summary row" no_match "$out" "^ brew vulnerabilities [0-9?]"
+
+rm -f "$FIX/brew-vulns.json" "$HOME/.local/state/mac-outdated/last-check"
+touch "$FIX/fail-brew-vulns"
+run
+check "vulns: no result, progress" has "$out" "^ brew vulnerabilities \.+ could not check$"
+check "vulns: no result, summary row" has "$out" "^ brew vulnerabilities \? run brew vulns$"
+check "vulns: no result, not a failed check" equals "$rc" 0
+check "vulns: no result, stamp still written" test -f "$HOME/.local/state/mac-outdated/last-check"
+
+admin_setup admin 20
+: > "$FIX/fail-brew-vulns"
+run --install
+check "vulns: not part of --install" no_match "$(calls)" "^brew vulns"
 
 # ── install scripts in the repo naming a tap that is not tapped ─────────────
 fixtures_outdated
