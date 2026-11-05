@@ -5,7 +5,7 @@ One command for every outdated piece of software on this Mac. Install: `software
 | Command | Admin | Does |
 |---|---|---|
 | `mac-outdated` | no | check all sources, print progress, details and a summary, write the last-check stamp (not when a check failed) |
-| `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update; sudo may ask for your password at the start, during brew (some casks), and again for later steps |
+| `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update except third-party tap formulae (held for review); sudo may ask for your password at the start, during brew (some casks), and again for later steps |
 | `mac-outdated --help` | no | usage |
 
 Exit: `0` nothing outdated / all installed, `1` something outdated / a check or step failed, `2` usage error or admin precondition not met, `130` interrupted.
@@ -73,6 +73,7 @@ mac-outdated · 2026-11-03 11:20
 - One line per source while checking, then a detail section only for sources with outdated items or notes; the summary lists sources with something to report (`?` unknown, `–` skipped, `!` check failed). Adobe is only listed with admin, so check mode shows `checked during --install`.
 - A source that could not be checked (`brew outdated`, `brew tap`, `msupdate --list`, `mas outdated`, `softwareupdate --list`, `pipx list`, `uv tool list`, GitHub for xxh, `RemoteUpdateManager` failing, e.g. offline) shows `check failed` in red, counts as `N checks failed` in the total, exits 1 and leaves the last-check stamp alone, so the greeting keeps reminding.
 - `(older version: brew moved to the X.Y line)`: brew deliberately moved to an older (LTS) line; `--install` still installs it and it counts as outdated.
+- Third-party tap formulae (yabai, skhd) are held for review, counted by hand: `yabai 7.1.25 → 7.1.26, third-party tap, held for review: released 3 days ago, wait 11 more days · changes: <compare link> · then: brew upgrade yabai`. Read the changes, wait until the release is 14 days old, then run the command. Limits: yabai ships a prebuilt binary the source can't vouch for, and `brew outdated` already loads the tap's formula file, so a compromised tap runs code at the check.
 - `brew vulnerabilities`: one note per package with known issues, `libsndfile 1.2.2: 2 high, 3 medium, 1 unknown`, without those fixed by a formula patch; never counted as outdated, `brew vulns` shows the details. No result (offline, no `brew vulns`): `could not check`, the stamp is still written.
 - brew warns `The following taps are not trusted:` (in `brew update`/`brew outdated` stderr) -> yellow note `brew ignores untrusted tap <tap> (its formulae get no updates): brew trust --formula <tap>/<formula> …` with the installed formulae of that tap (also those installed under the tap's old name), counted by hand (`brew by hand` row).
 - xxh remote binaries are outdated items counted by hand (`N outdated` on the progress line, not via `--install`): the pins are bumped deliberately.
@@ -126,7 +127,7 @@ mac-outdated · 2026-11-03 11:20
 
 | Source | Check | Install |
 |---|---|---|
-| brew (formulae + casks) | `brew outdated --greedy --json=v2` (after `brew update`), casks checked against the real app | `brew upgrade --formula`, then `brew upgrade --cask <tokens>` only for non-auto-updating casks whose app is older; never `--greedy`, never under sudo |
+| brew (formulae + casks) | `brew outdated --greedy --json=v2` (after `brew update`), casks checked against the real app | `brew upgrade --formula` (naming the formulae when a third-party tap formula is installed, those are held), then `brew upgrade --cask <tokens>` only for non-auto-updating casks whose app is older; never `--greedy`, never under sudo |
 | brew taps | `brew tap` minus core/cask: by hand when nothing installed comes from the tap (`brew list --full-name`; installed under the tap's old owner counts, e.g. `koekeishiya/formulae/yabai` for `asmvik/formulae`) or its last commit is over 2 years old (`git log` in `brew --repo <tap>`); loads no formula from the tap | none: `brew untap <tap>` |
 | brew vulnerabilities | `brew vulns --json` (OSV.dev; formulae only, some skipped), info only | none |
 | Install scripts | `*.sh` and `install*` files of this repo (found from the script's real path; `.git`, `tests`, `fixtures` skipped) naming `brew install <owner>/<tap>/<name>` or `brew tap <owner>/<tap>` for a tap that is not tapped (comments and `homebrew/*` skipped) | none: fix the script |

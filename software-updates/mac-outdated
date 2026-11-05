@@ -30,6 +30,7 @@ declare -A LABELS=(
   [pipx]="pipx" [uv]="uv tools" [vscode]="VS Code extensions" [xxh]="xxh remote binaries" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
 )
 MANUAL_SOURCES=" xxh sparkle unmanaged "
+REVIEW_DAYS=14
 SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian Docker Steam zoom.us Element "Autodesk Fusion" "iStat Menus")
 MANAGED_IDS=('com.apple.*' 'com.microsoft.*' 'com.adobe.*' 'com.jamf*' '*ethz*' 'corp.sap.privileges' 'nl.root3.support')
 BREW_APPS=""
@@ -50,7 +51,7 @@ usage() {
   cat <<'EOF'
 usage: mac-outdated [--install]
   (none)     check every source, print what is outdated (no admin needed)
-  --install  install every available update (needs admin from the Privileges app, >= 15 min left)
+  --install  install every available update except third-party tap formulae, held for review (needs admin from the Privileges app, >= 15 min left)
   --help     this text
 exit: 0 nothing outdated / all installed, 1 something outdated / something failed, 2 usage or admin precondition, 130 interrupted (Ctrl-C)
 EOF
@@ -219,6 +220,31 @@ tap_formulae() {  # tap_formulae <tap>: installed formulae of the tap as <tap>/<
       | while IFS= read -r f; do grep -qxE "([^/]+/[^/]+/)?${f##*/}" <<< "$installed" && printf '%s\n' "$f"; done
   } | sort -u
 }
+third_party_formulae() {  # base names of formulae installed from a tap other than homebrew's, also under the tap's old name
+  brew list --formula --full-name 2>/dev/null | awk -F/ 'NF == 3 && $1 != "homebrew" { print $3 }'
+}
+is_listed() { grep -qxF "$2" <<< "$1"; }  # is_listed <lines> <line>
+review_text() {  # review_text <name> <installed> <latest>: what a held formula's reviewer needs
+  local name=$1 inst=${2%_*} latest=$3 info url home repo="" tag="" link age date secs days
+  info=$(brew info --json=v2 --formula "$name" 2>/dev/null) || info=""
+  url=$(jq -r '.formulae[0].urls.stable.url // empty' <<< "$info" 2>/dev/null)
+  home=$(jq -r '.formulae[0].homepage // empty' <<< "$info" 2>/dev/null)
+  link=${home:-unknown}
+  age="release date unknown"
+  if [[ $url =~ ^https://github\.com/([^/]+/[^/]+)/(releases/download/([^/]+)/|archive/refs/tags/([^/]+)$|archive/([^/]+)$) ]]; then
+    repo=${BASH_REMATCH[1]}
+    tag=${BASH_REMATCH[3]:-${BASH_REMATCH[4]:-${BASH_REMATCH[5]}}}
+    tag=${tag%.tar.gz}; tag=${tag%.zip}
+    link="https://github.com/$repo/compare/${tag//$latest/$inst}...$tag"
+    date=$(curl -fsSL --max-time 10 "https://api.github.com/repos/$repo/commits/$tag" 2>/dev/null | jq -r '.commit.committer.date // empty' 2>/dev/null)
+    if [ -n "$date" ] && secs=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$date" +%s 2>/dev/null); then
+      days=$(( ($(date +%s) - secs) / 86400 ))
+      age="released $days days ago"
+      [ "$days" -ge "$REVIEW_DAYS" ] || age+=", wait $((REVIEW_DAYS - days)) more days"
+    fi
+  fi
+  printf '%s %s → %s, third-party tap, held for review: %s · changes: %s · then: brew upgrade %s' "${name##*/}" "$2" "$latest" "$age" "$link" "$name"
+}
 check_vulns() {
   command -v brew >/dev/null || { note vulns "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
   local json line
@@ -238,7 +264,7 @@ check_vulns() {
 }
 check_brew() {
   command -v brew >/dev/null || { note brew "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
-  local json err tap list
+  local json err tap list third
   err=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX")
   brew update --quiet >/dev/null 2>"$err" || note brew "brew update failed, the list may be stale"
   json=$(brew outdated --greedy --json=v2 2>>"$err") || { rm -f "$err"; check_failed brew "brew outdated failed"; return; }
@@ -247,6 +273,7 @@ check_brew() {
     note brew "brew ignores untrusted tap $tap (its formulae get no updates): brew trust --formula ${list% }" "" + "brew trust (see brew section)"
   done < <(untrusted_taps < "$err")
   rm -f "$err"
+  third=$(third_party_formulae)
   local lines s name inst latest kind state app ver
   lines=$(jq -r '(.formulae | map(. + {kind: "formula"})) + (.casks | map(. + {kind: "cask"})) | .[] | select(.pinned | not)
     | "brew|\(.name)|\(.installed_versions | if type == "array" then last else . end)|\(.current_version)|\(.kind)"' <<< "$json") \
@@ -259,6 +286,9 @@ check_brew() {
         stale) note brew "$name: app already at $ver (brew's record is stale)" "" i; continue ;;
         self) item brew "$app" "$ver" "${latest%%,*}" open; continue ;;
       esac
+    elif is_listed "$third" "${name##*/}"; then
+      note brew "$(review_text "$name" "$inst" "$latest")" "" + "review, then brew upgrade ${name##*/}"
+      continue
     fi
     item brew "$name" "$inst" "$latest" "$kind"
   done <<< "$lines"
@@ -826,9 +856,21 @@ install_adobe() {
 }
 install_brew() {
   command -v brew >/dev/null || { STEP_STATUS=missing; return 0; }
-  local json casks=() token latest state rc=0 r
+  local json casks=() token latest state rc=0 r third name upgrades=()
   brew update || echo "brew update failed, upgrading anyway"
-  brew upgrade --formula || rc=$?
+  third=$(third_party_formulae)
+  if [ -z "$third" ]; then
+    brew upgrade --formula || rc=$?
+  elif json=$(brew outdated --formula --json=v2 2>/dev/null); then
+    while IFS= read -r name; do
+      [ -n "$name" ] || continue
+      if is_listed "$third" "${name##*/}"; then echo "${name##*/}: third-party tap, held for review (see mac-outdated)"; else upgrades+=("$name"); fi
+    done < <(jq -r '.formulae[] | select(.pinned | not) | .name' <<< "$json")
+    [ "${#upgrades[@]}" -eq 0 ] || brew upgrade --formula "${upgrades[@]}" || rc=$?
+  else
+    echo "brew outdated failed, no formula upgraded"
+    rc=1
+  fi
   load_brew_apps
   json=$(brew outdated --cask --json=v2 2>/dev/null) || { echo "brew outdated --cask failed"; return 1; }
   while IFS=$'\t' read -r token latest; do

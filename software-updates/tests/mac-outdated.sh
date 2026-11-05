@@ -45,8 +45,8 @@ case "$1" in
   tap-info) [ -f "$FIX/brew-tap-info.json" ] || exit 1; cat "$FIX/brew-tap-info.json" ;;
   info)
     if [ "$4" = --installed ]; then cat "$FIX/brew-info-installed.json"; exit 0; fi
-    [ -f "$FIX/brew-info-$4.json" ] || { echo "Error: Cask $4 is unavailable" >&2; exit 1; }
-    cat "$FIX/brew-info-$4.json" ;;
+    [ -f "$FIX/brew-info-${4##*/}.json" ] || { echo "Error: Cask $4 is unavailable" >&2; exit 1; }
+    cat "$FIX/brew-info-${4##*/}.json" ;;
   upgrade)
     if [ -f "$FIX/prompt-brew" ]; then
       printf "Proceed? "; i=0
@@ -113,6 +113,9 @@ case "$url" in
     r=${url#https://github.com/}; r=${r%/releases/latest}; f="$FIX/gh/$(echo "$r" | tr / _).json"
     [ -f "$f" ] || exit 22; printf "https://github.com/%s/releases/tag/%s" "$r" "$(sed -E "s/.*\"tag_name\": \"([^\"]*)\".*/\\1/" "$f")" ;;
   https://example.com/*) cat "$FIX/appcast.xml" ;;
+  https://api.github.com/repos/*/commits/*)
+    [ -f "$FIX/gh-commit-date" ] || exit 22
+    echo "{\"commit\": {\"committer\": {\"date\": \"$(cat "$FIX/gh-commit-date")\"}}}" ;;
   *) exit 6 ;;
 esac'
 cat > "$BIN/sudo" <<'EOF'
@@ -763,6 +766,70 @@ admin_setup admin 20
 : > "$FIX/fail-brew-vulns"
 run --install
 check "vulns: not part of --install" no_match "$(calls)" "^brew vulns"
+
+# ── third-party tap formulae: held for review, never upgraded by --install ──
+held_setup() {
+  fixtures_current
+  jq -n '{formulae: [
+      {name: "aom", installed_versions: ["3.15.2"], current_version: "3.15.3", pinned: false},
+      {name: "yabai", installed_versions: ["7.1.25"], current_version: "7.1.26", pinned: false},
+      {name: "asmvik/formulae/skhd", installed_versions: ["0.3.9_1"], current_version: "0.3.10", pinned: false}
+    ], casks: []}' > "$FIX/brew-outdated.json"
+  printf '%s\n' aom koekeishiya/formulae/yabai asmvik/formulae/skhd > "$FIX/brew-list-full.txt"
+  jq -n '{formulae: [{homepage: "https://github.com/asmvik/yabai", urls: {stable: {url: "https://github.com/asmvik/yabai/releases/download/v7.1.26/yabai-v7.1.26.tar.gz"}}}]}' > "$FIX/brew-info-yabai.json"
+  jq -n '{formulae: [{homepage: "https://github.com/asmvik/skhd", urls: {stable: {url: "https://github.com/asmvik/skhd/archive/v0.3.10.zip"}}}]}' > "$FIX/brew-info-skhd.json"
+  date -u -v-3d +%Y-%m-%dT%H:%M:%SZ > "$FIX/gh-commit-date"
+}
+held_setup
+run
+check "held: core formula still outdated" has "$out" "aom 3.15.2 → 3.15.3"
+check "held: progress" has "$out" "^ brew \.+ 1 outdated · 2 by hand$"
+check "held: versions" contains "$out" "yabai 7.1.25 → 7.1.26"
+check "held: young release" contains "$out" "released 3 days ago, wait 11 more days"
+check "held: change link from a release url" contains "$out" "https://github.com/asmvik/yabai/compare/v7.1.25...v7.1.26"
+check "held: change link from an archive url, revision dropped" contains "$out" "https://github.com/asmvik/skhd/compare/v0.3.9...v0.3.10"
+check "held: upgrade command" contains "$out" "then: brew upgrade yabai"
+check "held: total" contains "$out" "total 3 1 via --install · 2 by hand"
+check "held: exit 1" equals "$rc" 1
+
+date -u -v-20d +%Y-%m-%dT%H:%M:%SZ > "$FIX/gh-commit-date"
+run
+check "held: old release" contains "$out" "released 20 days ago"
+check "held: old release, no wait" lacks "$out" "more days"
+
+rm -f "$FIX/gh-commit-date"
+run
+check "held: GitHub unreachable" contains "$out" "release date unknown"
+check "held: GitHub unreachable, still a link" contains "$out" "compare/v7.1.25...v7.1.26"
+
+jq -n '{formulae: [{homepage: "https://example.org/tool", urls: {stable: {url: "https://example.org/tool-7.1.26.tar.gz"}}}]}' > "$FIX/brew-info-yabai.json"
+run
+check "held: not on GitHub, homepage" contains "$out" "changes: https://example.org/tool"
+
+rm -f "$FIX/brew-info-yabai.json"
+run
+check "held: no formula info, still held" contains "$out" "yabai 7.1.25 → 7.1.26"
+check "held: no formula info, no link" contains "$out" "changes: unknown"
+
+held_setup
+admin_setup admin 20
+run --install
+check "held install: core formula upgraded by name" contains "$(calls)" "brew upgrade --formula aom"
+check "held install: tap formulae not upgraded" no_match "$(calls)" "^brew upgrade .*(yabai|skhd)"
+check "held install: says so" contains "$out" "yabai: third-party tap, held for review"
+
+held_setup
+admin_setup admin 20
+jq '.formulae |= map(select(.name != "aom"))' "$FIX/brew-outdated.json" > "$FIX/o.json" && mv "$FIX/o.json" "$FIX/brew-outdated.json"
+run --install
+check "held install: only held, no formula upgrade" no_match "$(calls)" "^brew upgrade --formula"
+
+held_setup
+admin_setup admin 20
+touch "$FIX/fail-brew-outdated"
+run --install
+check "held install: list unknown, nothing upgraded" no_match "$(calls)" "^brew upgrade --formula"
+check "held install: list unknown, step failed" equals "$rc" 1
 
 # ── install scripts in the repo naming a tap that is not tapped ─────────────
 fixtures_outdated
