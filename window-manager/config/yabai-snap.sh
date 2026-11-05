@@ -237,13 +237,14 @@ update_connected_block() {
 # "arrange <location> <top|bottom|center> <name>..." places the screens left to
 # right, applied with displayplacer.
 
-# Set RES_NAME and RES_LOC for display UUID $1 with frame $2 x $3. The location is
-# the UUID line's when resolve_name picked that line, else the model rule's.
+# Set RES_NAME and RES_LOC for display UUID $1 with frame $2 x $3: the UUID line's,
+# unless a model rule applies to a line without a layout.
 resolve_location() {
   local entry
   resolve_name "$1" "$2" "$3"
   entry="$(monitor_entry "$1")"
-  if [ "${entry%% *}" = "$RES_NAME" ]; then
+  if [ "${entry%% *}" = "$RES_NAME" ] || { [ "$RES_NAME" = "default" ] && [ "${entry%% *}" != "-" ]; }; then
+    RES_NAME="${entry%% *}"
     RES_LOC="${entry##* }"; [ "$RES_LOC" != "-" ] || RES_LOC=""
   else
     load_models
@@ -322,11 +323,12 @@ arrange_screens() {
     id="${arg#*id:}"; id="$(upper "${id%% *}")"
     AIDX[i]=""
     for ((j = 0; j < n; j++)); do [ "${S_UUID[$j]}" != "$id" ] || AIDX[i]="$j"; done
+    if [ -z "${AIDX[$i]}" ]; then echo "displayplacer and yabai list different screens — screens not arranged" >&2; return 0; fi
     case "$arg" in *"origin:(0,0)"*) main="${AIDX[$i]}" ;; esac
   done
+  if [ -z "$main" ]; then echo "displayplacer lists no main screen — screens not arranged" >&2; return 0; fi
 
-  local dx=0 dy=0 same=1
-  if [ -n "$main" ]; then dx=$(( -NX[main] )); dy=$(( -NY[main] )); fi
+  local dx=$(( -NX[main] )) dy=$(( -NY[main] )) same=1
   for j in "${ORDER[@]}"; do
     NX[j]=$(( NX[j] + dx )); NY[j]=$(( NY[j] + dy ))
     [ "${NX[$j]}" = "${S_X[$j]}" ] && [ "${NY[$j]}" = "${S_Y[$j]}" ] || same=""
@@ -335,7 +337,7 @@ arrange_screens() {
 
   for ((i = 0; i < ${#ARGS[@]}; i++)); do
     arg="${ARGS[$i]}"; j="${AIDX[$i]}"
-    [ -z "$j" ] || arg="$(printf '%s' "$arg" | sed -E "s/origin:\([^)]*\)/origin:(${NX[$j]},${NY[$j]})/")"
+    arg="$(printf '%s' "$arg" | sed -E "s/origin:\([^)]*\)/origin:(${NX[$j]},${NY[$j]})/")"
     NEW+=("$arg")
   done
   printf 'displayplacer'; printf ' "%s"' "${NEW[@]}"; echo

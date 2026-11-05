@@ -136,9 +136,9 @@ arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
 |------|-----|
 | apply | `yabai-snap.sh arrange`; automatically on yabai start/restart (restart app) and on plug in/out (`display_added`/`display_removed` signals in `yabairc`) |
 | which line | the first whose location is one of the connected screens' locations and whose names are exactly the connected screens (any order), both matched exactly, case included |
-| name and workspace of a screen | its `monitor` line's name and location if that name has a `layout` line; else the `model` rule's name and location; else `default`, no location |
+| name and workspace of a screen | its `monitor` line's name and location, unless that name has no `layout` line and a `model` rule covers the screen: then the rule's name and location |
 | tool | `displayplacer`: only `origin` is changed, resolution/scaling/rotation stay; the main screen stays at (0,0) |
-| skipped | no matching line, already arranged, yabai not running or reports no screens, `displayplacer` missing or gives no arrangement, or a screen listed as `enabled:false` (asleep/locked) |
+| skipped | no matching line, already arranged, yabai not running or reports no screens, `displayplacer` missing or gives no arrangement, `displayplacer` and yabai list different screens, or a screen listed as `enabled:false` (asleep/locked) |
 
 No match: the message `no arrange line for the connected screens (names: …; locations: …)` lists the values to use. Where it lands: [Logs](#logs).
 

@@ -30,7 +30,7 @@ chmod +x "$WORK/bin/yabai" "$WORK/bin/ioreg" "$WORK/bin/displayplacer"
 export PATH="$WORK/bin:$PATH"
 export FIXTURE_DISPLAYS="$WORK/displays.json" FIXTURE_IOREG="$WORK/ioreg.txt"
 export FIXTURE_WINDOW="$WORK/window.json" FIXTURE_LIST="$WORK/list.txt" FIXTURE_APPLIED="$WORK/applied"
-export YABAI_ZONES_FILE="$WORK/zones.conf"
+export YABAI_ZONES_FILE="$WORK/zones.conf" YABAI_SNAP_LOG="$WORK/snap.log"
 
 LAPTOP=37D8832A-2D66-02CA-B9F7-8F30A301B230
 HP=9EF24336-093D-4B36-8D24-BA95A65D1EEB
@@ -214,6 +214,51 @@ OUT="$(/bin/bash "$SNAP" arrange 2>"$WORK/err")"; RC=$?; ERR="$(cat "$WORK/err")
 check "10 exit 0" same "$RC" 0
 check "10 note on stderr" contains "$ERR" "no screens"
 check "10 displayplacer not called" not_applied
+
+# 11. named monitor without its own layout line: name and location still count
+setup "$(LAPTOP_AT 0 0)" "$(DELL_AT 1470 0)"
+zones <<EOF
+monitor $DELL  Room-TV  Room
+arrange Room bottom MacBook Room-TV
+EOF
+run arrange
+check "11 applied" contains "$(arg_for "$DELL")" "origin:(1470,-484) "
+check "11 no note" same "$ERR" ""
+
+# 12. the main screen is not among yabai's screens: nothing to anchor on
+setup "$(LAPTOP_AT 0 0)" "$(HP_AT 1470 0)"
+printf '[{"index":1,"uuid":"%s","frame":{"x":1470.0000,"y":0.0000,"w":3440.0000,"h":1440.0000},"has-focus":true}]' "$HP" > "$FIXTURE_DISPLAYS"
+zones <<EOF
+monitor $HP  Solo  Desk
+layout Solo 50 50
+arrange Desk top Solo
+EOF
+run arrange
+check "12 note on stderr" contains "$ERR" "screens not arranged"
+check "12 displayplacer not called" not_applied
+
+# 13. displayplacer lists a screen yabai doesn't have
+setup "$(LAPTOP_AT 0 0)" "$(HP_AT 1470 0)"
+sed -i '' '/^displayplacer /s/$/ "id:CCCCCCCC-1111-2222-3333-444444444444 res:1920x1080 hz:60 color_depth:8 enabled:true scaling:on origin:(4910,0) degree:0"/' "$FIXTURE_LIST"
+zones <<EOF
+model HP-E34m-G4 Work-HP-Ultrawide open-office
+arrange open-office bottom Work-HP-Ultrawide MacBook
+EOF
+run arrange
+check "13 note on stderr" contains "$ERR" "screens not arranged"
+check "13 displayplacer not called" not_applied
+
+# 14. equal names take one screen each, in order
+setup "$(LAPTOP_AT 0 0)" "$(HP_AT 1470 0)" "$(DELL_AT 4910 0)"
+zones <<EOF
+monitor $HP  Same  Desk
+monitor $DELL  Same  Desk
+layout Same 50 50
+arrange Desk bottom Same Same MacBook
+EOF
+run arrange
+check "14 first screen" contains "$(arg_for "$HP")" "origin:(-6000,-484) "
+check "14 second screen" contains "$(arg_for "$DELL")" "origin:(-2560,-484) "
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi
