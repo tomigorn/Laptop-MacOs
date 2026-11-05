@@ -201,6 +201,7 @@ window-manager/
 ├── tests/arrange.sh            # tests for arrange (stubs yabai, ioreg, displayplacer)
 ├── tests/bottom.sh             # tests for the fixed bottom gap (stubs yabai)
 ├── tests/snap-log.sh           # tests for the snap log (stubs yabai, ioreg)
+├── tests/walk.sh               # tests for left, right, fill, extend (stubs yabai, ioreg; bash 5 and 3.2)
 ├── tests/launcher.sh           # tests for launcher.sh
 ├── tests/make-icon.sh          # tests for make-icon.sh
 ├── tests/install.sh            # tests for install.sh: brew tap asmvik/formulae (stubs brew)

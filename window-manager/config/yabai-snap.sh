@@ -191,8 +191,8 @@ monitor_entry() {
 # The layout percentages for monitor <name>, falling back to "layout default".
 layout_sizes() {
   awk -v n="$1" '
-    $1=="layout" && $2==n         { for (i=3;i<=NF;i++) s = s (i>3 ? " " : "") $i; got=1 }
-    $1=="layout" && $2=="default" { for (i=3;i<=NF;i++) d = d (i>3 ? " " : "") $i }
+    $1=="layout" && $2==n         { for (i=3;i<=NF && $i !~ /^#/;i++) s = s (i>3 ? " " : "") $i; got=1 }
+    $1=="layout" && $2=="default" { for (i=3;i<=NF && $i !~ /^#/;i++) d = d (i>3 ? " " : "") $i }
     END { print (got ? s : d) }' "$ZONES_FILE"
 }
 
@@ -346,8 +346,8 @@ arrange_screens() {
 # else the "default" layout. COLS is fixed at 100 so percentages map to columns.
 profile_for_name() {
   awk -v n="$1" '
-    $1=="layout" && $2==n         { for (i=3;i<=NF;i++) sel[++s]=$i; got=1 }
-    $1=="layout" && $2=="default" { for (i=3;i<=NF;i++) def[++d]=$i }
+    $1=="layout" && $2==n         { for (i=3;i<=NF && $i !~ /^#/;i++) sel[++s]=$i; got=1 }
+    $1=="layout" && $2=="default" { for (i=3;i<=NF && $i !~ /^#/;i++) def[++d]=$i }
     END { x=0
       if (got) for (i=1;i<=s;i++) { printf "1:100:%d:0:%d:1\n", x, sel[i]; x+=sel[i] }
       else     for (i=1;i<=d;i++) { printf "1:100:%d:0:%d:1\n", x, def[i]; x+=def[i] }
@@ -413,6 +413,32 @@ span_grid() {
   echo "1:100:$sx:0:$(( ex + ew - sx )):1"
 }
 
+# True when snapping left the window where it was: it can't shrink into its zone.
+window_unmoved() {
+  [ "$( { printf '%s' "$win"; "$YABAI" -m query --windows --window "$wid"; } | "$JQ" -s \
+    '((.[0].frame.x - .[1].frame.x) | fabs) + ((.[0].frame.w - .[1].frame.w) | fabs) <= 1')" = "true" ]
+}
+
+# cross <east|west> <zone if it can't leave this display> <first|last zone over there>
+cross() {
+  local err ndi z=0
+  if ! err="$("$YABAI" -m window "$wid" --display "$1" 2>&1)"; then
+    note "window $wid ($app) --display $1 failed: $err"
+    snap "$2"
+    return 0
+  fi
+  ndi="$("$YABAI" -m query --windows --window "$wid" | "$JQ" '.display')"
+  if [ "$ndi" = "$di" ]; then
+    note "window $wid ($app) still on display $di after --display $1"
+    snap "$2"
+    return 0
+  fi
+  read_zones "$ndi"
+  [ "$3" = "first" ] || z=$(( ${#ZONES[@]} - 1 ))
+  snap "${ZONES[$z]}"
+  "$YABAI" -m window --focus "$wid" || true
+}
+
 register_displays
 mark_connected
 
@@ -422,30 +448,20 @@ case "$cmd" in
     ;;
   right)
     read_zones "$di"; ci="$(current_zone_index)"; last=$(( ${#ZONES[@]} - 1 ))
-    if   [ "$ci" -eq -1 ];      then snap "${ZONES[$last]}"        # filled/none -> right zone here
-    elif [ "$ci" -lt "$last" ]; then snap "${ZONES[$((ci + 1))]}"  # next zone here
-    elif err="$("$YABAI" -m window "$wid" --display east 2>&1)"; then
-      ndi="$("$YABAI" -m query --windows --window "$wid" | "$JQ" '.display')"
-      [ "$ndi" != "$di" ] || note "window $wid ($app) still on display $di after --display east"
-      read_zones "$ndi"; snap "${ZONES[0]}"                        # crossed east -> its left zone
-      "$YABAI" -m window --focus "$wid" || true
-    else
-      note "window $wid ($app) --display east failed: $err"
-      snap "${ZONES[$ci]}"                                         # rightmost, no display east
+    if [ "$ci" -eq -1 ]; then
+      snap "${ZONES[$last]}"
+      if window_unmoved; then cross east "${ZONES[$last]}" first; fi
+    elif [ "$ci" -lt "$last" ]; then snap "${ZONES[$((ci + 1))]}"
+    else cross east "${ZONES[$ci]}" first
     fi
     ;;
   left)
     read_zones "$di"; ci="$(current_zone_index)"
-    if   [ "$ci" -eq -1 ]; then snap "${ZONES[0]}"                 # filled/none -> left zone here
-    elif [ "$ci" -gt 0 ];  then snap "${ZONES[$((ci - 1))]}"       # previous zone here
-    elif err="$("$YABAI" -m window "$wid" --display west 2>&1)"; then
-      ndi="$("$YABAI" -m query --windows --window "$wid" | "$JQ" '.display')"
-      [ "$ndi" != "$di" ] || note "window $wid ($app) still on display $di after --display west"
-      read_zones "$ndi"; snap "${ZONES[$(( ${#ZONES[@]} - 1 ))]}"  # crossed west -> its right zone
-      "$YABAI" -m window --focus "$wid" || true
-    else
-      note "window $wid ($app) --display west failed: $err"
-      snap "${ZONES[0]}"                                           # leftmost, no display west
+    if [ "$ci" -eq -1 ]; then
+      snap "${ZONES[0]}"
+      if window_unmoved; then cross west "${ZONES[0]}" last; fi
+    elif [ "$ci" -gt 0 ]; then snap "${ZONES[$((ci - 1))]}"
+    else cross west "${ZONES[$ci]}" last
     fi
     ;;
   extend-right)
