@@ -8,11 +8,20 @@
 
 # Launch Services gives a minimal PATH; make the Homebrew bins findable
 # (same problem yabai-snap.sh handles). Intel Homebrew lives in /usr/local.
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 
 # Restart with a start fallback, so this also works if a service was fully stopped.
-yabai --restart-service 2>/dev/null || yabai --start-service
-skhd  --restart-service 2>/dev/null || skhd  --start-service
+yabai --restart-service 2>/dev/null || yabai --start-service 2>/dev/null || true
+skhd  --restart-service 2>/dev/null || skhd  --start-service 2>/dev/null || true
+sleep 1
 
-# The app has no window of its own — a notification is the "it worked" feedback.
-osascript -e 'display notification "yabai + skhd restarted" with title "Window manager reloaded"' >/dev/null 2>&1 || true
+down=""
+pgrep -x yabai >/dev/null || down="yabai"
+pgrep -x skhd >/dev/null || down="${down:+$down }skhd"
+
+# The app has no window of its own: the notification is its only feedback.
+if [ -z "$down" ]; then
+  osascript -e 'display notification "yabai + skhd restarted" with title "Window manager reloaded"' >/dev/null 2>&1 || true
+else
+  osascript -e "display notification \"$down is not running, check Accessibility\" with title \"Window manager restart failed\"" >/dev/null 2>&1 || true
+fi

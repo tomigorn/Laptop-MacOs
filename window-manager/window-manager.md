@@ -200,6 +200,7 @@ window-manager/
 ├── tests/model-fallback.sh     # tests for the model fallback, marks and safe rewrites (stubs yabai + ioreg)
 ├── tests/arrange.sh            # tests for arrange (stubs yabai, ioreg, displayplacer)
 ├── tests/bottom.sh             # tests for the fixed bottom gap (stubs yabai)
+├── tests/restart-launcher.sh   # tests for the restart notification (stubs yabai, skhd, pgrep, osascript)
 ├── tests/snap-log.sh           # tests for the snap log (stubs yabai, ioreg)
 ├── tests/walk.sh               # tests for left, right, fill, extend (stubs yabai, ioreg; bash 5 and 3.2)
 ├── tests/launcher.sh           # tests for launcher.sh
@@ -223,7 +224,7 @@ Both are found by typing **`yabai`** or **`window manager`** in Spotlight:
 | App | What it does |
 |-----|--------------|
 | `yabai window manager` | refreshes `connected.txt`, then opens `~/.config/yabai` in VS Code |
-| `yabai window manager - restart` | restarts the yabai + skhd services (notifies when done) |
+| `yabai window manager - restart` | restarts the yabai + skhd services; the notification says whether both run afterwards, or which doesn't |
 
 Use **restart** when a window won't move/snap (e.g. a fullscreen-video window
 yabai lost its Accessibility handle to — see [Known limitations](#known-limitations))
