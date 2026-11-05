@@ -53,7 +53,7 @@ if [ "$cmd" != "connected" ] && [ "$cmd" != "arrange" ]; then
     left|right|fill|extend-left|extend-right)
       exec 2>>"$SNAP_LOG" || true
       set -E
-      trap 'note "failed at line $LINENO: $BASH_COMMAND"' ERR
+      trap '[ "$BASH_SUBSHELL" -gt 0 ] || note "failed at line $LINENO: $BASH_COMMAND"' ERR
       ;;
   esac
   win="$("$YABAI" -m query --windows --window || true)"

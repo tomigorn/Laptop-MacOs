@@ -52,6 +52,7 @@ check() {  # check <name> <condition...>
 }
 contains() { [[ "$1" == *"$2"* ]]; }
 empty() { [ -z "$1" ]; }
+same() { [ "$1" = "$2" ]; }
 
 # 1. a move inside the screen logs nothing
 reset; window 0 735
@@ -65,6 +66,7 @@ check "2 direction" contains "$(snaplog)" "--display east failed"
 check "2 yabai message" contains "$(snaplog)" "could not locate a eastward display."
 check "2 window" contains "$(snaplog)" "Teams"
 check "2 command" contains "$(snaplog)" " right: "
+check "2 one entry only" same "$(snaplog | wc -l | tr -d ' ')" 1
 
 # 3. same to the west
 reset; window 0 735
@@ -92,6 +94,7 @@ reset; window 0 735
 GRID_FAILS=1 "$SNAP" right
 check "7 yabai message" contains "$(snaplog)" "could not locate the window to act on!"
 check "7 failed line" contains "$(snaplog)" "failed at line"
+check "7 one failed line" same "$(snaplog | grep -c 'failed at line')" 1
 
 # 8. entries carry date and time
 reset; window 735 735
