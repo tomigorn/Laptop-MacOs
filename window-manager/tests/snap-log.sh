@@ -107,4 +107,31 @@ out="$("$SNAP" arrange 2>&1)"
 check "9 arrange stderr" contains "$out" "no arrange line"
 check "9 no log entry" empty "$(snaplog)"
 
-[ "$fails" -eq 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }
+# 10. default path: private, under the home folder
+HOME_LOG="$WORK/home/.local/state/yabai/snap.log"
+mkdir -p "$WORK/home"; window 735 735
+env -u YABAI_SNAP_LOG HOME="$WORK/home" DISPLAY_FAILS=1 "$SNAP" right
+check "10 default path" contains "$(cat "$HOME_LOG" 2>/dev/null)" "--display east failed"
+check "10 folder private" same "$(stat -f %Lp "$(dirname "$HOME_LOG")" 2>/dev/null)" 700
+check "10 file private" same "$(stat -f %Lp "$HOME_LOG" 2>/dev/null)" 600
+
+# 11. it outlives reboots, so it stays small and keeps the newest lines
+reset; window 735 735
+{ for ((i = 0; i < 25000; i++)); do echo "2026-01-01 00:00:00 right: old line to fill the log up $i"; done; echo "newest old line"; } > "$YABAI_SNAP_LOG"
+DISPLAY_FAILS=1 "$SNAP" right
+check "11 trimmed" [ "$(wc -c < "$YABAI_SNAP_LOG")" -lt 1048576 ]
+check "11 newest old line kept" contains "$(snaplog)" "newest old line"
+check "11 new entry written" contains "$(snaplog)" "--display east failed"
+
+# 12. Homebrew's jq, also when another jq comes first on PATH
+if [ -x /opt/homebrew/bin/jq ]; then
+  mkdir -p "$WORK/otherjq"
+  printf '#!/bin/sh\ntouch "%s"\nexec /opt/homebrew/bin/jq "$@"\n' "$WORK/otherjq/used" > "$WORK/otherjq/jq"
+  chmod +x "$WORK/otherjq/jq"
+  reset; window 0 735
+  PATH="$WORK/otherjq:$PATH" "$SNAP" right
+  check "12 other jq not used" [ ! -e "$WORK/otherjq/used" ]
+fi
+
+echo
+if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

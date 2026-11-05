@@ -20,14 +20,26 @@ cmd="${1:-}"
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 YABAI="$(command -v yabai)"
-JQ="$(command -v jq)"
+JQ=/opt/homebrew/bin/jq
+[ -x "$JQ" ] || JQ="$(command -v jq)"
 ZONES_FILE="${YABAI_ZONES_FILE:-$HOME/.config/yabai/zones.conf}"
 ZONES_REAL="$(readlink -f "$ZONES_FILE" 2>/dev/null || echo "$ZONES_FILE")"
 CONNECTED_DIR="$(dirname "$ZONES_FILE")"
 FILL_GRID="1:1:0:0:1:1"
-SNAP_LOG="${YABAI_SNAP_LOG:-/tmp/yabai-snap_${USER:-$(id -un)}.log}"
+SNAP_LOG="${YABAI_SNAP_LOG:-$HOME/.local/state/yabai/snap.log}"
 
 note() { { printf '%s %s: %s\n' "$(date '+%F %T')" "$cmd" "$*" >> "$SNAP_LOG"; } 2>/dev/null || true; }
+
+prepare_log() {
+  local dir tmp
+  dir="$(dirname "$SNAP_LOG")"
+  [ -d "$dir" ] || { mkdir -p "$dir" && chmod 700 "$dir"; }
+  ( umask 077; : >> "$SNAP_LOG" )
+  [ "$(wc -c < "$SNAP_LOG")" -gt 1048576 ] || return 0
+  tmp="$(mktemp "$SNAP_LOG.XXXXXX")" && tail -n 1000 "$SNAP_LOG" > "$tmp" && mv -f "$tmp" "$SNAP_LOG"
+}
+
+case "$cmd" in left|right|fill|extend-left|extend-right) prepare_log 2>/dev/null || true ;; esac
 
 displays="$("$YABAI" -m query --displays 2>/dev/null || true)"
 if [ -z "$displays" ]; then                      # yabai not running / not answering
@@ -48,7 +60,7 @@ fi
 # "connected" and "arrange" work on displays only, so they skip this guard —
 # otherwise they would silently do nothing whenever no window is focusable.
 if [ "$cmd" != "connected" ] && [ "$cmd" != "arrange" ]; then
-  # skhd has no terminal to show errors in; keep them until the next reboot
+  # skhd has no terminal to show errors in
   case "$cmd" in
     left|right|fill|extend-left|extend-right)
       exec 2>>"$SNAP_LOG" || true

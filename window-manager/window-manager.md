@@ -251,8 +251,8 @@ The snap shortcuts then do nothing and leave `no window to act on` in the [snap 
 | Symptom | Fix |
 |---------|-----|
 | Nothing happens on a shortcut | Grant **skhd** Accessibility **and** Input Monitoring, then `skhd --restart-service`. |
-| Windows don't move | Grant **yabai** Accessibility; `yabai --restart-service`. Check `tail /tmp/yabai-snap_$USER.log` and `tail /tmp/yabai_$USER.err.log`. |
-| A window won't change screen | `tail /tmp/yabai-snap_$USER.log`: the direction tried and yabai's message ([Logs](#logs)). No screen on that side: check the arrangement, or add an `arrange` line to `zones.conf`. |
+| Windows don't move | Grant **yabai** Accessibility; `yabai --restart-service`. Check `tail ~/.local/state/yabai/snap.log` and `tail /tmp/yabai_$USER.err.log`. |
+| A window won't change screen | `tail ~/.local/state/yabai/snap.log`: the direction tried and yabai's message ([Logs](#logs)). No screen on that side: check the arrangement, or add an `arrange` line to `zones.conf`. A maximised window, or one too wide for its zone, needs one press to reach the edge zone first. |
 | Screens not arranged | `tail /tmp/yabai_$USER.err.log`: `no arrange line` lists the names and locations of the connected screens. The `arrange` line must have exactly those names and one of those locations, case included. |
 | A specific window won't snap | Likely a window with no Accessibility handle (e.g. **Steam**, some overlays/dialogs, a **fullscreen YouTube/video window**) — yabai can't move it without the scripting addition. Exit the video's fullscreen, or launch **yabai window manager - restart** to have yabai re-acquire it. See [Known limitations](#known-limitations). |
 | Window-manager just "bugged out" | Launch **yabai window manager - restart** from Spotlight (or `yabai --restart-service && skhd --restart-service`). |
@@ -261,11 +261,11 @@ The snap shortcuts then do nothing and leave `no window to act on` in the [snap 
 
 ## Logs
 
-All in `/tmp`, gone after a reboot.
+The snap log stays across reboots, trimmed to its last 1000 lines past 1 MB. The `/tmp` logs are gone after a reboot.
 
 | Log | Contains |
 |-----|----------|
-| `/tmp/yabai-snap_$USER.log` (path override: `YABAI_SNAP_LOG`) | failed window moves, see below |
+| `~/.local/state/yabai/snap.log` (path override: `YABAI_SNAP_LOG`) | failed window moves, see below |
 | `/tmp/yabai_$USER.err.log` | yabai's errors; `arrange` from `yabairc` or a signal: `no arrange line …` and the other skip reasons |
 | `/tmp/yabai_$USER.out.log` | `yabai configuration loaded`; `already arranged`; the `displayplacer` command applied |
 | `/tmp/skhd_$USER.err.log`, `/tmp/skhd_$USER.out.log` | skhd |
