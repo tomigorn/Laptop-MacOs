@@ -172,7 +172,7 @@ macOS keeps Ethernet above Wi-Fi even behind a login page. [`net-priority.sh`](n
 
 ### Open the log from Spotlight
 
-Type `ethernet`, `wifi` or `network log`: **ethernet wifi network log** opens `/var/log/homelab-dns.log` in VS Code.
+Type `ethernet`, `wifi` or `network log`: **ethernet wifi network log** opens this folder in a new VS Code window, with the log open as a tab. `homelab-dns.log` here is a local, gitignored link to `/var/log/homelab-dns.log`.
 
 ```sh
 homelab-dns/build-log-launcher.sh   # no sudo, builds it into ~/Applications

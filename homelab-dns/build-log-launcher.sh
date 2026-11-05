@@ -12,6 +12,7 @@ chmod +x "$SRC_DIR/log-launcher.sh"
 ln -sf "$SRC_DIR/log-launcher.sh" "$APP_DIR/Contents/MacOS/ethernet-wifi-network-log"
 ln -sf "$SRC_DIR/log-Info.plist" "$APP_DIR/Contents/Info.plist"
 printf 'APPL????' > "$APP_DIR/Contents/PkgInfo"
+ln -sfn /var/log/homelab-dns.log "$SRC_DIR/homelab-dns.log"
 
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR"
 
