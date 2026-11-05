@@ -60,8 +60,7 @@ Tests: `window-manager/tests/*.sh`, or all via `tests/test-all.sh`.
 | `⌥⌘ ↑` | **fill** the whole display |
 | `⇧⌥⌘ ←` / `⇧⌥⌘ →` | **extend** the window across zones (grow left / right; reset with plain `⌥⌘ ←/→`) |
 
-`config/keys.conf` documents the full menu of options
-(Spectacle / Rectangle / Magnet / macOS Sequoia / Windows / Linux conventions).
+[`config/keys.conf`](config/keys.conf) is authoritative, with a menu of other conventions (Spectacle, Rectangle, Magnet, macOS Sequoia, Windows, Linux) as comments.
 
 Behaviour: open a window (it floats), press `⌥⌘→` to snap it into a zone, press
 again to walk across — at a display edge it crosses to the next monitor. If a
@@ -82,11 +81,12 @@ Change the keys (or modifier) in [`config/keys.conf`](config/keys.conf), then
 This is the only file you normally edit. Main lines:
 
 ```
-monitor <uuid> <name> <location>     # a physical screen (auto-added; edit name+location)
-model   <Product-Name> <name>        # any screen of that model uses <name>'s layout (shared desks)
-layout  <name> <size> <size> ...     # zone sizes for that monitor, % left→right, sum 100
-bottom  <pt>                         # gap kept free at the bottom of every screen for the Dock (default 59)
-* monitor …                          # leading "* " = connected right now (set automatically)
+monitor <uuid> <name> <location>                   # a physical screen (auto-added; edit name+location)
+model   <Product-Name> <name> [<location>]         # any screen of that model uses <name>'s layout (shared desks)
+layout  <name> <size> <size> ...                   # zone sizes for that monitor, % left→right, sum 100
+arrange <location> <top|bottom|center> <name> ...  # screens left→right per workspace (see below)
+bottom  <pt>                                       # gap kept free at the bottom of every screen for the Dock (default 59)
+* monitor …  /  * model …                          # leading "* " = connected right now (set automatically)
 ```
 
 Lookup: UUID's name (if it has a `layout` line) → `model` rule → `layout default` → 50 50.
@@ -101,28 +101,14 @@ Examples for the sizes on a `layout` line:
 | `33 34 33`  | three thirds                    |
 | `100`       | one full-width zone             |
 
-Edit the numbers, save — **no restart needed** (the script re-reads the file on
-every keypress). The number of values = the number of stops you walk through on
-that monitor.
-
-`layout default …` applies to any monitor that has no `layout` line of its own.
+Edit the numbers, save — **no restart needed** (the script re-reads the file on every keypress). The number of values = the number of stops you walk through on that monitor.
 
 ## Adding a monitor / a new work location
 
 Monitors are recognised by UUID and **registered automatically**:
 
-1. Plug in the monitor(s).
-2. Press any shortcut once — each new screen is added to `zones.conf`, after the last `monitor` line, as
-   `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`.
-3. Open `zones.conf`, rename them (e.g. `Dell27 office-a`, `Dell24 office-a`)
-   and add a `layout <name> …` line for each (or let them ride on `default`).
-
-`connected.txt` tells you which of the accumulated UUIDs you are actually looking at; freshly registered screens appear
-there with `-` for name and location.
-
-Because each physical screen has its own UUID line, your home Dell-27 and Dell-24
-get separate layouts, and office screens stay distinct from home — no
-cross-location confusion.
+1. Plug in the monitor(s). Any run of `yabai-snap.sh` (the plug-in signal, a shortcut) adds each new screen after the last `monitor` line, as `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`. Screens covered by a `model` rule are left out.
+2. Open `zones.conf`, rename them (e.g. `Dell27 office-a`, `Dell24 office-a`) and add a `layout <name> …` line for each (or let them ride on `default`).
 
 ## Shared desks (open office)
 
@@ -149,10 +135,12 @@ arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
 | What | How |
 |------|-----|
 | apply | `yabai-snap.sh arrange`; automatically on yabai start/restart (restart app) and on plug in/out (`display_added`/`display_removed` signals in `yabairc`) |
-| which line | the first whose location is a connected screen's location and whose names are exactly the connected screens |
-| workspace of a screen | its `monitor` line's location, or the `model` rule's third field |
+| which line | the first whose location is one of the connected screens' locations and whose names are exactly the connected screens (any order), both matched exactly, case included |
+| name and workspace of a screen | its `monitor` line's name and location if that name has a `layout` line; else the `model` rule's name and location; else `default`, no location |
 | tool | `displayplacer`: only `origin` is changed, resolution/scaling/rotation stay; the main screen stays at (0,0) |
-| skipped | no matching line, already arranged, yabai reports no screens, or a screen listed as `enabled:false` (asleep/locked) |
+| skipped | no matching line, already arranged, yabai not running or reports no screens, `displayplacer` missing or gives no arrangement, or a screen listed as `enabled:false` (asleep/locked) |
+
+No match: the message `no arrange line for the connected screens (names: …; locations: …)` lists the values to use. Where it lands: [Logs](#logs).
 
 ## Which monitors are connected right now?
 
@@ -171,22 +159,18 @@ arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
 # --- end currently connected ------------------------------------------------
 ```
 
-`yabai-snap.sh connected` regenerates it (and prints the same table to stdout).
-`launcher.sh` runs it before opening the folder, so the **yabai window manager**
-Spotlight app always leaves you looking at current information.
-If yabai isn't running, the command says so and changes nothing.
+Columns: `idx` is yabai's display index, `layout` the zone sizes the screen resolves to. `-` under name/location: the screen has no `monitor` line (it uses a `model` rule, or `zones.conf` isn't writable).
+
+`yabai-snap.sh connected` regenerates it and prints the same table. `launcher.sh` runs it before opening the folder from Spotlight. If yabai isn't running, the command says so and changes nothing.
 
 `zones.conf` also marks them: `* ` in front of the `monitor` line of each connected screen, or of the `model` rule a screen without its own line uses; the other lines start with two spaces, so the columns stay aligned. Every run of `yabai-snap.sh` (any shortcut, plug in/out) updates the marks; the file is only rewritten when a mark changes, and then replaced in one step (temp file + rename), so runs firing at once never empty it. Because `zones.conf` is in the repo, git shows it as modified after a plug in/out.
 
-Unlike the other subcommands, `connected` doesn't need a focused window, so it
-skips the focused-window guard that makes the snap commands no-op.
+`connected` and `arrange` work on displays only, so they skip the focused-window guard that makes the snap commands no-op.
 
 ## How it works
 
-- `yabairc` sets yabai to `layout float` (no auto-tiling) and a couple of
-  options. No scripting addition is loaded.
-- `keys.conf` binds the keys to `yabai-snap.sh left|right|fill` (skhd reads it
-  via the `~/.config/skhd/skhdrc` symlink).
+- `yabairc` sets yabai to `layout float` (no auto-tiling) and a couple of options, adds the `display_added`/`display_removed` signals and runs `yabai-snap.sh arrange`. No scripting addition is loaded.
+- `keys.conf` binds the keys to `yabai-snap.sh left|right|fill|extend-left|extend-right` (skhd reads it via the `~/.config/skhd/skhdrc` symlink).
 - `yabai-snap.sh`:
   - captures the focused window by **id** (focus doesn't reliably follow a
     window across displays, so it never re-queries "the focused window"),
@@ -195,7 +179,7 @@ skips the focused-window guard that makes the snap commands no-op.
     width, so a filled window matches nothing),
   - snaps to the next/previous zone, crossing displays only at the real edge,
   - then sets the window's bottom edge to the screen bottom minus `bottom` (yabai often misses the Dock),
-  - and, as `yabai-snap.sh connected`, writes `connected.txt` (see above).
+  - and, as `yabai-snap.sh connected`, writes `connected.txt`; as `yabai-snap.sh arrange`, places the screens (see above).
 
 ## Files
 
@@ -216,6 +200,9 @@ window-manager/
 ├── tests/model-fallback.sh     # tests for the model fallback, marks and safe rewrites (stubs yabai + ioreg)
 ├── tests/arrange.sh            # tests for arrange (stubs yabai, ioreg, displayplacer)
 ├── tests/bottom.sh             # tests for the fixed bottom gap (stubs yabai)
+├── tests/snap-log.sh           # tests for the snap log (stubs yabai, ioreg)
+├── tests/launcher.sh           # tests for launcher.sh
+├── tests/make-icon.sh          # tests for make-icon.sh
 ├── tests/install.sh            # tests for install.sh: brew tap asmvik/formulae (stubs brew)
 └── config/
     ├── yabairc                 # → ~/.config/yabai/yabairc
@@ -225,8 +212,7 @@ window-manager/
     └── zones.conf              # → ~/.config/yabai/zones.conf (monitors, layouts, models, arrangements)
 ```
 
-`install.sh` symlinks the config files into `~/.config` (backing up any existing
-real files) and builds the Spotlight launcher.
+`install.sh` symlinks the config files into `~/.config` (backing up any existing real files) and builds the Spotlight launchers.
 
 ## Spotlight launchers
 
@@ -235,7 +221,7 @@ Both are found by typing **`yabai`** or **`window manager`** in Spotlight:
 
 | App | What it does |
 |-----|--------------|
-| `yabai window manager` | refreshes the connected-monitor block in `zones.conf`, then opens `~/.config/yabai` in VS Code |
+| `yabai window manager` | refreshes `connected.txt`, then opens `~/.config/yabai` in VS Code |
 | `yabai window manager - restart` | restarts the yabai + skhd services (notifies when done) |
 
 Use **restart** when a window won't move/snap (e.g. a fullscreen-video window
@@ -252,42 +238,52 @@ with `./make-icon.sh [symbol] [out-name]` (e.g.
 
 **Steam (and other windows with no Accessibility window) can't be snapped.**
 
-This setup runs yabai **without the scripting addition** (so SIP stays enabled),
-which means yabai's *only* way to move or resize a window is the macOS
-Accessibility (AX) API. A few apps don't expose an AX window at all — most
-notably **Steam**, whose UI is the CEF-rendered "Steam Helper" window
-(`role`/`subrole` empty, `has-ax-reference: false`, `can-move`/`can-resize`
-false). For those windows:
+Without the scripting addition (SIP stays on), yabai can only move a window through the macOS Accessibility (AX) API. Some apps expose no AX window, most notably **Steam** (`has-ax-reference: false`, `can-move`/`can-resize` false):
 
 - `yabai -m window <id> --grid …` → `could not locate the window to act on!`
-- with the window focused, `yabai -m query --windows --window` → `could not
-  retrieve window details`
+- with the window focused, `yabai -m query --windows --window` → `could not retrieve window details`
 
-So the snap shortcuts simply do nothing on a Steam window — that's expected, not
-a bug in this config. It can't be fixed without the scripting addition (which
-requires partially disabling SIP), and even then it isn't guaranteed to work
-because Steam exposes no AX handle to act on. **Workaround:** position Steam by
-hand — it remembers its window size/position across launches.
-
-`yabai-snap.sh` guards its focused-window query so these cases no-op cleanly
-instead of erroring out.
+The snap shortcuts then do nothing and leave `no window to act on` in the [snap log](#logs). Expected, not a bug. **Workaround:** position Steam by hand; it remembers its window size/position across launches.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
 | Nothing happens on a shortcut | Grant **skhd** Accessibility **and** Input Monitoring, then `skhd --restart-service`. |
-| Windows don't move | Grant **yabai** Accessibility; `yabai --restart-service`. Check `/tmp/yabai_$USER.err.log`. |
-| A window won't change screen | `tail /tmp/yabai-snap_$USER.log`: the direction tried and yabai's message. No screen on that side: check the arrangement, or add an `arrange` line to `zones.conf`. |
+| Windows don't move | Grant **yabai** Accessibility; `yabai --restart-service`. Check `tail /tmp/yabai-snap_$USER.log` and `tail /tmp/yabai_$USER.err.log`. |
+| A window won't change screen | `tail /tmp/yabai-snap_$USER.log`: the direction tried and yabai's message ([Logs](#logs)). No screen on that side: check the arrangement, or add an `arrange` line to `zones.conf`. |
 | Screens not arranged | `tail /tmp/yabai_$USER.err.log`: `no arrange line` lists the names and locations of the connected screens. The `arrange` line must have exactly those names and one of those locations, case included. |
 | A specific window won't snap | Likely a window with no Accessibility handle (e.g. **Steam**, some overlays/dialogs, a **fullscreen YouTube/video window**) — yabai can't move it without the scripting addition. Exit the video's fullscreen, or launch **yabai window manager - restart** to have yabai re-acquire it. See [Known limitations](#known-limitations). |
 | Window-manager just "bugged out" | Launch **yabai window manager - restart** from Spotlight (or `yabai --restart-service && skhd --restart-service`). |
 | Ratios look wrong on a monitor | Check its `monitor` line is named and has a matching `layout` line in `zones.conf`, or a `model` rule for its model. |
 | Service won't start | `tail /tmp/{yabai,skhd}_$USER.err.log` |
 
+## Logs
+
+All in `/tmp`, gone after a reboot.
+
+| Log | Contains |
+|-----|----------|
+| `/tmp/yabai-snap_$USER.log` (path override: `YABAI_SNAP_LOG`) | failed window moves, see below |
+| `/tmp/yabai_$USER.err.log` | yabai's errors; `arrange` from `yabairc` or a signal: `no arrange line …` and the other skip reasons |
+| `/tmp/yabai_$USER.out.log` | `yabai configuration loaded`; `already arranged`; the `displayplacer` command applied |
+| `/tmp/skhd_$USER.err.log`, `/tmp/skhd_$USER.out.log` | skhd |
+
+Snap log lines, only from `left`, `right`, `fill`, `extend-left`, `extend-right`, as `<date> <time> <command>: …`:
+
+| Line | Meaning |
+|------|---------|
+| `window <id> (<app>) --display east failed: <yabai's message>` | no screen that way (or `west`); also on every press at the outermost zone, the window just re-snaps |
+| `window <id> (<app>) still on display <n> after --display east` | yabai accepted the move, the window stayed |
+| `no window to act on` | yabai can't query the focused window; its message is on the line above |
+| `yabai not answering` | yabai isn't running or not responding |
+| `failed at line <n>: <command>` | any other failed step; yabai's message is on the line above |
+
+Not logged: successful moves, `connected`, `arrange` (run by hand, these print to the terminal).
+
 ## Uninstall
 
 ```sh
-./uninstall.sh                 # stop services, remove symlinks (zones.conf stays in the repo)
+./uninstall.sh                 # stop services, remove symlinks, launchers, connected.txt (zones.conf stays in the repo)
 ./uninstall.sh --uninstall     # also brew-uninstall yabai, skhd, displayplacer
 ```

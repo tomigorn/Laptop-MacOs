@@ -1,10 +1,10 @@
 # yabai window manager — your config folder
 
-This folder holds the live config for the keyboard-driven window snapper
-(yabai + skhd). Edit the files here; most changes apply instantly.
+Live config of the keyboard-driven window snapper (yabai + skhd).
 
-> Quick open: type **`yabai`** in Spotlight (the "yabai window manager" app
-> opens this folder in VS Code), or run `code ~/.config/yabai`.
+- Open this folder: type **`yabai`** in Spotlight, or `code ~/.config/yabai`.
+- Full docs (shortcuts, adding monitors, shared desks, arrangement, logs, troubleshooting): `~/development/private/Laptop-MacOs/window-manager/window-manager.md`.
+- Line syntax of `zones.conf`: its own header. Active shortcuts: top of `keys.conf`.
 
 ## Files here
 
@@ -12,136 +12,22 @@ This folder holds the live config for the keyboard-driven window snapper
 |------|------------|----------|
 | `zones.conf`   | **Your monitors, split sizes, models, arrangements, Dock gap (`bottom`)** | ✅ yes — this is the main one |
 | `connected.txt`| Which monitors are connected right now (generated, local only) | no |
-| `keys.conf`    | Keyboard shortcuts | ✅ to rebind keys |
-| `yabairc`      | yabai settings (float layout) | rarely |
+| `keys.conf`    | Keyboard shortcuts (skhd reads it via the symlink `~/.config/skhd/skhdrc`) | ✅ to rebind keys |
+| `yabairc`      | yabai settings (float layout), arrange on start and plug in/out | rarely |
 | `yabai-snap.sh`| The snapping logic | no |
 | `README.md`    | This file | — |
 
-(`keys.conf` is the skhd config; skhd reads it via the symlink
-`~/.config/skhd/skhdrc → keys.conf`, because that's the only path skhd looks in.)
+Everything except `connected.txt` is a symlink into `~/development/private/Laptop-MacOs/window-manager/config/`: edits here are repo changes, commit them there.
 
-## Shortcuts
+## Applying changes
 
-| Key | Action |
-|-----|--------|
-| `⌥⌘ ←` / `⌥⌘ →` | walk the focused window left / right through its zones; at the edge it crosses to the next display |
-| `⌥⌘ ↑` | fill the whole display (not macOS fullscreen) |
-| `⇧⌥⌘ ←` / `⇧⌥⌘ →` | extend the window across zones (grow left / right; reset with plain `⌥⌘ ←/→`) |
+| Changed | Apply |
+|---------|-------|
+| `zones.conf`: sizes, names, `model`, `bottom` | nothing, re-read on every keypress |
+| `zones.conf`: `arrange` lines | `~/.config/yabai/yabai-snap.sh arrange` (also runs on yabai start/restart and plug in/out) |
+| `keys.conf` | `skhd --restart-service` |
+| `yabairc` | `yabai --restart-service` |
 
-See `keys.conf` for the full list of options and conventions from other tools.
+Refresh `connected.txt` (also prints it; runs when you open this folder from Spotlight): `~/.config/yabai/yabai-snap.sh connected`
 
-## Which monitors are connected right now?
-
-`zones.conf` grows into *every* monitor you have ever plugged in, so `connected.txt` names the ones that are actually live:
-
-```
-# --- Currently connected (auto-generated — do not edit) ---------------------
-#   Last refreshed 2026-08-18 09:45. Regenerate with:  ./yabai-snap.sh connected
-#   (also runs automatically when you open this folder from Spotlight)
-#
-#   idx uuid                                 width   name                location      layout       model
-#   1   37D8832A-2D66-02CA-B9F7-8F30A301B230 1470pt  MacBook             laptop        50 50        -
-# * 2   269F4E09-0D04-41E9-A7A4-CE591643DAE0 3440pt  HP                  home          40 60        HP-E34m-G4
-#
-#   * = display with keyboard focus.  name/location "-" = not named below yet.
-# --- end currently connected ------------------------------------------------
-```
-
-The built-in laptop screen appears like any other display (`MacBook` above).
-`idx` is yabai's display index, `uuid` the stable id used by the `monitor` lines
-further down, and `layout` the zone sizes that id currently resolves to. A `-`
-under name/location means that screen hasn't been named yet.
-
-It refreshes **every time you open this folder from Spotlight** ("yabai window
-manager"), so it is current whenever you arrive here to edit. To refresh by hand
-— which also prints the same table to the terminal:
-
-```sh
-~/.config/yabai/yabai-snap.sh connected
-```
-
-In `zones.conf` itself, connected screens are marked with `* ` in front of their `monitor` line (or of the `model` rule they use), updated on every shortcut and plug in/out. The file is replaced in one step, so runs firing at once (docking, yabai start) never empty it. If yabai isn't running, both are left untouched.
-
-## Change window sizes — `zones.conf`
-
-Four kinds of lines:
-
-```
-monitor <uuid> <name> <location>     # a physical screen (auto-added; you edit name+location)
-model   <Product-Name> <name> [<location>]   # any screen of that model uses <name>'s layout (shared desks)
-arrange <location> <top|bottom|center> <name> ...   # screens left→right per workspace
-layout  <name> <size> <size> ...     # zone sizes for that monitor: % left→right, summing to 100
-* monitor …                          # leading "* " = connected right now (set automatically)
-```
-
-Edit the numbers on a `layout` line and **save — no restart needed** (the script
-re-reads this file on every keypress). Sizes examples:
-
-| Sizes      | Result |
-|------------|--------|
-| `50 50`    | two halves |
-| `40 60`    | 40 % left, 60 % right |
-| `20 60 20` | three columns (small/big/small) |
-| `33 34 33` | three thirds |
-| `100`      | one full-width zone |
-
-The number of values = how many stops you walk through on that monitor.
-`layout default …` is used for any monitor without its own `layout` line (no `default` line: 50 50).
-
-## Add a monitor / a new work location
-
-Monitors are recognised by **stable UUID** (so two identical screens, or the
-same model at different offices, never get mixed up) and registered
-automatically:
-
-1. Plug in the monitor(s).
-2. Press any shortcut once → each new screen is added after the last `monitor` line as
-   `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`.
-3. Rename it (e.g. `Dell27 office-a`) and add a `layout <name> …` line.
-
-`connected.txt` tells you which UUIDs
-you're looking at — the new ones show up there with `-` for name and location.
-
-## Shared desks (open office)
-
-Every desk is a new UUID, so match the model instead: `model HP-E34m-G4 Work-HP-Ultrawide`.
-
-- Lookup: UUID's name (if it has a `layout`) → `model` rule → `default`.
-- Product name: `model` column of `connected.txt`, spaces as `-`.
-- Screens covered by a rule are not registered.
-- One rule can serve every desk with that model, fixed ones too: `arrange` takes the location from any connected screen, so `arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook` matches as long as the Dell is at `Work5-WEV`.
-
-## Screen arrangement — `arrange`
-
-`arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook`: screens left→right, bottom aligned, for the workspace `Work5-WEV` (the `location` of the `monitor` lines, or the third field of a `model` rule).
-
-- Applied on plug in/out and on yabai start/restart (restart app), or by hand: `~/.config/yabai/yabai-snap.sh arrange`
-- Only used when its names are exactly the connected screens.
-
-## Change the keyboard shortcuts — `keys.conf`
-
-Lines look like `ctrl + alt - left : … left`. Edit, then reload:
-
-```sh
-skhd --restart-service
-```
-
-To change the modifier everywhere, swap `ctrl + alt` for e.g. `cmd + alt`.
-
-## Applying changes / services
-
-- `zones.conf`  → no restart (re-read each keypress); `arrange` lines → `yabai --restart-service` or plug in/out.
-- `keys.conf`   → `skhd --restart-service`
-- `yabairc`     → `yabai --restart-service`
-
-Check they're alive: `pgrep -x yabai; pgrep -x skhd`.
-Logs (until the next reboot): `/tmp/yabai_$USER.err.log`, `/tmp/skhd_$USER.err.log`, `/tmp/yabai-snap_$USER.log` (failed window moves).
-
-## Source of truth
-
-These files are maintained in the dotfiles repo at
-`~/development/private/Laptop-MacOs/window-manager/` (install/uninstall scripts
-and full docs live there). If this folder was set up via that repo's
-`install.sh`, the files here are symlinks back to it, `zones.conf` included: edits here are repo changes, commit them there.
-
-Only `connected.txt` is a real local file (generated).
+Check the services are alive: `pgrep -x yabai; pgrep -x skhd`

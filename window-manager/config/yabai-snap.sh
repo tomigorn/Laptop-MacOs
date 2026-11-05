@@ -76,7 +76,7 @@ snap() {
 }
 
 # --- Monitor model fallback -------------------------------------------------
-# Shared desks give every monitor a new UUID, so a "model <Product-Name> <name>"
+# Shared desks give every monitor a new UUID, so a "model <Product-Name> <name> [<location>]"
 # line picks the layout by monitor model when the UUID has none.
 
 # "<w> <h> <Product-Name>" per external display (the built-in has no ProductName).
