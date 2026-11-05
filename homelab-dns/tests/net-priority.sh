@@ -57,8 +57,9 @@ echo "sleep $*" >> "$CALLS"
 STUB
 chmod +x "$WORK/bin/"*
 
-sed "s|^LOG=.*|LOG=\"$WORK/net.log\"|" "$SRC" > "$WORK/net-priority.sh"
+sed -e "s|^LOG=.*|LOG=\"$WORK/net.log\"|" -e "s|^STOP_FLAG=.*|STOP_FLAG=\"$WORK/stopped\"|" "$SRC" > "$WORK/net-priority.sh"
 grep -q "^LOG=\"$WORK/net.log\"" "$WORK/net-priority.sh" || { echo "FAIL  LOG substitution"; exit 1; }
+grep -q "^STOP_FLAG=\"$WORK/stopped\"" "$WORK/net-priority.sh" || { echo "FAIL  STOP_FLAG substitution"; exit 1; }
 chmod +x "$WORK/net-priority.sh"
 LOG="$WORK/net.log"
 
@@ -110,7 +111,7 @@ TWO_DOCKS='An asterisk (*) denotes that a network service is disabled.
 '
 
 reset() {  # reset <order text>
-  rm -rf "$STATE" "$CALLS" "$LOG"; mkdir -p "$STATE"
+  rm -rf "$STATE" "$CALLS" "$LOG"; rm -f "$WORK/stopped"; mkdir -p "$STATE"
   printf '%s' "$1" > "$STATE/order"
   echo 10.0.0.5 > "$STATE/ip.en5"; echo 10.0.0.1 > "$STATE/dns.en5"
   echo 10.0.1.5 > "$STATE/ip.en0"; echo 10.0.1.1 > "$STATE/dns.en0"
@@ -191,6 +192,55 @@ check "disabled: stays in the order" contains "$(calls)" "order <Parked Dock> <W
 # 14. only Ethernet-like services count: the bridge is ignored even with an address
 reset "$ETH_FIRST"; echo 169.254.0.1 > "$STATE/ip.bridge0"; touch "$STATE/online.en5"; run
 check "bridge: not probed" lacks "$(calls)" "--interface bridge0"
+
+# 15. Stop itself: no probes, Ethernet back directly above Wi-Fi, logged
+reset "$WIFI_FIRST"; touch "$WORK/stopped"; "$WORK/net-priority.sh" control
+check "stop: moved above Wi-Fi" contains "$(calls)" "order <Thunderbolt Bridge> <USB LAN> <Wi-Fi> <fastpi>"
+check "stop: no probes" lacks "$(calls)" "curl"
+check "stop: logged" contains "$(logtxt)" "control  priority  stopped  changed=[USB LAN]above-wifi"
+
+# 16. Stop with Ethernet already above: no reorder, still logged
+reset "$ETH_FIRST"; touch "$WORK/stopped"; "$WORK/net-priority.sh" control
+check "stop, already above: no reorder" lacks "$(calls)" "order"
+check "stop, already above: logged" contains "$(logtxt)" "control  priority  stopped  changed=none"
+
+# 17. Stop reverts unplugged and disabled adapters too; bridge and VPN stay
+PARKED_BELOW='An asterisk (*) denotes that a network service is disabled.
+(1) Wi-Fi
+(Hardware Port: Wi-Fi, Device: en0)
+
+(*) Parked Dock
+(Hardware Port: USB 10/100/1000 LAN, Device: en7)
+
+(2) USB LAN
+(Hardware Port: USB 10/100/1000 LAN, Device: en5)
+
+(3) Thunderbolt Bridge
+(Hardware Port: Thunderbolt Bridge, Device: bridge0)
+
+(4) fastpi
+(Hardware Port: com.wireguard.macos, Device: )
+'
+reset "$PARKED_BELOW"; rm -f "$STATE/ip.en5"; touch "$WORK/stopped"; "$WORK/net-priority.sh" control
+check "stop: all en adapters above, bridge and VPN stay" contains "$(calls)" "order <Parked Dock> <USB LAN> <Wi-Fi> <Thunderbolt Bridge> <fastpi>"
+
+# 18. stopped, any other run: hands off
+for why in boot change manual; do
+  reset "$WIFI_FIRST"; touch "$WORK/stopped"; touch "$STATE/online.en5"; "$WORK/net-priority.sh" "$why"
+  check "stopped, $why: touches nothing" test -z "$(calls)"
+  check "stopped, $why: no log" test -z "$(logtxt)"
+done
+
+# 19. Stop landing during the probes: the running job does not write the order
+reset "$WIFI_FIRST"; touch "$STATE/online.en5"
+cat > "$WORK/bin/curl" <<'STUB'
+#!/bin/sh
+echo "curl $*" >> "$CALLS"
+touch "$STOPPED_AT"
+echo "NetworkManager is online"
+STUB
+STOPPED_AT="$WORK/stopped" "$WORK/net-priority.sh" change
+check "stop during probes: order not written" lacks "$(calls)" "order"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

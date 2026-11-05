@@ -65,8 +65,9 @@ printf 'en0: flags=8863\n\tinet 192.0.2.50 netmask 0xffffff00\n'
 STUB
 chmod +x "$WORK/bin/"*
 
-sed "s|^LOG=.*|LOG=\"$WORK/homelab-dns.log\"|" "$DNS_SRC" > "$WORK/homelab-dns.sh"
+sed -e "s|^LOG=.*|LOG=\"$WORK/homelab-dns.log\"|" -e "s|^STOP_FLAG=.*|STOP_FLAG=\"$WORK/stopped\"|" "$DNS_SRC" > "$WORK/homelab-dns.sh"
 grep -q "^LOG=\"$WORK/homelab-dns.log\"" "$WORK/homelab-dns.sh" || { echo "FAIL  LOG substitution"; exit 1; }
+grep -q "^STOP_FLAG=\"$WORK/stopped\"" "$WORK/homelab-dns.sh" || { echo "FAIL  STOP_FLAG substitution"; exit 1; }
 sed -e "s|^ACTOR=\"[^\"]*\"|ACTOR=\"$WORK/actor.sh\"|" -e "s|^PRIORITY=\"[^\"]*\"|PRIORITY=\"$WORK/priority.sh\"|" "$WATCH_SRC" > "$WORK/watch.sh"
 grep -q "^ACTOR=\"$WORK/actor.sh\"" "$WORK/watch.sh" || { echo "FAIL  ACTOR substitution"; exit 1; }
 grep -q "^PRIORITY=\"$WORK/priority.sh\"" "$WORK/watch.sh" || { echo "FAIL  PRIORITY substitution"; exit 1; }
@@ -88,7 +89,7 @@ calls() { [ -f "$CALLS" ] && cat "$CALLS" || true; }
 SERVICES=$'Wi-Fi\nUSB 10/100 LAN\n*Parked Dock'
 PRESET=()
 reset() {
-  rm -rf "$STATE" "$CALLS" "$LOG" "$LOG.1"; mkdir -p "$STATE/dns"
+  rm -rf "$STATE" "$CALLS" "$LOG" "$LOG.1"; rm -f "$WORK/stopped"; mkdir -p "$STATE/dns"
   printf '%s\n' "$SERVICES" > "$STATE/services"
   printf '%s\n' "$@" > "$STATE/dig"
   local p; for p in ${PRESET[@]+"${PRESET[@]}"}; do printf '%s\n' "${p#*=}" > "$STATE/dns/$(echo "${p%%=*}" | tr / _)"; done
@@ -156,6 +157,40 @@ head -c 100 /dev/zero | tr '\0' 'x' > "$LOG"
 "$WORK/homelab-dns.sh" boot
 check "no rotation below limit" test ! -e "$LOG.1"
 
+# 9. stopped, run by Stop itself: no probe, ours reverted (disabled too), foreign left alone, logged
+PRESET=("Wi-Fi=192.168.1.2" "USB 10/100 LAN=10.0.0.1" "Parked Dock=192.168.1.2"); reset "$HOME_ANSWER"; touch "$WORK/stopped"
+"$WORK/homelab-dns.sh" control
+check "stop: no probe" lacks "$(calls)" "dig "
+check "stop: Wi-Fi reverted" contains "$(calls)" "set Wi-Fi empty"
+check "stop: disabled service reverted" contains "$(calls)" "set Parked Dock empty"
+check "stop: foreign DNS untouched" lacks "$(calls)" "set USB 10/100 LAN"
+check "stop: log line" contains "$(logtxt)" "control  iface=en0 gw=192.0.2.1  homelab=stopped tries=0  changed=[Wi-Fi]revert->dhcp [Parked Dock]revert->dhcp"
+
+# 10. stopped, any other run: hands off
+for why in boot change timer manual; do
+  PRESET=("Wi-Fi=192.168.1.2"); reset "$HOME_ANSWER"; touch "$WORK/stopped"
+  "$WORK/homelab-dns.sh" "$why"
+  check "stopped, $why: touches nothing" eq "$(calls)" ""
+  check "stopped, $why: no log" test -z "$(logtxt)"
+done
+
+# 12. Start: no flag and reason control is a normal, logged evaluation
+PRESET=(); reset "$HOME_ANSWER"
+"$WORK/homelab-dns.sh" control
+check "start: DNS set" contains "$(calls)" "set Wi-Fi 192.168.1.2"
+check "start: logged" contains "$(logtxt)" "control  iface=en0 gw=192.0.2.1  homelab=reachable tries=1"
+
+# 11. Stop landing during a probe: the running job does not write
+PRESET=(); reset "$HOME_ANSWER"
+cat > "$WORK/bin/dig" <<'STUB'
+#!/bin/sh
+echo "dig $*" >> "$CALLS"
+touch "$STOPPED_AT"
+echo 198.51.100.53
+STUB
+STOPPED_AT="$WORK/stopped" "$WORK/homelab-dns.sh" timer
+check "stop during probe: no DNS written" lacks "$(calls)" "set "
+
 # watcher: runs the actor at startup, then on route events only, coalescing bursts
 cat > "$WORK/actor.sh" <<'STUB'
 #!/bin/sh
@@ -204,6 +239,28 @@ rm -f "$CALLS" "$WORK/actor.sh"
 printf '%s\n' "RTM_ADD: a" > "$STATE/events"
 "$WORK/watch.sh"
 check "watch: missing actor is skipped (only the settle sleep)" eq "$(calls)" "sleep 3"
+
+# control script: priority first, then the actor, both with reason control
+cat > "$WORK/actor.sh" <<'STUB'
+#!/bin/sh
+echo "actor $1" >> "$CALLS"
+STUB
+cat > "$WORK/priority.sh" <<'STUB'
+#!/bin/sh
+echo "priority $1" >> "$CALLS"
+STUB
+chmod +x "$WORK/actor.sh" "$WORK/priority.sh"
+sed -e "s|^ACTOR=\"[^\"]*\"|ACTOR=\"$WORK/actor.sh\"|" -e "s|^PRIORITY=\"[^\"]*\"|PRIORITY=\"$WORK/priority.sh\"|" "$DIR/homelab-dns-control.sh" > "$WORK/control.sh"
+chmod +x "$WORK/control.sh"
+rm -f "$CALLS"
+"$WORK/control.sh"
+check "control: priority then actor" eq "$(calls)" $'priority control\nactor control'
+
+# the control daemon watches the folder of the flag the scripts obey
+flag="$(sed -n 's/^STOP_FLAG="\(.*\)"$/\1/p' "$DNS_SRC")"
+check "scripts agree on the flag" eq "$flag" "$(sed -n 's/^STOP_FLAG="\(.*\)"$/\1/p' "$DIR/net-priority.sh")"
+check "daemon watches the flag folder" eq "$(plutil -extract WatchPaths.0 raw "$DIR/com.tomigorn.homelab-dns-control.plist")" "$(dirname "$flag")"
+check "daemon runs the control script" eq "$(plutil -extract ProgramArguments.0 raw "$DIR/com.tomigorn.homelab-dns-control.plist")" "/usr/local/sbin/homelab-dns-control.sh"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

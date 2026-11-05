@@ -14,7 +14,8 @@
 # ONLY the homelab DNS knows. A real answer means we're home or on the VPN.
 set -u
 
-REASON="${1:-manual}"         # why we ran: boot | change | timer | manual
+REASON="${1:-manual}"         # why we ran: boot | change | timer | control | manual
+STOP_FLAG="/usr/local/var/homelab-dns/stopped"
 DNS_SERVER="192.168.1.2"      # homelab DNS server
 PROBE_NAME="probe.homelab"    # dedicated probe name (AdGuard DNS rewrite)
 PROBE_EXPECT="198.51.100.53"  # sentinel A it MUST return — RFC 5737 TEST-NET-2,
@@ -40,6 +41,10 @@ log() {
     rotate_log
     printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "${LOG}" 2>/dev/null
 }
+
+# Stopped means hands off; only the run triggered by Network Stop itself reverts.
+stopped() { [ -e "${STOP_FLAG}" ]; }
+if stopped && [ "${REASON}" != "control" ]; then exit 0; fi
 
 # ── gather context (for the log line) ────────────────────────────────────────
 gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
@@ -68,7 +73,7 @@ probe_once() {
 }
 
 reachable=0; reach_str="unreachable"; tries=0
-while [ "${tries}" -lt "${PROBE_TRIES}" ]; do
+while ! stopped && [ "${tries}" -lt "${PROBE_TRIES}" ]; do
     tries=$((tries + 1))
     if [ "$(probe_once)" = "${PROBE_EXPECT}" ]; then
         reachable=1; reach_str="reachable"
@@ -76,6 +81,10 @@ while [ "${tries}" -lt "${PROBE_TRIES}" ]; do
     fi
     [ "${tries}" -lt "${PROBE_TRIES}" ] && sleep "${PROBE_GAP}"
 done
+if stopped; then
+    [ "${REASON}" = "control" ] || exit 0
+    reachable=0; reach_str="stopped"
+fi
 
 # ── decide + act on every network service ─────────────────────────────────────
 # One global probe, applied to all interfaces. We only write DNS when it actually

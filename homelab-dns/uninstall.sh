@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Remove the homelab-dns auto-switcher. Safe to re-run.
 #
-#   1. Unloads + deletes both LaunchDaemons (watcher + 5-min timer schedule)
-#   2. Deletes the scripts from /usr/local/sbin (the network service order stays as it is)
+#   1. Unloads + deletes the LaunchDaemons (watcher, 5-min timer, control)
+#   2. Deletes the scripts from /usr/local/sbin and the stop flag folder (the network service order stays as it is)
 #   3. Reverts the Wi-Fi DNS to DHCP — but ONLY if it's still the one we set;
 #      a DNS someone/something else configured is left untouched
 #
@@ -16,8 +16,12 @@ TIMER_LABEL="com.tomigorn.homelab-dns-timer"
 BIN_DEST="/usr/local/sbin/homelab-dns.sh"
 WATCH_DEST="/usr/local/sbin/homelab-dns-watch.sh"
 PRIORITY_DEST="/usr/local/sbin/net-priority.sh"
+CONTROL_LABEL="com.tomigorn.homelab-dns-control"
+CONTROL_DEST="/usr/local/sbin/homelab-dns-control.sh"
+STATE_DIR="/usr/local/var/homelab-dns"
 PLIST_DEST="/Library/LaunchDaemons/${LABEL}.plist"
 TIMER_PLIST_DEST="/Library/LaunchDaemons/${TIMER_LABEL}.plist"
+CONTROL_PLIST_DEST="/Library/LaunchDaemons/${CONTROL_LABEL}.plist"
 DNS_SERVER="192.168.1.2"      # the only DNS this tool ever sets — see actor
 
 step()  { echo; printf '\033[1m── %s\033[0m\n' "$*"; }
@@ -30,7 +34,7 @@ die()   { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ── 1. Daemons ───────────────────────────────────────────────────────────────
 step "LaunchDaemons"
-for pair in "${LABEL}|${PLIST_DEST}" "${TIMER_LABEL}|${TIMER_PLIST_DEST}"; do
+for pair in "${LABEL}|${PLIST_DEST}" "${TIMER_LABEL}|${TIMER_PLIST_DEST}" "${CONTROL_LABEL}|${CONTROL_PLIST_DEST}"; do
     label=${pair%%|*}
     plist=${pair##*|}
     if launchctl print "system/${label}" >/dev/null 2>&1; then
@@ -49,7 +53,7 @@ done
 
 # ── 2. Scripts ───────────────────────────────────────────────────────────────
 step "Scripts"
-for f in "${BIN_DEST}" "${WATCH_DEST}" "${PRIORITY_DEST}"; do
+for f in "${BIN_DEST}" "${WATCH_DEST}" "${PRIORITY_DEST}" "${CONTROL_DEST}"; do
     if [ -f "${f}" ]; then
         rm -f "${f}"
         ok "removed ${f}"
@@ -57,6 +61,10 @@ for f in "${BIN_DEST}" "${WATCH_DEST}" "${PRIORITY_DEST}"; do
         skip "${f} already gone"
     fi
 done
+
+rm -f "${STATE_DIR}/stopped"
+rmdir "${STATE_DIR}" 2>/dev/null || true
+ok "removed ${STATE_DIR}"
 
 # ── 3. DNS: revert ONLY the services where it's still ours ───────────────────
 # Same rule the actor uses, across every enabled service: undo only the DNS WE set

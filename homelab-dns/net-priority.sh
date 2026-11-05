@@ -2,7 +2,8 @@
 # net-priority: keep Ethernet above Wi-Fi only while it reaches the internet. Run by homelab-dns-watch.sh on real network changes.
 set -u
 
-REASON="${1:-manual}"         # boot | change | manual
+REASON="${1:-manual}"         # boot | change | control | manual
+STOP_FLAG="/usr/local/var/homelab-dns/stopped"
 LOG="/var/log/homelab-dns.log"
 EXPECT="NetworkManager is online"
 SITES="http://nmcheck.gnome.org/check_network_status.txt
@@ -10,6 +11,10 @@ http://ping.archlinux.org/nm-check.txt
 http://network-test.debian.org/nm"
 ROUNDS=2                      # rounds over all sites before a connection counts as failed
 GAP=2                         # seconds between rounds
+
+# Stopped means hands off; only the run triggered by Network Stop itself reverts.
+stopped() { [ -e "${STOP_FLAG}" ]; }
+if stopped && [ "${REASON}" != "control" ]; then exit 0; fi
 
 # A captive network can hijack DNS, so each connection resolves through its own server.
 try_site() {  # try_site <dev> <ip> <dns> <url>
@@ -56,6 +61,19 @@ move() {  # move <service> above|below : place the service directly next to Wi-F
     changed="${changed} [$1]$2-wifi"
 }
 
+apply_order() {
+    if [ -z "${changed}" ]; then
+        changed="none"
+    else
+        OLDIFS=$IFS
+        IFS='
+'
+        # shellcheck disable=SC2086
+        networksetup -ordernetworkservices ${names} 2>/dev/null || changed=" order-failed"
+        IFS=$OLDIFS
+    fi
+}
+
 # One line per service: flag|device|hardware port|name
 services=$(networksetup -listnetworkserviceorder 2>/dev/null | awk '
     /^\(\*\) /      { flag = "off"; name = substr($0, 5); next }
@@ -73,6 +91,19 @@ wifi_svc=$(printf '%s\n' "${wifi_line}" | cut -d'|' -f4-)
 
 report=""
 changed=""
+if stopped; then
+    while IFS='|' read -r flag dev port name; do
+        [ "${name}" != "${wifi_svc}" ] || continue
+        case "${dev}" in en[0-9]*) ;; *) continue ;; esac
+        [ "$(position "${name}")" -gt "$(position "${wifi_svc}")" ] && move "${name}" above
+    done <<EOF
+${services}
+EOF
+    apply_order
+    printf '%s  %s  priority  stopped  changed=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${REASON}" "${changed# }" >> "${LOG}" 2>/dev/null
+    exit 0
+fi
+
 while IFS='|' read -r flag dev port name; do
     [ "${flag}" = "on" ] && [ "${name}" != "${wifi_svc}" ] || continue
     case "${dev}" in en[0-9]*) ;; *) continue ;; esac
@@ -93,15 +124,7 @@ EOF
 
 [ -n "${report}" ] || exit 0
 
-if [ -z "${changed}" ]; then
-    changed="none"
-else
-    OLDIFS=$IFS
-    IFS='
-'
-    # shellcheck disable=SC2086
-    networksetup -ordernetworkservices ${names} 2>/dev/null || changed=" order-failed"
-    IFS=$OLDIFS
-fi
+stopped && exit 0
+apply_order
 
 printf '%s  %s  priority %s wifi=%s  changed=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${REASON}" "${report}" "${wifi_state}" "${changed# }" >> "${LOG}" 2>/dev/null
