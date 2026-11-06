@@ -63,8 +63,15 @@ for f in "${BIN_DEST}" "${WATCH_DEST}" "${PRIORITY_DEST}" "${CONTROL_DEST}"; do
 done
 
 rm -f "${STATE_DIR}/stopped"
+had_state=0; [ -d "${STATE_DIR}" ] && had_state=1
 rmdir "${STATE_DIR}" 2>/dev/null || true
-ok "removed ${STATE_DIR}"
+if [ -d "${STATE_DIR}" ]; then
+    skip "${STATE_DIR} not empty, left in place"
+elif [ "${had_state}" -eq 0 ]; then
+    skip "${STATE_DIR} already gone"
+else
+    ok "removed ${STATE_DIR}"
+fi
 
 # ── 3. DNS: revert ONLY the services where it's still ours ───────────────────
 # Same rule the actor uses, across every enabled service: undo only the DNS WE set

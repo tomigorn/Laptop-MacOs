@@ -35,7 +35,7 @@ STUB
 cat > "$WORK/bin/networksetup" <<'STUB'
 #!/bin/sh
 case "$1" in
-  -listallnetworkservices) echo "An asterisk (*) denotes that a network service is disabled."; cat "$STATE/services" ;;
+  -listallnetworkservices) [ -z "${STOP_ON_LIST:-}" ] || touch "$STOP_ON_LIST"; echo "An asterisk (*) denotes that a network service is disabled."; cat "$STATE/services" ;;
   -getdnsservers)
     k=$(echo "$2" | tr / _)
     if [ -f "$STATE/dns/$k" ]; then cat "$STATE/dns/$k"; else echo "There aren't any DNS Servers set on $2."; fi ;;
@@ -180,16 +180,29 @@ PRESET=(); reset "$HOME_ANSWER"
 check "start: DNS set" contains "$(calls)" "set Wi-Fi 192.168.1.2"
 check "start: logged" contains "$(logtxt)" "control  iface=en0 gw=192.0.2.1  homelab=reachable tries=1"
 
-# 11. Stop landing during a probe: the running job does not write
-PRESET=(); reset "$HOME_ANSWER"
+# 11. Stop landing during a probe: the running job does not write, does not revert, does not log
+PRESET=("Wi-Fi=192.168.1.2"); reset "$HOME_ANSWER"
 cat > "$WORK/bin/dig" <<'STUB'
 #!/bin/sh
 echo "dig $*" >> "$CALLS"
-touch "$STOPPED_AT"
+[ -z "${STOPPED_AT:-}" ] || touch "$STOPPED_AT"
 echo 198.51.100.53
 STUB
 STOPPED_AT="$WORK/stopped" "$WORK/homelab-dns.sh" timer
 check "stop during probe: no DNS written" lacks "$(calls)" "set "
+check "stop during probe: no log" test -z "$(logtxt)"
+
+# 13. Stop landing during the probe of a control run: reverted, never set, logged as stopped
+PRESET=("Wi-Fi=192.168.1.2"); reset "$HOME_ANSWER"
+STOPPED_AT="$WORK/stopped" "$WORK/homelab-dns.sh" control
+check "control, stop during probe: reverted" contains "$(calls)" "set Wi-Fi empty"
+check "control, stop during probe: never set" lacks "$(calls)" "set Wi-Fi 192.168.1.2"
+check "control, stop during probe: logged stopped" contains "$(logtxt)" "homelab=stopped"
+
+# 14. Stop landing while the services are listed: nothing is written
+PRESET=(); reset "$HOME_ANSWER"
+STOP_ON_LIST="$WORK/stopped" "$WORK/homelab-dns.sh" timer
+check "stop during service list: no DNS written" lacks "$(calls)" "set "
 
 # watcher: runs the actor at startup, then on route events only, coalescing bursts
 cat > "$WORK/actor.sh" <<'STUB'

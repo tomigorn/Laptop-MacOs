@@ -32,7 +32,7 @@ warn()  { printf '   \033[33m!\033[0m  %s\n' "$*"; }
 die()   { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "run with sudo: sudo ./install.sh"
-[ -n "${SUDO_USER:-}" ] || die "run with sudo from your own account, the flag folder belongs to you"
+{ [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; } || die "run with sudo from your own account, the flag folder belongs to you"
 
 # ── 1. Scripts ───────────────────────────────────────────────────────────────
 step "Scripts -> /usr/local/sbin"

@@ -89,9 +89,9 @@ wifi_line=$(printf '%s\n' "${services}" | awk -F'|' '$3 == "Wi-Fi" { print; exit
 wifi_dev=$(printf '%s\n' "${wifi_line}" | cut -d'|' -f2)
 wifi_svc=$(printf '%s\n' "${wifi_line}" | cut -d'|' -f4-)
 
-report=""
-changed=""
-if stopped; then
+revert_order() {  # Stop: every en adapter directly above Wi-Fi, no probes
+    changed=""
+    names=$(printf '%s\n' "${services}" | cut -d'|' -f4-)
     while IFS='|' read -r flag dev port name; do
         [ "${name}" != "${wifi_svc}" ] || continue
         case "${dev}" in en[0-9]*) ;; *) continue ;; esac
@@ -102,9 +102,17 @@ EOF
     apply_order
     printf '%s  %s  priority  stopped  changed=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${REASON}" "${changed# }" >> "${LOG}" 2>/dev/null
     exit 0
+}
+
+report=""
+changed=""
+if stopped; then
+    [ "${REASON}" = "control" ] || exit 0
+    revert_order
 fi
 
 while IFS='|' read -r flag dev port name; do
+    stopped && break
     [ "${flag}" = "on" ] && [ "${name}" != "${wifi_svc}" ] || continue
     case "${dev}" in en[0-9]*) ;; *) continue ;; esac
     [ -n "$(ipconfig getifaddr "${dev}" 2>/dev/null)" ] || continue
@@ -122,9 +130,13 @@ done <<EOF
 ${services}
 EOF
 
+if stopped; then
+    [ "${REASON}" = "control" ] || exit 0
+    revert_order
+fi
+
 [ -n "${report}" ] || exit 0
 
-stopped && exit 0
 apply_order
 
 printf '%s  %s  priority %s wifi=%s  changed=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${REASON}" "${report}" "${wifi_state}" "${changed# }" >> "${LOG}" 2>/dev/null

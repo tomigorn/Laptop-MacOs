@@ -15,7 +15,7 @@ export STATE="$WORK/state" CALLS="$WORK/calls.log"
 cat > "$WORK/bin/networksetup" <<'STUB'
 #!/bin/sh
 case "$1" in
-  -listnetworkserviceorder) cat "$STATE/order" ;;
+  -listnetworkserviceorder) [ -z "${STOP_ON_LIST:-}" ] || touch "$STOP_ON_LIST"; cat "$STATE/order" ;;
   -ordernetworkservices) shift; printf 'order'  >> "$CALLS"; printf ' <%s>' "$@" >> "$CALLS"; echo >> "$CALLS" ;;
 esac
 STUB
@@ -231,6 +231,17 @@ for why in boot change manual; do
   check "stopped, $why: no log" test -z "$(logtxt)"
 done
 
+# 20. Start: no flag and reason control is a normal, logged evaluation
+reset "$WIFI_FIRST"; touch "$STATE/online.en5"; "$WORK/net-priority.sh" control
+check "start: moved above Wi-Fi" contains "$(calls)" "order <Thunderbolt Bridge> <USB LAN> <Wi-Fi> <fastpi>"
+check "start: logged" contains "$(logtxt)" "control  priority  [USB LAN]=ok wifi=unchecked  changed=[USB LAN]above-wifi"
+
+# 21. Stop landing while the services are listed, on a change run: no order, no log
+reset "$WIFI_FIRST"; touch "$STATE/online.en5"
+STOP_ON_LIST="$WORK/stopped" "$WORK/net-priority.sh" change
+check "stop during list: order not written" lacks "$(calls)" "order"
+check "stop during list: no log" test -z "$(logtxt)"
+
 # 19. Stop landing during the probes: the running job does not write the order
 reset "$WIFI_FIRST"; touch "$STATE/online.en5"
 cat > "$WORK/bin/curl" <<'STUB'
@@ -241,6 +252,13 @@ echo "NetworkManager is online"
 STUB
 STOPPED_AT="$WORK/stopped" "$WORK/net-priority.sh" change
 check "stop during probes: order not written" lacks "$(calls)" "order"
+check "stop during probes: no log" test -z "$(logtxt)"
+
+# 22. Stop landing during the probes of a control run: order reverted and logged as stopped
+reset "$WIFI_FIRST"; touch "$STATE/online.en5"
+STOPPED_AT="$WORK/stopped" "$WORK/net-priority.sh" control
+check "control, stop during probes: reverted" contains "$(calls)" "order <Thunderbolt Bridge> <USB LAN> <Wi-Fi> <fastpi>"
+check "control, stop during probes: logged stopped" contains "$(logtxt)" "control  priority  stopped  changed=[USB LAN]above-wifi"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

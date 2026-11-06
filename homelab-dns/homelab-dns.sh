@@ -123,6 +123,7 @@ for svc in ${services}; do
     if [ "${reachable}" -eq 1 ]; then
         [ "${disabled}" -eq 1 ] && continue                 # don't arm a landmine on a parked adapter
         [ "${cur}" = "${DNS_SERVER}" ] && continue          # already ours
+        stopped && break                                    # Stop landed meanwhile: write nothing more
         networksetup -setdnsservers "${name}" "${DNS_SERVER}" 2>/dev/null \
             && changed="${changed} [${name}]set->${DNS_SERVER}"
     else
