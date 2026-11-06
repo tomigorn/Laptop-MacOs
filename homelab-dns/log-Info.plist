@@ -5,9 +5,9 @@
     <key>CFBundleName</key>
     <string>ethernet wifi network log</string>
     <key>CFBundleDisplayName</key>
-    <string>ethernet wifi network log</string>
+    <string>Network Log</string>
     <key>CFBundleIdentifier</key>
-    <string>com.tomigorn.ethernet-wifi-network-log-launcher</string>
+    <string>com.tomigorn.network-log</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
@@ -15,7 +15,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>ethernet-wifi-network-log</string>
+    <string>network-log</string>
+    <key>CFBundleIconFile</key>
+    <string>LogIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
     <key>LSUIElement</key>

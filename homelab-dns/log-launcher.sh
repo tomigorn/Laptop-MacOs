@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Opens this folder with the log link as a tab in a new VS Code window; the executable inside "ethernet wifi network log.app".
+# Opens this folder with the log link as a tab in a new VS Code window; the executable inside "Network Log.app".
 SCRIPT="$(readlink "$0" || echo "$0")"
 FOLDER="$(cd "$(dirname "$SCRIPT")" && pwd)"
 LOG_LINK="$FOLDER/homelab-dns.log"
