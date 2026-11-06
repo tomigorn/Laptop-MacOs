@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>ethernet wifi network log</string>
+    <string>Network Log</string>
     <key>CFBundleDisplayName</key>
     <string>Network Log</string>
     <key>CFBundleIdentifier</key>

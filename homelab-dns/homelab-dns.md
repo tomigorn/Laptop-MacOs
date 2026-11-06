@@ -21,7 +21,7 @@ network change.
 
 ## The approach
 
-Three parts, run by two `LaunchDaemon`s:
+Three parts, run by two `LaunchDaemon`s (a third handles [stop and start](#stop-and-start)):
 
 - **[`homelab-dns-watch.sh`](homelab-dns-watch.sh)** — a long-running watcher
   that blocks on `route -n monitor` and only reacts when the network *path*
@@ -170,15 +170,40 @@ macOS keeps Ethernet above Wi-Fi even behind a login page. [`net-priority.sh`](n
 2026-11-05 09:17:12  change  priority  [USB 10/100/1000 LAN]=fail wifi=ok  changed=[USB 10/100/1000 LAN]below-wifi
 ```
 
-### Open the log from Spotlight
+## Spotlight apps
 
-Type `ethernet`, `wifi` or `network log`: **ethernet wifi network log** opens this folder in a new VS Code window, with the log open as a tab. `homelab-dns.log` here is a local, gitignored link to `/var/log/homelab-dns.log`.
+| App | Does |
+|---|---|
+| **Network Log** | opens this folder in a new VS Code window, with the log as a tab |
+| **Network Stop** | stops the switcher |
+| **Network Start** | starts it again, checks the network right away |
 
 ```sh
-homelab-dns/build-log-launcher.sh   # no sudo, builds it into ~/Applications
+homelab-dns/build-launchers.sh   # no sudo, builds them into ~/Applications
+homelab-dns/make-icons.sh        # only to regenerate the icons, then build again
 ```
 
-Remove: delete `~/Applications/ethernet wifi network log.app`.
+- `homelab-dns.log` here is a local, gitignored link to `/var/log/homelab-dns.log`.
+- Spotlight only searches the app's file name, and learns from what you pick. It has no ranking setting.
+- Remove: delete the three apps from `~/Applications`.
+
+### Stop and start
+
+The apps need no sudo: they set or remove `/usr/local/var/homelab-dns/stopped`, a flag in a folder you own. The third daemon, `com.tomigorn.homelab-dns-control`, watches the folder and runs both scripts with reason `control`. A notification is the apps' only feedback, the log shows the result.
+
+| State | Run | Does |
+|---|---|---|
+| stopped | Network Stop's own run | services on `192.168.1.2` back to DHCP, every `en*` adapter directly above Wi-Fi, no probes, logged |
+| stopped | boot, change, timer, manual | nothing, no log line |
+| running | Network Start's own run | normal check of order and DNS, logged |
+
+- Stays stopped through reboots.
+- launchd can miss a folder change (`man launchd.plist`). No log line after Stop: run Start, then Stop again.
+
+```
+2026-11-06 09:00:01  control  priority  stopped  changed=[USB 10/100/1000 LAN]above-wifi
+2026-11-06 09:00:01  control  iface=en0 gw=192.0.2.1  homelab=stopped tries=0  changed=[Wi-Fi]revert->dhcp
+```
 
 ## Install
 
@@ -186,12 +211,9 @@ Remove: delete `~/Applications/ethernet wifi network log.app`.
 sudo ./install.sh
 ```
 
-Installs the three scripts to `/usr/local/sbin/` and two daemons to
-`/Library/LaunchDaemons/` (`com.tomigorn.homelab-dns.plist`, the watcher, and
-`com.tomigorn.homelab-dns-timer.plist`, the 5-min safety net), then loads both.
-Runs at boot, on every network change, and every 5 minutes. Safe to re-run.
+Installs the four scripts to `/usr/local/sbin/` and three daemons to `/Library/LaunchDaemons/` (`com.tomigorn.homelab-dns.plist`, the watcher, `com.tomigorn.homelab-dns-timer.plist`, the 5-min safety net, and `com.tomigorn.homelab-dns-control.plist`, for stop and start), creates the flag folder, then loads all three. Runs at boot, on every network change, and every 5 minutes. Safe to re-run. Run it from your own account, the flag folder gets your user as owner.
 
-Tests: `homelab-dns/tests/homelab-dns.sh`, `homelab-dns/tests/net-priority.sh` and `homelab-dns/tests/log-launcher.sh` (stubbed, no system changes), or all via `tests/test-all.sh`.
+Tests: `homelab-dns/tests/homelab-dns.sh`, `net-priority.sh`, `log-launcher.sh`, `control-launcher.sh` and `build-launchers.sh` in the same folder (stubbed, no system changes), or all via `tests/test-all.sh`.
 
 ## Verify / operate
 
@@ -213,9 +235,9 @@ Every evaluation writes one line, e.g.:
 2026-05-29 15:01:44  change  iface=en0 gw=192.0.2.1  homelab=reachable tries=1  changed=[Wi-Fi]set->192.168.1.2 [Thunderbolt Ethernet Slot 1]set->192.168.1.2
 ```
 
-- first field — why it ran: `boot` (daemon start), `change` (network change), `timer` (5-min safety net — only logs when it changed DNS), `manual`
+- first field — why it ran: `boot` (daemon start), `change` (network change), `timer` (5-min safety net — only logs when it changed DNS), `manual`, `control` (Network Stop or Start)
 - `iface` / `gw` — interface + gateway of the default route (which network you're on)
-- `homelab`      — probe result: `reachable` / `unreachable`
+- `homelab`      — probe result: `reachable` / `unreachable`; `stopped` when Network Stop reverted without a probe
 - `tries`        — probe attempts used (`1` = answered first shot; `2`/`3` = a retry
   saved it; `3` on an `unreachable` line = all attempts failed). A creeping `tries`
   count is the early warning that the homelab DNS is getting flaky
@@ -232,7 +254,7 @@ so it never grows unbounded — no `newsyslog`/logrotate needed.
 sudo ./uninstall.sh
 ```
 
-Unloads + deletes **both** daemons (watcher + 5-min timer) and the three scripts (the service order stays as it is), then
+Unloads + deletes **all three** daemons and the four scripts, removes the flag folder (the service order stays as it is), then
 reverts every interface's DNS to DHCP — but **only the ones still set to the
 `192.168.1.2` we set**. Any interface that's already DHCP, or that something else
 has since pointed at a custom resolver, is left untouched. Safe to re-run. (Leaves
