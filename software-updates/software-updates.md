@@ -1,12 +1,12 @@
 # Software updates — `mac-outdated`
 
-One command for every outdated piece of software on this Mac. Install: `software-updates/install.sh` (links it into `~/.local/bin`).
+One command for every outdated piece of software on this Mac. Install: `software-updates/install.sh` (links it into `~/.local/bin`, the fish completion into `~/.config/fish/completions`).
 
 | Command | Admin | Does |
 |---|---|---|
 | `mac-outdated` | no | check all sources, print progress, details and a summary, write the last-check stamp (not when a check failed) |
 | `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update except third-party tap formulae (held for review); sudo may ask for your password at the start, during brew (some casks), and again for later steps |
-| `mac-outdated --help` | no | usage |
+| `mac-outdated --help`, `-h` | no | usage and examples |
 
 Exit: `0` nothing outdated / all installed, `1` something outdated / a check or step failed, `2` usage error or admin precondition not met, `130` interrupted.
 
@@ -177,7 +177,8 @@ New fish shells show `software not checked for N days: mac-outdated` when the la
 | Path | What |
 |---|---|
 | `software-updates/mac-outdated` | the script (bash 5) |
-| `software-updates/install.sh` | symlink into `~/.local/bin` |
+| `software-updates/install.sh` | symlinks into `~/.local/bin` and `~/.config/fish/completions` |
+| `software-updates/completions/mac-outdated.fish` | fish tab completion: `--install`, `--help` |
 | `software-updates/tests/mac-outdated.sh` | offline tests, every tool stubbed |
 | `~/.local/state/mac-outdated/last-check` | epoch of the last check without a failed source |
 | `~/.local/state/mac-outdated/logs/` | one log per run, newest 20 kept |
