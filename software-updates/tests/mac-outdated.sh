@@ -923,6 +923,7 @@ FISH="$(PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" command -v fish)"
 if [ -n "$FISH" ]; then
   complete_line() { "$FISH" --no-config -c "source '$COMPLETION'; complete -C '$1'" | cut -f1 | tr '\n' ' '; }
   check "completion: first word offers --install and --help" equals "$(complete_line 'mac-outdated --')" "--help --install "
+  check "completion: flags offered without typing a dash" equals "$(complete_line 'mac-outdated ')" "--help --install "
   check "completion: nothing after a flag" equals "$(complete_line 'mac-outdated --install --')" ""
 fi
 HOME="$WORK/inst-home" "$HERE/../install.sh" > /dev/null 2>&1
