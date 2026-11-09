@@ -18,6 +18,7 @@ symlink() {
 step "Symlinks — mac-outdated"
 chmod +x "$SCRIPT_DIR/mac-outdated"
 symlink "$SCRIPT_DIR/mac-outdated" ~/.local/bin/mac-outdated
+symlink "$SCRIPT_DIR/completions/mac-outdated.fish" ~/.config/fish/completions/mac-outdated.fish
 
 case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;

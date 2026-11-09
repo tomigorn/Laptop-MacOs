@@ -906,8 +906,27 @@ check "hooks: sourcing runs nothing" equals "$(: > "$CALLS"; paths >/dev/null; c
 run --help
 check "--help: exit 0" equals "$rc" 0
 check "--help: usage" contains "$out" "usage: mac-outdated [--install]"
+check "--help: lists -h" contains "$out" "-h, --help"
+check "--help: examples" contains "$out" "examples:"
+run -h
+check "-h: usage" contains "$out" "usage: mac-outdated [--install]"
 run --bogus
 check "unknown option: exit 2" equals "$rc" 2
+
+# ── completion ───────────────────────────────────────────────────────────────
+COMPLETION="$HERE/../completions/mac-outdated.fish"
+run --help
+for flag in $(grep -oE -- '--[a-z-]+' <<< "$out" | sort -u); do
+  check "completion: covers $flag" grep -q -- "-l ${flag#--}" "$COMPLETION"
+done
+FISH="$(PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" command -v fish)"
+if [ -n "$FISH" ]; then
+  complete_line() { "$FISH" --no-config -c "source '$COMPLETION'; complete -C '$1'" | cut -f1 | tr '\n' ' '; }
+  check "completion: first word offers --install and --help" equals "$(complete_line 'mac-outdated --')" "--help --install "
+  check "completion: nothing after a flag" equals "$(complete_line 'mac-outdated --install --')" ""
+fi
+HOME="$WORK/inst-home" "$HERE/../install.sh" > /dev/null 2>&1
+check "install: links the completion" equals "$(readlink "$WORK/inst-home/.config/fish/completions/mac-outdated.fish")" "$(cd "$HERE/.." && pwd)/completions/mac-outdated.fish"
 
 # ── install ──────────────────────────────────────────────────────────────────
 fixtures_outdated

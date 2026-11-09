@@ -52,8 +52,13 @@ usage() {
 usage: mac-outdated [--install]
   (none)     check every source, print what is outdated (no admin needed)
   --install  install every available update except third-party tap formulae, held for review (needs admin from the Privileges app, >= 15 min left)
-  --help     this text
+  -h, --help this text
 exit: 0 nothing outdated / all installed, 1 something outdated / something failed, 2 usage or admin precondition, 130 interrupted (Ctrl-C)
+
+examples:
+  mac-outdated             what is outdated, and the next command to run
+  mac-outdated --install   after a click on Privileges (menu bar lock icon)
+  logs: ~/.local/state/mac-outdated/logs/
 EOF
 }
 
