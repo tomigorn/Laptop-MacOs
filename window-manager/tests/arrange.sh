@@ -293,5 +293,26 @@ run arrange
 check "16 no mark" same "$(grep -c '^\* arrange' "$YABAI_ZONES_FILE")" 0
 check "16 line kept" grep -q "^  arrange Work5-WEV bottom Work-HP-Ultrawide MacBook$" "$YABAI_ZONES_FILE"
 
+# 17. a "none" line is marked when no arrange line matches, unmarked when one does
+setup "$(LAPTOP_AT 0 0)" "$(HP_AT 1470 0)"
+zones <<EOF
+model HP-E34m-G4 Work-HP-Ultrawide open-office
+none
+arrange Work5-WEV bottom Work-HP-Ultrawide MacBook
+EOF
+run arrange
+check "17 none marked" grep -qx "\* none" "$YABAI_ZONES_FILE"
+check "17 arrange unmarked" same "$(grep -c '^\* arrange' "$YABAI_ZONES_FILE")" 0
+
+setup "$(LAPTOP_AT 0 0)" "$(HP_AT 1470 0)"
+zones <<EOF
+model HP-E34m-G4 Work-HP-Ultrawide open-office
+* none
+arrange open-office bottom Work-HP-Ultrawide MacBook
+EOF
+run arrange
+check "17 none unmarked on a match" grep -qx "  none" "$YABAI_ZONES_FILE"
+check "17 matching line marked" grep -q "^\* arrange open-office" "$YABAI_ZONES_FILE"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

@@ -167,7 +167,7 @@ register_displays() {
 }
 
 # Mark the lines of connected screens with "* ": their monitor line, or the model
-# rule used by a screen without one, and the arrange line that matches them.
+# rule used by a screen without one, and the arrange line that matches them (the "none" line when none does).
 # The others get "  ", so the columns stay aligned. Rewritten only when a mark changes.
 mark_connected() {
   [ -w "$ZONES_FILE" ] || return 0
@@ -187,6 +187,7 @@ mark_connected() {
       f[1]=="monitor" { print (index(ENVIRON["ON_UUIDS"], " " f[2] " ") ? "* " : "  ") line; next }
       f[1]=="model"   { print (index(ENVIRON["ON_MODELS"], " " f[2] " ") ? "* " : "  ") line; next }
       f[1]=="arrange" { print (FNR "" == ENVIRON["ARR_LINE"] ? "* " : "  ") line; next }
+      line=="none"    { print (ENVIRON["ARR_LINE"] == "" ? "* " : "  ") line; next }
       { print }' "$ZONES_FILE" > "$tmp" && ! cmp -s "$tmp" "$ZONES_FILE"; then
     save_zones "$tmp"
   fi
