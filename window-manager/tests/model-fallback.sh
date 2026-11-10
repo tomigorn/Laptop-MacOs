@@ -168,7 +168,7 @@ zones < /dev/null
 echo "arrange home bottom MacBook" >> "$YABAI_ZONES_FILE"
 run connected
 check "10 registered after the last monitor line" [ "$(grep -A1 "monitor $LAPTOP" "$YABAI_ZONES_FILE" | sed -n 2p | cut -d" " -f3)" = "$HP" ]
-check "10 file still ends with the arrange line" [ "$(tail -n1 "$YABAI_ZONES_FILE")" = "arrange home bottom MacBook" ]
+check "10 file still ends with the arrange line" [ "$(tail -n1 "$YABAI_ZONES_FILE")" = "  arrange home bottom MacBook" ]
 
 # 11. registering keeps a symlinked zones.conf a symlink
 setup "$(hp_disp)"

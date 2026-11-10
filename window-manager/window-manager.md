@@ -86,7 +86,7 @@ model   <Product-Name> <name> [<location>]         # any screen of that model us
 layout  <name> <size> <size> ...                   # zone sizes for that monitor, % left→right, sum 100
 arrange <location> <top|bottom|center> <name> ...  # screens left→right per workspace (see below)
 bottom  <pt>                                       # gap kept free at the bottom of every screen for the Dock (default 59)
-* monitor …  /  * model …                          # leading "* " = connected right now (set automatically)
+* monitor …  /  * model …  /  * arrange …            # leading "* " = connected right now, or the arrange line matching them (set automatically)
 ```
 
 Lookup: UUID's name (if it has a `layout` line) → `model` rule → `layout default` → 50 50.
@@ -135,7 +135,7 @@ arrange Work5-WEV  bottom  Work-Dell Work-HP-Ultrawide MacBook
 | What | How |
 |------|-----|
 | apply | `yabai-snap.sh arrange`; automatically on yabai start/restart (restart app) and on plug in/out (`display_added`/`display_removed` signals in `yabairc`) |
-| which line | the first whose location is one of the connected screens' locations and whose names are exactly the connected screens (any order), both matched exactly, case included |
+| which line | the first whose location is one of the connected screens' locations and whose names are exactly the connected screens (any order), both matched exactly, case included; marked with a leading `* ` in `zones.conf` |
 | name and workspace of a screen | its `monitor` line's name and location, unless that name has no `layout` line and a `model` rule covers the screen: then the rule's name and location |
 | tool | `displayplacer`: only `origin` is changed, resolution/scaling/rotation stay; the main screen stays at (0,0) |
 | skipped | no matching line, already arranged, yabai not running or reports no screens, `displayplacer` missing or gives no arrangement, `displayplacer` and yabai list different screens, or a screen listed as `enabled:false` (asleep/locked) |

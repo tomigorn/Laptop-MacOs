@@ -167,8 +167,8 @@ register_displays() {
 }
 
 # Mark the lines of connected screens with "* ": their monitor line, or the model
-# rule used by a screen without one. The others get "  ", so the columns stay
-# aligned. Rewritten only when a mark changes.
+# rule used by a screen without one, and the arrange line that matches them.
+# The others get "  ", so the columns stay aligned. Rewritten only when a mark changes.
 mark_connected() {
   [ -w "$ZONES_FILE" ] || return 0
   local uuid w h model on_uuids=" " on_models=" " tmp
@@ -180,11 +180,13 @@ mark_connected() {
     model="$(model_for_display "$w" "$h")"
     [ -z "$model" ] || on_models+="$model "
   done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.w|floor) \(.frame.h|floor)"')
+  match_arrange
   tmp="$(mktemp "$ZONES_REAL.XXXXXX")" || return 0
-  if ON_UUIDS="$on_uuids" ON_MODELS="$on_models" awk '
+  if ON_UUIDS="$on_uuids" ON_MODELS="$on_models" ARR_LINE="$ARR_LINE" awk '
       { line = $0; sub(/^[* ]+/, "", line); split(line, f, " ") }
       f[1]=="monitor" { print (index(ENVIRON["ON_UUIDS"], " " f[2] " ") ? "* " : "  ") line; next }
       f[1]=="model"   { print (index(ENVIRON["ON_MODELS"], " " f[2] " ") ? "* " : "  ") line; next }
+      f[1]=="arrange" { print (FNR "" == ENVIRON["ARR_LINE"] ? "* " : "  ") line; next }
       { print }' "$ZONES_FILE" > "$tmp" && ! cmp -s "$tmp" "$ZONES_FILE"; then
     save_zones "$tmp"
   fi
@@ -271,33 +273,50 @@ resolve_location() {
 sorted_words() { printf '%s\n' "$@" | sort | tr '\n' ' '; }
 upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
 
-arrange_screens() {
-  local uuid x y w h line kw loc align names have i j n found=""
-  local S_UUID=() S_NAME=() S_LOC=() S_X=() S_Y=() S_W=() S_H=() ORDER=() USED=()
-  load_models
+# The connected screens (S_UUID, S_NAME, S_LOC, frames), read once per run, and the
+# first arrange line matching them: ARR_LINE (line number), ARR_ALIGN, ARR_NAMES;
+# ARR_LINE is empty when none matches. ARR_HAVE: the screen names, sorted.
+S_UUID=() S_NAME=() S_LOC=() S_X=() S_Y=() S_W=() S_H=()
+ARR_READ="" ARR_LINE="" ARR_ALIGN="" ARR_NAMES="" ARR_HAVE=""
+match_arrange() {
+  [ -z "$ARR_READ" ] || return 0
+  ARR_READ=1
+  local uuid x y w h line kw loc align names nr=0
   while read -r uuid x y w h; do
     [ -n "$uuid" ] || continue
     resolve_location "$uuid" "$w" "$h"
     S_UUID+=("$(upper "$uuid")"); S_NAME+=("$RES_NAME"); S_LOC+=("$RES_LOC")
-    S_X+=("$x"); S_Y+=("$y"); S_W+=("$w"); S_H+=("$h"); USED+=("")
+    S_X+=("$x"); S_Y+=("$y"); S_W+=("$w"); S_H+=("$h")
   done < <(echo "$displays" | "$JQ" -r '.[] | "\(.uuid) \(.frame.x|floor) \(.frame.y|floor) \(.frame.w|floor) \(.frame.h|floor)"')
-  n="${#S_UUID[@]}"
-  if [ "$n" -eq 0 ]; then echo "yabai reports no screens — screens not arranged" >&2; return 0; fi
-  have="$(sorted_words "${S_NAME[@]}")"
+  [ "${#S_UUID[@]}" -gt 0 ] || return 0
+  ARR_HAVE="$(sorted_words "${S_NAME[@]}")"
 
   while IFS= read -r line; do
+    nr=$((nr + 1))
     line="${line%%#*}"
+    line="${line#\* }"
     read -r kw loc align names <<<"$line"
     [ "$kw" = "arrange" ] || continue
     case " ${S_LOC[*]} " in *" $loc "*) ;; *) continue ;; esac
     # shellcheck disable=SC2086
-    [ "$(sorted_words $names)" = "$have" ] || continue
-    found=1; break
+    [ "$(sorted_words $names)" = "$ARR_HAVE" ] || continue
+    ARR_LINE="$nr" ARR_ALIGN="$align" ARR_NAMES="$names"; break
   done < "$ZONES_FILE"
-  if [ -z "$found" ]; then
+}
+
+arrange_screens() {
+  local kw i j n align names have
+  local ORDER=() USED=()
+  load_models
+  match_arrange
+  n="${#S_UUID[@]}"
+  if [ "$n" -eq 0 ]; then echo "yabai reports no screens — screens not arranged" >&2; return 0; fi
+  have="$ARR_HAVE" align="$ARR_ALIGN" names="$ARR_NAMES"
+  if [ -z "$ARR_LINE" ]; then
     echo "no arrange line for the connected screens (names: ${have% }; locations: ${S_LOC[*]})" >&2
     return 0
   fi
+  for ((j = 0; j < n; j++)); do USED+=(""); done
 
   # screen index per listed name, left to right (equal names take the next unused screen)
   # shellcheck disable=SC2086

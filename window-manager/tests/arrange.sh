@@ -260,5 +260,38 @@ run arrange
 check "14 first screen" contains "$(arg_for "$HP")" "origin:(-6000,-484) "
 check "14 second screen" contains "$(arg_for "$DELL")" "origin:(-2560,-484) "
 
+# 15. the matching arrange line gets "* ", the others "  "; a marked line still applies
+setup "$(LAPTOP_AT 0 0)" "$(HP_AT 1470 -484)" "$(DELL_AT 4910 -484)"
+zones <<EOF
+$(fixed_desk)
+* arrange Work5-WEV top Work-HP-Ultrawide MacBook
+arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook
+arrange Home bottom Work-Dell MacBook
+EOF
+run arrange
+check "15 matching line marked" grep -q "^\* arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook$" "$YABAI_ZONES_FILE"
+check "15 stale mark removed" grep -q "^  arrange Work5-WEV top Work-HP-Ultrawide MacBook$" "$YABAI_ZONES_FILE"
+check "15 other line unmarked" grep -q "^  arrange Home bottom Work-Dell MacBook$" "$YABAI_ZONES_FILE"
+check "15 one mark" same "$(grep -c '^\* arrange' "$YABAI_ZONES_FILE")" 1
+check "15 applied" contains "$(arg_for "$DELL")" "origin:(-6000,-484) "
+
+setup "$(LAPTOP_AT 0 0)" "$(HP_AT -3440 -484)" "$(DELL_AT -6000 -484)"
+run arrange
+check "15 marked line still matches" contains "$OUT$ERR" "already arranged"
+
+sed -i '' 's/^\* arrange/  arrange/' "$YABAI_ZONES_FILE"
+run connected
+check "15 other commands mark too" grep -q "^\* arrange Work5-WEV bottom" "$YABAI_ZONES_FILE"
+
+# 16. no matching line: no arrange line marked
+setup "$(LAPTOP_AT 0 0)" "$(HP_AT 1470 0)"
+zones <<EOF
+model HP-E34m-G4 Work-HP-Ultrawide open-office
+* arrange Work5-WEV bottom Work-HP-Ultrawide MacBook
+EOF
+run arrange
+check "16 no mark" same "$(grep -c '^\* arrange' "$YABAI_ZONES_FILE")" 0
+check "16 line kept" grep -q "^  arrange Work5-WEV bottom Work-HP-Ultrawide MacBook$" "$YABAI_ZONES_FILE"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi
