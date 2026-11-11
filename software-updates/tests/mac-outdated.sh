@@ -1473,6 +1473,7 @@ check "root: says it asks for the password itself" contains "$out" "asks for you
 fixtures_outdated; admin_setup admin 20
 cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-after.txt"; run --install; rm -f "$FIX/softwareupdate-after.txt"
 check "end: nothing failed" contains "$out" "✓ nothing failed"
+check "end: nothing failed, nothing skipped" lacks "$out" "skipped: see By hand"
 check "end: by hand heading" contains "$out" "By hand"
 check "end: held formula absent without tap" no_match "$(sed -n '/By hand/,$p' "$WORK/out")" "held for review"
 
@@ -1540,6 +1541,11 @@ run --install
 rm -f "$FIX/privileges-expire-after"
 check "end: admin expired by hand" has "$out" "App Store: skipped, admin (expired|expires in [0-9]+ min): click Privileges, then mac-outdated --install"
 check "end: skipped step not in the failed line" no_match "$out" "✗ failed:.*App Store"
+check "end: nothing failed names the skipped steps" contains "$out" "✓ nothing failed (2 skipped: see By hand)"
+echo 2 > "$FIX/privileges-expire-after"
+MAC_OUTDATED_COLOR=always run --install
+rm -f "$FIX/privileges-expire-after"
+check "end: nothing failed with skipped steps in yellow" grep -q $'\033\\[33m✓ nothing failed (2 skipped' "$WORK/out"
 
 fixtures_current; admin_setup admin 20
 run --install

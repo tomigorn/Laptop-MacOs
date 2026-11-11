@@ -1174,17 +1174,19 @@ install_summary() {
   local joined=${parts[0]-} i
   for i in "${parts[@]:1}"; do joined+=" · $i"; done
   printf '  %-26s%s\n' total "$joined"
-  local failed=() h f
+  local failed=() h f n_admin=0
   for src in "${INSTALL_ORDER[@]}"; do
     r=${RESULT[$src]:-}
     case $r in
+      "skipped (admin"*) n_admin=$((n_admin + 1)) ;;
       failed*) failed+=("${LABELS[$src]} ${r#failed }") ;;
       "some updates failed"*) failed+=("${LABELS[$src]} (some updates failed)") ;;
       "not verified"*) failed+=("${LABELS[$src]} (not verified)") ;;
     esac
   done
   printf '\n'
-  if [ "${#failed[@]}" -eq 0 ]; then printf '  %s\n' "$(c 32 '✓ nothing failed')"
+  if [ "${#failed[@]}" -eq 0 ] && [ "$n_admin" -gt 0 ]; then printf '  %s\n' "$(c 33 "✓ nothing failed ($n_admin skipped: see By hand)")"
+  elif [ "${#failed[@]}" -eq 0 ]; then printf '  %s\n' "$(c 32 '✓ nothing failed')"
   else
     joined=${failed[0]}
     for f in "${failed[@]:1}"; do joined+=", $f"; done
