@@ -20,6 +20,8 @@ export MAC_OUTDATED_TEST=1
 export MAC_OUTDATED_PRIVILEGESCLI="$BIN/PrivilegesCLI"
 export MAC_OUTDATED_MSUPDATE="$BIN/msupdate"
 export MAC_OUTDATED_RUM="$BIN/RemoteUpdateManager"
+export MAC_OUTDATED_SUDO="$BIN/sudo"
+export MAC_OUTDATED_SOFTWAREUPDATE="$BIN/softwareupdate"
 export MAC_OUTDATED_APP_DIRS="$APPS"
 export REPO="$WORK/repo"
 export MAC_OUTDATED_REPO="$REPO"
@@ -553,7 +555,7 @@ fixtures_outdated
 SAVED_PATH=$PATH
 mkdir -p "$WORK/empty"
 ln -sf "$BIN/curl" "$BIN/sw_vers" "$WORK/empty/"
-PATH="$WORK/empty:/usr/bin:/bin" MAC_OUTDATED_MSUPDATE="$WORK/none/msupdate" MAC_OUTDATED_RUM="$WORK/none/rum" run
+PATH="$WORK/empty:/usr/bin:/bin" MAC_OUTDATED_MSUPDATE="$WORK/none/msupdate" MAC_OUTDATED_RUM="$WORK/none/rum" MAC_OUTDATED_SOFTWAREUPDATE="$WORK/none/softwareupdate" run
 PATH=$SAVED_PATH
 check "missing tools: no crash" equals "$rc" 1
 check "missing brew: note" contains "$out" "skipped (brew not installed)"
@@ -906,6 +908,18 @@ check "hooks: overrides ignored without MAC_OUTDATED_TEST=1" equals "$(MAC_OUTDA
 check "hooks: repo override used in tests" equals "$(/opt/homebrew/bin/bash -c 'source "$1"; echo "$REPO_ROOT"' _ "$SCRIPT")" "$REPO"
 mkdir -p "$WORK/linked"; ln -sf "$SCRIPT" "$WORK/linked/mac-outdated"
 check "hooks: repo root from the script's real path" equals "$(MAC_OUTDATED_TEST='' /opt/homebrew/bin/bash -c 'source "$1"; echo "$REPO_ROOT"' _ "$WORK/linked/mac-outdated")" "$(cd "$HERE/../.." && pwd -P)"
+roots() { /opt/homebrew/bin/bash -c 'source "$1"; printf "%s\n" "$SUDO" "$SOFTWAREUPDATE" "$RUM" "$SCRIPT_CMD"' _ "$SCRIPT"; }
+check "hooks: sudo-run overrides used with a stub sudo" equals "$(roots)" "$BIN/sudo
+$BIN/softwareupdate
+$BIN/RemoteUpdateManager
+$BIN/script"
+check "hooks: sudo-run overrides ignored with the real sudo" equals "$(MAC_OUTDATED_SUDO='' MAC_OUTDATED_RUM="$BIN/evil" roots)" "/usr/bin/sudo
+/usr/sbin/softwareupdate
+/usr/local/bin/RemoteUpdateManager
+/usr/bin/script"
+check "hooks: sudo-run overrides ignored with /usr/bin/sudo named" equals "$(MAC_OUTDATED_SUDO=/usr/bin/sudo roots | sed -n 2,4p)" "/usr/sbin/softwareupdate
+/usr/local/bin/RemoteUpdateManager
+/usr/bin/script"
 check "hooks: sourcing runs nothing" equals "$(: > "$CALLS"; paths >/dev/null; calls)" ""
 
 # ── usage ────────────────────────────────────────────────────────────────────
@@ -1007,7 +1021,7 @@ check "install log: softwareupdate --list before and after" has "$(grep -c 'soft
 
 fixtures_outdated; admin_setup admin 20
 run --install
-check "macOS: through script" has "$(calls)" '^script -q .* sudo softwareupdate --install --all$'
+check "macOS: through script, sudo and softwareupdate by absolute path" has "$(calls)" "^script -q .* $BIN/sudo $BIN/softwareupdate --install --all$"
 check "macOS: --list before/after only in the log" lacks "$out" "softwareupdate --list before:"
 check "macOS: softwareupdate output on the terminal once" equals "$(grep -c 'Restart is required' "$WORK/out")" 1
 check "macOS: still offered + restart text -> restart required" has "$out" "macOS \.+ installed, restart required"
@@ -1401,6 +1415,24 @@ run
 logf=$(ls -t "$logs_dir"/*-check.log | head -1)
 check "log (check): version first" has "$(head -1 "$logf")" "^mac-outdated $(cat "$HERE/../VERSION") · check · [0-9-]+ [0-9:]+$"
 check "log (check): total time last" has "$(tail -1 "$logf")" "^end [0-9:]+, [0-9]+s total$"
+
+# ── planted sudo, softwareupdate, script on PATH: never used ───────────────
+mkdir -p "$WORK/planted"
+for n in sudo softwareupdate script; do printf '#!/bin/sh\necho "planted %s $*" | tee -a "$CALLS" >> "$ALLCALLS"\n' "$n" > "$WORK/planted/$n"; chmod +x "$WORK/planted/$n"; done
+fixtures_outdated; admin_setup admin 20
+PATH="$WORK/planted:$PATH" run --install
+check "planted on PATH: never run" no_match "$(calls)" "^planted"
+check "planted on PATH: install still ran" contains "$(calls)" "softwareupdate --install --all"
+fixtures_outdated
+PATH="$WORK/planted:$PATH" run
+check "planted on PATH, check: never run" no_match "$(calls)" "^planted"
+rm -rf "$WORK/planted"
+
+# ── mas owned by the user runs as root: warned ─────────────────────────────
+fixtures_outdated; admin_setup admin 20
+run --install
+check "mas user-owned: warning before upgrade" contains "$out" "mas is owned by your user (Homebrew) and runs as root here: residual risk, see software-updates.md"
+check "mas user-owned: still upgraded" contains "$(calls)" "sudo mas upgrade"
 
 # ── safety, over every run above ─────────────────────────────────────────────
 all="$(cat "$ALLCALLS")"

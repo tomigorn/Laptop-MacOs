@@ -172,7 +172,9 @@ Run it as your own user, never with sudo: `--install` asks for the password itse
 
 - Never asks for or changes admin rights itself: elevation is your click in Privileges (menu bar lock icon).
 - No sudo keep-alive, no `sudo -S`, no stored password, no restart.
-- The tests' path overrides (`MAC_OUTDATED_RUM`, `…_MSUPDATE`, `…_PRIVILEGESCLI`, `…_APP_DIRS`) count only with `MAC_OUTDATED_TEST=1`, so nothing from the environment picks what runs under sudo.
+- `sudo` and `softwareupdate` run by absolute path (`/usr/bin/sudo`, `/usr/sbin/softwareupdate`), never from `PATH`.
+- The tests' path overrides (`MAC_OUTDATED_RUM`, `…_MSUPDATE`, `…_PRIVILEGESCLI`, `…_APP_DIRS`, …) count only with `MAC_OUTDATED_TEST=1`; those for what runs under sudo (`…_RUM`, `…_SOFTWAREUPDATE`, `…_SCRIPT`) only with a stub `MAC_OUTDATED_SUDO`, so nothing from the environment picks what runs under sudo.
+- Residual risk: `mas` is Homebrew's, owned by your user, and `sudo mas upgrade` runs it as root; whoever can write it as you gets root at the next `--install`. Not owned by root -> a warning line before `sudo mas upgrade`, which still runs.
 - Before each sudo step (Adobe, App Store, macOS) `PrivilegesCLI --status` is checked again, the others go on, exit 1:
   - admin gone -> `skipped (admin expired: click Privileges and rerun)`
   - under 2 min left -> `skipped (admin expires in N min: click Privileges and rerun)`
