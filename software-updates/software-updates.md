@@ -5,7 +5,7 @@ One command for every outdated piece of software on this Mac. Install: `software
 | Command | Admin | Does |
 |---|---|---|
 | `mac-outdated` | no | check all sources, print progress, details and a summary, write the last-check stamp (not when a check failed) |
-| `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update except third-party tap formulae (held for review); sudo may ask for your password at the start, during brew (some casks), and again for later steps |
+| `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update except third-party tap formulae (held for review); sudo asks again before a step when the last sudo was over a minute ago; the macOS step also asks for the owner password (your login password) |
 | `mac-outdated --help`, `-h` | no | usage and examples |
 | `mac-outdated --version` | no | print the version (from `software-updates/VERSION`) |
 
@@ -92,7 +92,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | older (or unknown), no `auto_updates` | casks row | via `--install` |
 
 - brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.
-- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS is not indented, its input stays the terminal: `softwareupdate` may ask for the owner password), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
+- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs through `script(1)` straight on the terminal, not indented: both password prompts stay hidden), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
 - `up to date` instead of `installed` when nothing was updated:
 
 | Source | Signal |
@@ -113,7 +113,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 
 - Adobe exit 2 (an update could not be installed, often because an Adobe app is open; details in Adobe's RUM log) shows yellow `some updates failed (Adobe exit 2: …)`, still exit 1; exit 1 is `failed (exit 1)`.
 - Ctrl-C during `--install` stops the whole run: the current step ends, then `interrupted — remaining steps not run`, the summary so far (`interrupted` / `not run`), exit 130. A step ending with 130 counts the same.
-- Every run (check and `--install`) writes its full output without colour codes to `~/.local/state/mac-outdated/logs/<YYYY-MM-DD-HHMMSS>-<check|install>.log`; the newest 20 are kept. Last line on the terminal: `log: <path>`. sudo prompts go to the terminal only; `softwareupdate` output is in the log too, its prompts still work.
+- Every run (check and `--install`) writes its full output without colour codes to `~/.local/state/mac-outdated/logs/<YYYY-MM-DD-HHMMSS>-<check|install>.log`; the newest 20 are kept. Last line on the terminal: `log: <path>`. sudo prompts go to the terminal only; `softwareupdate --install` output and `softwareupdate --list` before/after go to the log.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 - Colours (traffic light):
 
@@ -135,7 +135,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | Microsoft AutoUpdate | `msupdate --list`, lines `<app ID>  <title> Update <version> (<build>)`: app ID -> app (`MSWD2019` Word, `XCEL2019` Excel, `PPT32019` PowerPoint, `OPIM2019` Outlook, `ONMC2019` OneNote, `ONDR18` OneDrive, `MSau04` AutoUpdate, Teams, Defender, Edge, …; unknown ID: the title), installed = the app's `CFBundleShortVersionString`, latest = the title's version (the build only without one) | `msupdate --list` first: no updates -> `up to date`; else `msupdate --install --wait 600` (without a wait it can hang until the MAU window is clicked) |
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
 | App Store | `mas outdated --json` (note if `mas` is missing) | `mas outdated` first: nothing -> `up to date`; else `sudo mas upgrade` (mas needs root to update apps) |
-| macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all`, never restarts; `restart required` only after a successful install |
+| macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all` through `script -q`, never restarts; then `--list` again: nothing left -> `installed`; still offered + restart text -> `installed, restart required`; still offered otherwise -> `failed (still offered after install: owner password empty or wrong?)`; `--list` failing -> `installed (not verified: …)` |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | uv tools | `uv tool list --outdated` (`none installed` without tools; skipped when uv is missing) | `uv tool upgrade --all` |
 | VS Code extensions | count on the progress line, then a section with every extension and its version (`code --list-extensions --show-versions`), shown also when nothing is outdated; no outdated check | `code --update-extensions` (all) |

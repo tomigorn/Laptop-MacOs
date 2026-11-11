@@ -82,7 +82,7 @@ esac'
 stub softwareupdate '
 case "$1" in
   --list) [ -f "$FIX/fail-softwareupdate-list" ] && { echo "Cannot connect to the Apple Software Update server." >&2; exit 1; }; cat "$FIX/softwareupdate-list.txt" >&2 ;;
-  --install) echo "Restart is required to complete installation"; [ -f "$FIX/fail-softwareupdate" ] && exit 1; exit 0 ;;
+  --install) [ -f "$FIX/su-norestart" ] || echo "Restart is required to complete installation"; [ -f "$FIX/softwareupdate-after.txt" ] && cp "$FIX/softwareupdate-after.txt" "$FIX/softwareupdate-list.txt"; [ -f "$FIX/fail-softwareupdate-list-after" ] && touch "$FIX/fail-softwareupdate-list"; [ -f "$FIX/fail-softwareupdate" ] && exit 1; exit 0 ;;
 esac'
 stub sw_vers 'echo 27.2'
 stub pipx '
@@ -126,6 +126,8 @@ echo "sudo $n $*" | tee -a "$CALLS" >> "$ALLCALLS"
 exec "$(dirname "$0")/$n" "$@"
 EOF
 chmod +x "$BIN/sudo"
+stub script '[ "$1" = -q ] || exit 9; f=$2; shift 2; "$@" > "$f" 2>&1; rc=$?; cat "$f"; exit $rc'
+export MAC_OUTDATED_SCRIPT="$BIN/script"
 # $FIX/privileges-expire-after N: admin for the first N --status calls, afterwards $FIX/privileges-status-later.txt or standard
 stub PrivilegesCLI '
 [ "$1" = --status ] || exit 0
@@ -978,7 +980,7 @@ check "admin 20 min: exit 0" equals "$rc" 0
 check "admin 20 min: sudo -v once, short sudo steps first, macOS last" equals "$(install_calls)" "$expected"
 check "admin 20 min: admin re-checked before each sudo step" equals "$(grep -c '^PrivilegesCLI --status' "$CALLS")" 4
 check "admin 20 min: no password-once promise" lacks "$out" "password once"
-check "admin 20 min: sudo prompts named" contains "$out" "sudo may ask for your password at the start, during brew (some casks), and again for later steps"
+check "admin 20 min: sudo hint" contains "$out" "sudo asks again before a step when the last sudo was over a minute ago; the macOS step also asks for the owner password (your login password)"
 check "admin 20 min: restart required shown" contains "$out" "restart required"
 check "admin 20 min: summary" has "$out" "pipx \\.+ installed"
 check "admin 20 min: header" has "$out" "^mac-outdated v$(cat "$HERE/../VERSION") --install · [0-9-]+ [0-9:]+"
@@ -989,14 +991,45 @@ check "admin 20 min: tool output indented" has "$out" "^ +==> Upgrading 1 outdat
 check "admin 20 min: carriage return becomes a new indented line" has "$out" "^ +100%"
 check "admin 20 min: no carriage returns in install output" no_match "$(cat "$WORK/out")" $'\r'
 check "admin 20 min: softwareupdate runs on the terminal, not through a pipe" grep -q '^Restart is required to complete installation' "$WORK/out"
-check "admin 20 min: restart need read from softwareupdate --list before installing" equals "$(grep -E '^softwareupdate --(list|install)' "$CALLS" | cut -d' ' -f2)" "--list
---install"
+check "admin 20 min: softwareupdate --list before and after installing" equals "$(grep -E '^softwareupdate --(list|install)' "$CALLS" | cut -d' ' -f2)" "--list
+--install
+--list"
 check "admin: time read from PrivilegesCLI --status" contains "$(calls)" 'PrivilegesCLI --status'
 log=$(logpath)
 check "install log: named install" has "$log" "[0-9]{6}-install\\.log$"
 check "install log: softwareupdate output captured" contains "$(cat "$log" 2>/dev/null)" "Restart is required to complete installation"
 check "install log: has the summary" has "$(cat "$log" 2>/dev/null)" "total +8 installed"
 check "install log: log line last on the terminal" has "$(tail -n 1 "$WORK/out")" "^log: "
+check "install log: softwareupdate --list before and after" has "$(grep -c 'softwareupdate --list \(before\|after\):' "$log")" '^2$'
+
+fixtures_outdated; admin_setup admin 20
+run --install
+check "macOS: through script" has "$(calls)" '^script -q .* sudo softwareupdate --install --all$'
+check "macOS: --list before/after only in the log" lacks "$out" "softwareupdate --list before:"
+check "macOS: softwareupdate output on the terminal once" equals "$(grep -c 'Restart is required' "$WORK/out")" 1
+check "macOS: still offered + restart text -> restart required" has "$out" "macOS \.+ installed, restart required"
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/su-norestart"; run --install; rm -f "$FIX/su-norestart"
+check "macOS: still offered, no restart -> failed" has "$out" "macOS \.+ failed \(still offered after install: owner password empty or wrong\?\)"
+check "macOS: still offered -> exit 1" equals "$rc" 1
+
+fixtures_outdated; admin_setup admin 20
+cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-after.txt"; run --install; rm -f "$FIX/softwareupdate-after.txt"
+check "macOS: gone after install -> installed" has "$out" "macOS \.+ installed$"
+check "macOS: gone after install -> exit 0" equals "$rc" 0
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/fail-softwareupdate"; run --install; rm -f "$FIX/fail-softwareupdate"
+check "macOS: exit 1 -> failed (exit 1)" has "$out" "macOS \.+ failed \(exit 1\)"
+check "macOS: exit 1 -> no second --list" equals "$(grep -c '^softwareupdate --list' "$CALLS")" 1
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/fail-softwareupdate-list-after"; run --install; rm -f "$FIX/fail-softwareupdate-list-after" "$FIX/fail-softwareupdate-list"
+check "macOS: --list failing after install -> not verified" has "$out" "macOS \.+ installed \(not verified: softwareupdate --list failed\)"
+check "macOS: --list failing after install -> exit 0" equals "$rc" 0
+
+fixtures_outdated; admin_setup admin 20
 
 cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
 run --install
@@ -1267,6 +1300,7 @@ check "brew never via sudo" no_match "$all" '^sudo brew'
 check "brew upgrade never greedy" no_match "$all" '^brew upgrade .*--greedy'
 check "only sudo -v, macOS, Adobe and mas upgrade via sudo" only_allowed_sudo "$all"
 check "softwareupdate never restarts" no_match "$all" '^softwareupdate .*(-R|--restart|--reboot)'
+check "script never records input" no_match "$all" '^script .*-[a-z]*r'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

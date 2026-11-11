@@ -6,6 +6,7 @@ set -uo pipefail
 PRIVILEGESCLI=/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI
 MSUPDATE="/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate"
 RUM=/usr/local/bin/RemoteUpdateManager
+SCRIPT_CMD=/usr/bin/script
 APP_DIRS=/Applications:$HOME/Applications
 REPO_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." 2>/dev/null && pwd -P)
 VERSION=$(cat "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/VERSION" 2>/dev/null) || VERSION=""
@@ -14,6 +15,7 @@ if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; nev
   PRIVILEGESCLI=${MAC_OUTDATED_PRIVILEGESCLI:-$PRIVILEGESCLI}
   MSUPDATE=${MAC_OUTDATED_MSUPDATE:-$MSUPDATE}
   RUM=${MAC_OUTDATED_RUM:-$RUM}
+  SCRIPT_CMD=${MAC_OUTDATED_SCRIPT:-$SCRIPT_CMD}
   APP_DIRS=${MAC_OUTDATED_APP_DIRS:-$APP_DIRS}
   REPO_ROOT=${MAC_OUTDATED_REPO:-$REPO_ROOT}
 fi
@@ -23,7 +25,8 @@ LOG_KEEP=20
 LOG="" LOG_PID="" OUT_FD="" ERR_FD=""
 MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
-STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N"
+STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N", restart, unverified, stilloffered
+MACOS_STAGED=""  # macOS labels still offered after install because they wait for a restart
 
 SOURCES=(brew taps vulns scripts msupdate adobe mas macos pipx uv vscode xxh sparkle unmanaged)
 INSTALL_ORDER=(adobe mas brew msupdate pipx uv vscode macos)
@@ -838,15 +841,38 @@ still_admin() {  # before each sudo step; unknown time passes, the start already
 }
 
 # ── install_<src>: the tool's exit code; a step that does not run sets STEP_STATUS and returns 0 ──
-install_macos() {  # runs on the terminal, not through a pipe: softwareupdate may ask for the owner password
+install_macos() {
   command -v softwareupdate >/dev/null || { STEP_STATUS=missing; return 0; }
-  local list rc
+  local list after rc t="" text="" still
   list=$(softwareupdate --list 2>&1) || { rc=$?; printf '%s\n' "$list" | indent; return "$rc"; }
   grep -q 'No new software available' <<< "$list" && { STEP_STATUS=uptodate; return 0; }
   still_admin || return 0
-  sudo softwareupdate --install --all; rc=$?
-  [ "$rc" -eq 0 ] && grep -q 'Action: restart' <<< "$list" && echo "    restart required: restart the Mac when it suits you"
-  return "$rc"
+  { echo "softwareupdate --list before:"; printf '%s\n' "$list"; } | log_lines
+  if [ -x "$SCRIPT_CMD" ] && t=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX"); then
+    to_terminal "$SCRIPT_CMD" -q "$t" sudo softwareupdate --install --all; rc=$?
+    text=$(tr '\r' '\n' < "$t" | sed $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' | grep -v '^[[:space:]]*$' | uniq)
+    rm -f "$t"
+    { echo "softwareupdate --install output:"; printf '%s\n' "$text"; } | log_lines
+  else
+    to_terminal sudo softwareupdate --install --all; rc=$?
+  fi
+  [ "$rc" -eq 0 ] || return "$rc"
+  after=$(softwareupdate --list 2>&1) || { STEP_STATUS=unverified; return 0; }
+  { echo "softwareupdate --list after:"; printf '%s\n' "$after"; } | log_lines
+  still=$(labels_still_offered "$list" "$after")
+  [ -n "$still" ] || return 0
+  if grep -qi restart <<< "$text"; then STEP_STATUS=restart; MACOS_STAGED=$still; return 0; fi
+  STEP_STATUS=stilloffered
+  return 1
+}
+to_terminal() {  # past the log pipe, so sudo puts the terminal in raw mode and its prompts stay hidden
+  if [ -n "$OUT_FD" ]; then "$@" 1>&"$OUT_FD" 2>&"$ERR_FD"; else "$@"; fi
+}
+log_lines() { local l; while IFS= read -r l; do log_only "$l"; done; }
+labels_still_offered() {  # labels_still_offered <list before> <list after>: labels from before still offered after, comma separated
+  local l out=""
+  while IFS= read -r l; do grep -qF "* Label: $l" <<< "$2" && out+="${out:+, }$l"; done < <(sed -n 's/^\* Label: //p' <<< "$1")
+  printf '%s' "$out"
 }
 run_noting() {  # run_noting <pattern> <command…>: the command's exit code; on success, output matching <pattern> (nothing updated) marks the step up to date
   local pattern=$1 out rc
@@ -1010,7 +1036,7 @@ install_summary() {
   for src in "${INSTALL_ORDER[@]}"; do
     r=${RESULT[$src]:-not run}
     case $r in
-      installed) n_inst=$((n_inst + 1)); word=$(c 32 "$r") ;;
+      installed*) n_inst=$((n_inst + 1)); word=$(c 32 "$r") ;;
       "up to date") n_up=$((n_up + 1)); word=$(c 32 "$r") ;;
       skipped*) n_skip=$((n_skip + 1)); word=$(c 33 "$r") ;;
       "some updates failed"*) n_fail=$((n_fail + 1)); word=$(c 33 "$r") ;;
@@ -1044,7 +1070,7 @@ install_abort() {  # Ctrl-C or a step ending with 130: no further steps
 install_mode() {
   header "mac-outdated v$VERSION --install"
   require_admin || exit 2
-  echo "  sudo may ask for your password at the start, during brew (some casks), and again for later steps"
+  echo "  sudo asks again before a step when the last sudo was over a minute ago; the macOS step also asks for the owner password (your login password)"
   sudo -v || { echo "sudo failed"; exit 2; }
   trap install_abort INT
   local src rc label word
@@ -1064,6 +1090,9 @@ install_mode() {
       missing:*) RESULT[$src]="skipped ($src not installed)" ;;
       expired:*) RESULT[$src]="skipped (admin expired: click Privileges and rerun)"; FAILED=1 ;;
       expires*) RESULT[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; FAILED=1 ;;
+      restart:*) RESULT[$src]="installed, restart required" ;;
+      unverified:*) RESULT[$src]="installed (not verified: softwareupdate --list failed)" ;;
+      stilloffered:*) RESULT[$src]="failed (still offered after install: owner password empty or wrong?)"; FAILED=1 ;;
       :0) RESULT[$src]=installed ;;
       :130) RESULT[$src]=interrupted ;;
       :2) if [ "$src" = adobe ]; then RESULT[$src]="some updates failed (Adobe exit 2: often an open Adobe app; see Adobe's RUM log)"
@@ -1071,7 +1100,7 @@ install_mode() {
       *) RESULT[$src]="failed (exit $rc)"; FAILED=1 ;;
     esac
     case ${RESULT[$src]} in
-      installed|"up to date") word=$(c 32 "${RESULT[$src]}") ;;
+      installed*|"up to date") word=$(c 32 "${RESULT[$src]}") ;;
       skipped*|"some updates failed"*) word=$(c 33 "${RESULT[$src]}") ;;
       *) word=$(c 31 "${RESULT[$src]}") ;;
     esac
