@@ -1161,7 +1161,7 @@ install_mode() {
   echo "  sudo asks again before a step when the last sudo was over a minute ago; the macOS step asks for your sudo password and then the owner password (both your login password)"
   "$SUDO" -v || { echo "sudo failed"; exit 2; }
   trap install_abort INT
-  local src rc label word t0
+  local src rc label word t0 ifd ipid
   for src in "${INSTALL_ORDER[@]}"; do
     label=${LABELS[$src]}
     STEP=$src
@@ -1171,8 +1171,10 @@ install_mode() {
     if [ "$src" = macos ]; then
       install_macos; rc=$?
     else
-      "install_$src" > >(indent) 2>&1; rc=$?
-      wait "$!"
+      exec {ifd}> >(indent); ipid=$!
+      "install_$src" >&"$ifd" 2>&1; rc=$?
+      exec {ifd}>&-
+      wait "$ipid"
     fi
     case $STEP_STATUS:$rc in
       uptodate:*) RESULT[$src]="up to date" ;;

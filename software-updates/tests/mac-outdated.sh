@@ -1139,6 +1139,9 @@ touch "$FIX/chown-brew"
 run --install
 rm -f "$FIX/chown-brew"
 term=$(cat "$WORK/out")
+last_out=$(grep -n '^ *100%' "$WORK/out" | tail -1 | cut -d: -f1)
+result_line=$(grep -nE '^  brew \.+ ' "$WORK/out" | head -1 | cut -d: -f1)
+check "step output: brew's last line before its result line" test "${last_out:-999999}" -lt "${result_line:-0}"
 check "fold: first 3 lines shown" contains "$term" "Example.app/Contents/f3: Operation not permitted"
 check "fold: 4th line hidden" lacks "$term" "Example.app/Contents/f4: "
 check "fold: last line hidden" lacks "$term" "Example.app/Contents/f300: "
