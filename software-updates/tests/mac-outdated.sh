@@ -328,7 +328,7 @@ LOGS="$HOME/.local/state/mac-outdated/logs"
 logpath() { tail -n 1 "$WORK/out" | sed -n 's/^log: //p'; }
 MAC_OUTDATED_COLOR=always run
 log=$(logpath)
-check "log: last line names it" has "$(tail -n 1 "$WORK/out")" "^log: $LOGS/[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}-check\\.log$"
+check "log: last line names it" has "$(tail -n 1 "$WORK/out")" "^log: $LOGS/[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}(-[0-9]+)?-check\\.log$"
 check "log: created" test -s "$log"
 check "log: terminal keeps colours" grep -q $'\033\\[' "$WORK/out"
 check "log: no colour codes" no_match "$(cat "$log" 2>/dev/null)" $'\033'
@@ -1044,7 +1044,7 @@ check "admin 20 min: softwareupdate --list before and after installing" equals "
 --list"
 check "admin: time read from PrivilegesCLI --status" contains "$(calls)" 'PrivilegesCLI --status'
 log=$(logpath)
-check "install log: named install" has "$log" "[0-9]{6}-install\\.log$"
+check "install log: named install" has "$log" "[0-9]{6}(-[0-9]+)?-install\\.log$"
 check "install log: softwareupdate output captured" contains "$(cat "$log" 2>/dev/null)" "Restart is required to complete installation"
 check "install log: has the summary" has "$(cat "$log" 2>/dev/null)" "total +8 installed"
 check "install log: log line last on the terminal" has "$(tail -n 1 "$WORK/out")" "^log: "
