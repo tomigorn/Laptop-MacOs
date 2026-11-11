@@ -430,6 +430,12 @@ check "untrusted tap from brew update, no tap-info: full-name prefix" contains "
 rm -f "$FIX/brew-update-stderr.txt" "$FIX/brew-list-full.txt"
 run
 check "no untrusted tap: no note" lacks "$out" "untrusted tap"
+printf 'Warning: The following taps are not trusted:\n  jane/tools\n' > "$FIX/brew-update-stderr.txt"
+printf 'oldjane/tools/gtk+3\nlibsigc++\nbash\n' > "$FIX/brew-list-full.txt"
+printf '[{"name":"jane/tools","formula_names":["jane/tools/gtk+3","jane/tools/libsigc++","jane/tools/krp"]}]\n' > "$FIX/brew-tap-info.json"
+run
+check "untrusted tap: names with + matched literally" contains "$out" "brew trust --formula jane/tools/gtk+3 jane/tools/libsigc++"
+rm -f "$FIX/brew-update-stderr.txt" "$FIX/brew-list-full.txt" "$FIX/brew-tap-info.json"
 
 # casks: the real app version decides; auto-updating casks are updated by the app itself
 jq '.casks += [
@@ -683,6 +689,16 @@ jq '.casks[0].auto_updates = true' "$FIX/brew-info-vlc.json" > "$FIX/x" && mv "$
 run
 check "sparkle without feed, no cache: cask named like the app" has "$(sed -n '/Open to update/,/Summary/p' <<< "$out")" "VLC 3.0.20 → 3.0.24"
 
+# untrusted text: no field shift from "|", no escape bytes; only http(s) feeds fetched
+fixtures_outdated
+make_app "Fo|rk"$'\e'"[31m" com.example.pipe 2.70.2 https://example.com/pipe/appcast.xml sparkle
+make_app Local com.example.local 1.0 file:///etc/passwd sparkle
+run
+check "untrusted text: | becomes /, no field shift" contains "$out" "Fo/rk[31m 2.70.2 → 2.71.1"
+check "untrusted text: no escape byte" no_match "$(cat "$WORK/out")" $'\e'
+check "file feed: not fetched" lacks "$(calls)" "file:///etc/passwd"
+check "feed fetch: http(s) only" contains "$(calls)" "curl --proto =https,http"
+
 # ── xxh remote binaries: VERSIONS of each store vs GitHub's latest release ──
 fixtures_outdated
 run
@@ -730,6 +746,12 @@ check "xxh: store without VERSIONS, by hand" has "$out" "^ xxh remote binaries \
 check "xxh: store without VERSIONS, summary row" has "$out" "^ xxh remote binaries by hand 1 terminal/install.sh --refresh-remote$"
 count_col() { awk -v re="$1" '$0 ~ re { print match($0, /[0-9]   [^ ]/); exit }' "$WORK/out"; }
 check "summary: longest label keeps the columns aligned" test "$(count_col "binaries by hand")" = "$(count_col "^  total")"
+mv "$FIX/gh/sharkdp_bat.json" "$FIX/gh-bat.json"
+run
+check "xxh: one lookup failing, a note for it" contains "$out" "bat: GitHub release lookup failed for sharkdp/bat (offline or rate limited)"
+check "xxh: one lookup failing, others listed" contains "$out" "starship 1.27.0 → 1.28.0"
+check "xxh: one lookup failing, no check failed" no_match "$out" "^ xxh remote binaries \.+ check failed$"
+mv "$FIX/gh-bat.json" "$FIX/gh/sharkdp_bat.json"
 touch "$FIX/fail-github"
 run
 check "xxh: GitHub API failing, release page used" contains "$out" "starship 1.27.0 → 1.28.0"

@@ -80,9 +80,14 @@ EOF
 }
 
 # ── helpers ──────────────────────────────────────────────────────────────────
-item() { printf '%s|%s|%s|%s|%s%s\n' "$1" "$2" "$3" "$4" "${5:-}" "${6:+|$6}"; }
+clean_fields() {  # clean_fields <field>...: into CLEAN, "|" as "/", control characters dropped
+  local f
+  CLEAN=()
+  for f in "$@"; do f=${f//|//}; CLEAN+=("${f//[[:cntrl:]]/}"); done
+}
+item() { local CLEAN; clean_fields "$@"; set -- "${CLEAN[@]}"; printf '%s|%s|%s|%s|%s%s\n' "$1" "$2" "$3" "$4" "${5:-}" "${6:+|$6}"; }
 # note <src> <text> [short result] [kind: ? unknown, – skipped, + by hand, i info only] [summary hint]: without a short result the note gets a section
-note() { printf '%s|%s|%s||%s|%s\n' "$1" "${3:-}" "${4:-}" "$2" "${5:-}"; }
+note() { local CLEAN; clean_fields "$@"; set -- "${CLEAN[@]}"; printf '%s|%s|%s||%s|%s\n' "$1" "${3:-}" "${4:-}" "$2" "${5:-}"; }
 check_failed() { note "$1" "$2" "check failed" "!" "check failed"; }  # check_failed <src> <text>: the source could not be checked
 
 setup_color() {
@@ -228,6 +233,7 @@ finish_log() {  # waits up to 5 s for the log writer, then names the log as the 
   exec 2>&"$ERR_FD"
   local i=0
   while kill -0 "$LOG_PID" 2>/dev/null && [ "$i" -lt 250 ]; do sleep 0.02; i=$((i + 1)); done
+  ! kill -0 "$LOG_PID" 2>/dev/null || kill "$LOG_PID" 2>/dev/null
   printf 'log: %s\n' "$LOG"
 }
 
@@ -248,9 +254,11 @@ tap_formulae() {  # tap_formulae <tap>: installed formulae of the tap as <tap>/<
   local tap=$1 installed
   installed=$(brew list --formula --full-name 2>/dev/null)
   {
-    grep "^$tap/" <<< "$installed"
+    awk -v p="$tap/" 'index($0, p) == 1' <<< "$installed"
     brew tap-info --json "$tap" 2>/dev/null | jq -r '.[0].formula_names[]?' 2>/dev/null \
-      | while IFS= read -r f; do grep -qxE "([^/]+/[^/]+/)?${f##*/}" <<< "$installed" && printf '%s\n' "$f"; done
+      | while IFS= read -r f; do
+          awk -v f="${f##*/}" '{ n = split($0, a, "/") } (n == 1 || n == 3) && a[n] == f { found = 1 } END { exit !found }' <<< "$installed" && printf '%s\n' "$f"
+        done
   } | sort -u
 }
 third_party_formulae() {  # base names of formulae installed from a tap other than homebrew's, also under the tap's old name
@@ -510,7 +518,7 @@ github_latest() {  # github_latest <owner/repo>: tag of the latest release; the 
   printf '%s' "$tag"
 }
 check_xxh() {  # the VERSIONS file of each store under ~/.xxh/arch (written by terminal/install.sh) vs GitHub's latest release
-  local d arch tool ver repo latest n out="" rows="" stores=()
+  local d arch tool ver repo latest n out="" rows="" stores=() found=0 failed=""
   for d in "$HOME"/.xxh/arch/*/; do [ -d "$d" ] && stores+=("${d%/}"); done
   [ "${#stores[@]}" -gt 0 ] || { note xxh "no remote binaries under ~/.xxh/arch" "none stored"; return; }
   for d in "${stores[@]}"; do
@@ -528,7 +536,11 @@ check_xxh() {  # the VERSIONS file of each store under ~/.xxh/arch (written by t
     repo=${XXH_REPOS[$tool]:-}
     [ -n "$repo" ] || { out+=$(note xxh "$tool: no release source known" "" i)$'\n'; continue; }
     latest=$(github_latest "$repo")
-    [ -n "$latest" ] || { check_failed xxh "GitHub release lookup failed for $repo (offline or rate limited)"; return; }
+    if [ -z "$latest" ]; then
+      failed+="$tool $repo"$'\n'
+      continue
+    fi
+    found=1
     latest=${latest#v}
     n=$(awk -v t="$tool" '$1 == t { print $2 }' <<< "$rows" | sort -u | grep -c .)
     while read -r _ ver arch; do
@@ -538,6 +550,13 @@ check_xxh() {  # the VERSIONS file of each store under ~/.xxh/arch (written by t
       fi
     done < <(awk -v t="$tool" '$1 == t' <<< "$rows")
   done < <(awk '!seen[$1]++ { print $1 }' <<< "$rows")
+  if [ -n "$failed" ] && [ "$found" -eq 0 ]; then
+    check_failed xxh "GitHub release lookup failed for $(awk '{ print $2 }' <<< "${failed%$'\n'}" | paste -sd, - | sed 's/,/, /g') (offline or rate limited)"
+    return
+  fi
+  while read -r tool repo; do
+    [ -n "$tool" ] && out+=$(note xxh "$tool: GitHub release lookup failed for $repo (offline or rate limited)")$'\n'
+  done <<< "$failed"
   printf '%s' "$out"
 }
 
@@ -570,7 +589,8 @@ check_sparkle() {
       [ -n "$inst" ] && command -v brew >/dev/null && cask_item sparkle "$name" "$inst"
       continue
     fi
-    xml=$(curl -fsSL --max-time 10 "$feed" 2>/dev/null) || { note sparkle "$name: appcast not reachable"; continue; }
+    [[ $feed =~ ^https?:// ]] || { note sparkle "$name: appcast not http(s), skipped"; continue; }
+    xml=$(curl --proto '=https,http' -fsSL --max-time 10 -- "$feed" 2>/dev/null) || { note sparkle "$name: appcast not reachable"; continue; }
     short="" build=""
     while read -r kind value; do
       case $kind in S) short=$value ;; V) build=$value ;; esac
