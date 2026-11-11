@@ -882,10 +882,12 @@ labels_still_offered() {  # labels_still_offered <list before> <list after>: lab
 run_noting() {  # run_noting <pattern> <command…>: the command's exit code; on success, output matching <pattern> (nothing updated) marks the step up to date
   local pattern=$1 out rc
   shift
+  RUN_OUT=""
   out=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX") || { "$@"; return; }
   "$@" 2>&1 | tee -i "$out"
   rc=${PIPESTATUS[0]}
   [ "$rc" -ne 0 ] || ! grep -qE "$pattern" "$out" || STEP_STATUS=uptodate
+  RUN_OUT=$(cat "$out")
   rm -f "$out"
   return "$rc"
 }
@@ -896,7 +898,7 @@ install_adobe() {
 }
 install_brew() {
   command -v brew >/dev/null || { STEP_STATUS=missing; return 0; }
-  local json casks=() token latest state rc=0 r third name upgrades=()
+  local json casks=() token latest state rc=0 r third name upgrades=() selfs=() held=()
   brew update || echo "brew update failed, upgrading anyway"
   third=$(third_party_formulae)
   if [ -z "$third" ]; then
@@ -904,7 +906,7 @@ install_brew() {
   elif json=$(brew outdated --formula --json=v2 2>/dev/null); then
     while IFS= read -r name; do
       [ -n "$name" ] || continue
-      if is_listed "$third" "${name##*/}"; then echo "${name##*/}: third-party tap, held for review (see mac-outdated)"; else upgrades+=("$name"); fi
+      if is_listed "$third" "${name##*/}"; then echo "${name##*/}: third-party tap, held for review (see mac-outdated)"; held+=("${name##*/}"); else upgrades+=("$name"); fi
     done < <(jq -r '.formulae[] | select(.pinned | not) | .name' <<< "$json")
     [ "${#upgrades[@]}" -eq 0 ] || brew upgrade --formula "${upgrades[@]}" || rc=$?
   else
@@ -912,6 +914,7 @@ install_brew() {
     rc=1
   fi
   load_brew_apps
+  for name in "${held[@]}"; do hand "$name: third-party tap, held for review (mac-outdated lists it)"; done
   json=$(brew outdated --cask --json=v2 2>/dev/null) || { echo "brew outdated --cask failed"; return 1; }
   while IFS=$'\t' read -r token latest; do
     [ -n "$token" ] || continue
@@ -919,12 +922,16 @@ install_brew() {
     case $state in
       install) casks+=("$token") ;;
       stale) echo "$token: app already current, brew's record is stale" ;;
-      self) echo "$token: updates itself on start, open the app" ;;
+      self) echo "$token: updates itself on start, open the app"; selfs+=("$token") ;;
     esac
   done < <(jq -r '.casks[] | select(.pinned | not) | [.name, .current_version] | @tsv' <<< "$json")
   if [ "${#casks[@]}" -gt 0 ]; then
     brew upgrade --cask "${casks[@]}"; r=$?
     [ "$rc" -ne 0 ] || rc=$r
+  fi
+  if [ "${#selfs[@]}" -gt 0 ]; then
+    r=$(printf ', %s' "${selfs[@]}")
+    hand "${r:2}: open the app, it updates itself"
   fi
   return "$rc"
 }
@@ -945,7 +952,18 @@ install_mas() {
 }
 install_pipx() {
   command -v pipx >/dev/null || { STEP_STATUS=missing; return 0; }
-  run_noting 'No packages upgraded' pipx upgrade-all
+  local rc pkg path
+  run_noting 'No packages upgraded' pipx upgrade-all; rc=$?
+  while IFS=$'\t' read -r pkg path; do
+    [ -n "$path" ] || continue
+    path=${path/#"$HOME"/\~}
+    if [ -n "$pkg" ]; then hand "pipx $pkg: $path links elsewhere: rm it, then pipx reinstall $pkg"
+    else hand "pipx: $path links elsewhere: rm it so pipx can link its own"; fi
+  done < <(pipx_link_conflicts <<< "$RUN_OUT")
+  return "$rc"
+}
+pipx_link_conflicts() {  # pipx wraps its warnings; prints "<package>\t<path>" per "File exists at" warning
+  perl -0777 -ne 's/\n[ \t]*//g; my $p = ""; while (/upgrading (\S+) from|File exists at (\S+?) ?and points to/g) { if (defined $1) { $p = $1 } else { print "$p\t$2\n" } }'
 }
 install_uv() {
   command -v uv >/dev/null || { STEP_STATUS=missing; return 0; }
@@ -1034,6 +1052,8 @@ indent() {  # indents tool output as it arrives; a line without newline (a promp
 
 declare -A RESULT
 STEP="" FAILED=0
+BY_HAND=()
+hand() { BY_HAND+=("$1"); }
 
 install_summary() {
   local src r word n_inst=0 n_up=0 n_fail=0 n_skip=0 n_int=0 n_not=0
@@ -1062,6 +1082,27 @@ install_summary() {
   local joined=${parts[0]-} i
   for i in "${parts[@]:1}"; do joined+=" · $i"; done
   printf '  %-26s%s\n' total "$joined"
+  local failed=() h f
+  for src in "${INSTALL_ORDER[@]}"; do
+    r=${RESULT[$src]:-}
+    case $r in
+      failed*) failed+=("${LABELS[$src]} ${r#failed }") ;;
+      "some updates failed"*) failed+=("${LABELS[$src]} (some updates failed)") ;;
+      "not verified"*) failed+=("${LABELS[$src]} (not verified)") ;;
+    esac
+  done
+  printf '\n'
+  if [ "${#failed[@]}" -eq 0 ]; then printf '  %s\n' "$(c 32 '✓ nothing failed')"
+  else
+    joined=${failed[0]}
+    for f in "${failed[@]:1}"; do joined+=", $f"; done
+    printf '  %s\n' "$(c 31 "✗ failed: $joined")"
+    [ -z "$LOG" ] || printf '    details: %s\n' "$LOG"
+    printf '    rerun: mac-outdated --install\n'
+  fi
+  section "By hand" ""
+  if [ "${#BY_HAND[@]}" -eq 0 ]; then printf '  %s\n' "nothing to do by hand"
+  else for h in "${BY_HAND[@]}"; do printf '  %s\n' "$(c 33 "$h")"; done; fi
 }
 
 install_abort() {  # Ctrl-C or a step ending with 130: no further steps
@@ -1093,9 +1134,11 @@ install_mode() {
     case $STEP_STATUS:$rc in
       uptodate:*) RESULT[$src]="up to date" ;;
       missing:*) RESULT[$src]="skipped ($src not installed)" ;;
-      expired:*) RESULT[$src]="skipped (admin expired: click Privileges and rerun)"; FAILED=1 ;;
-      expires*) RESULT[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; FAILED=1 ;;
-      restart:*) RESULT[$src]="installed, restart required" ;;
+      expired:*) RESULT[$src]="skipped (admin expired: click Privileges and rerun)"; FAILED=1
+        hand "$label: skipped, admin expired: click Privileges, then mac-outdated --install" ;;
+      expires*) RESULT[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; FAILED=1
+        hand "$label: skipped, admin expires in ${STEP_STATUS#expires } min: click Privileges, then mac-outdated --install" ;;
+      restart:*) RESULT[$src]="installed, restart required"; hand "$MACOS_STAGED: restart the Mac when it suits you" ;;
       unverified:*) RESULT[$src]="installed (not verified: softwareupdate --list failed)" ;;
       stilloffered:*) RESULT[$src]="failed (still offered after install: owner password empty or wrong?)"; FAILED=1 ;;
       unconfirmed:*) RESULT[$src]="not verified (still offered, no terminal: restart if macOS asks, else rerun in a terminal)"; FAILED=1 ;;

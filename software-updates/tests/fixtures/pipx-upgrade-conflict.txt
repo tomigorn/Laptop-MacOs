@@ -1,0 +1,5 @@
+upgrading example-tool from spec '/Users/jane/dev/example-tool'...
+⚠️  File exists at /Users/jane/.local/bin/example-tool and points to /Users
+    /jane/dev/example-tool/.venv/bin/example-tool. pipx leaves it in place
+    instead of linking it to /Users/jane/.local/pipx/venvs/example-tool/bin/example-tool.
+upgraded package example-tool from 0.1.0 to 1.0.1

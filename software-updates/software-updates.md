@@ -92,7 +92,17 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | older (or unknown), no `auto_updates` | casks row | via `--install` |
 
 - brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.
-- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs through `script(1)` straight on the terminal, not indented: both password prompts stay hidden; stdin not a terminal: plain `sudo softwareupdate`; Ctrl-C there -> `interrupted`), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
+- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs through `script(1)` straight on the terminal, not indented: both password prompts stay hidden; stdin not a terminal: plain `sudo softwareupdate`; Ctrl-C there -> `interrupted`), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary. After the `total` row: `✓ nothing failed`, or `✗ failed: <step> (<why>), …` with the log path and `rerun: mac-outdated --install`; then a `By hand` block.
+
+  | By hand lists | Example |
+  |---|---|
+  | self-updating apps | `discord: open the app, it updates itself` |
+  | restart required | `macOS <label>: restart the Mac when it suits you` |
+  | skipped (admin expired) | `App Store: skipped, admin expired: click Privileges, then mac-outdated --install` |
+  | pipx link conflict | `pipx example-tool: ~/.local/bin/example-tool links elsewhere: rm it, then pipx reinstall example-tool` |
+  | held third-party formulae | `yabai: third-party tap, held for review (mac-outdated lists it)` |
+
+  Nothing to list: `nothing to do by hand`. Both also print after Ctrl-C. Exit code unchanged.
 - `up to date` instead of `installed` when nothing was updated:
 
 | Source | Signal |

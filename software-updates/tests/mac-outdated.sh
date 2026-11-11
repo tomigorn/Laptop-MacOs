@@ -1174,6 +1174,8 @@ check "step exit 130: earlier steps ran" contains "$(calls)" "mas upgrade"
 check "step exit 130: message" contains "$out" "interrupted — remaining steps not run"
 check "step exit 130: summary so far" has "$out" "App Store installed"
 check "step exit 130: interrupted step" has "$out" "^ brew interrupted$"
+check "step exit 130: failures line and by hand still print" has "$out" "nothing failed|✗ failed:"
+check "step exit 130: by hand block" contains "$out" "By hand"
 check "step exit 130: remaining steps listed as not run" has "$out" "^ macOS not run$"
 
 # Ctrl-C while a step runs: the step finishes, nothing after it runs
@@ -1313,6 +1315,52 @@ PATH="$WORK/asroot:/usr/bin:/bin" run --install
 check "root: exit 2" equals "$rc" 2
 check "root: says what to run instead" contains "$out" "run mac-outdated --install as your own user"
 check "root: says it asks for the password itself" contains "$out" "asks for your password itself"
+
+# ── failures line and by-hand block at the end of --install ──────────────────
+fixtures_outdated; admin_setup admin 20
+cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-after.txt"; run --install; rm -f "$FIX/softwareupdate-after.txt"
+check "end: nothing failed" contains "$out" "✓ nothing failed"
+check "end: by hand heading" contains "$out" "By hand"
+check "end: held formula absent without tap" no_match "$(sed -n '/By hand/,$p' "$WORK/out")" "held for review"
+
+fixtures_outdated; admin_setup admin 20
+jq '.casks += [{name: "discord", installed_versions: ["0.0.389"], current_version: "0.0.421", pinned: false}]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
+make_app Discord com.hammerandchisel.discord 0.0.420
+run --install
+check "end: self-updating cask by hand" contains "$out" "discord: open the app, it updates itself"
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/su-norestart"; run --install; rm -f "$FIX/su-norestart"
+check "end: failed line names macOS" contains "$out" "✗ failed: macOS (still offered after install: owner password empty or wrong?)"
+check "end: failed line has the log path" has "$out" "details: .*/logs/.*-install\\.log"
+check "end: failed line has the rerun hint" contains "$out" "rerun: mac-outdated --install"
+check "end: failed, nothing nothing-failed" lacks "$out" "nothing failed"
+
+fixtures_outdated; admin_setup admin 20
+run --install
+check "end: restart by hand" has "$out" "macOS .*: restart the Mac when it suits you"
+check "end: restart names the label" has "$out" "^ .+-.+: restart the Mac when it suits you"
+
+fixtures_outdated; admin_setup admin 20
+sed "s#/Users/jane#$HOME#g" "$FIXTURES/pipx-upgrade-conflict.txt" > "$FIX/pipx-upgrade.txt"
+run --install
+check "end: pipx link conflict by hand" contains "$out" "pipx example-tool: ~/.local/bin/example-tool links elsewhere: rm it, then pipx reinstall example-tool"
+
+fixtures_outdated; admin_setup admin 20
+echo 2 > "$FIX/privileges-expire-after"
+run --install
+rm -f "$FIX/privileges-expire-after"
+check "end: admin expired by hand" has "$out" "App Store: skipped, admin (expired|expires in [0-9]+ min): click Privileges, then mac-outdated --install"
+check "end: skipped step not in the failed line" no_match "$out" "✗ failed:.*App Store"
+
+fixtures_current; admin_setup admin 20
+run --install
+check "end: nothing by hand" contains "$out" "nothing to do by hand"
+
+held_setup
+admin_setup admin 20
+run --install
+check "end: held formula by hand" has "$(sed -n '/By hand/,$p' "$WORK/out")" "yabai: third-party tap, held for review"
 
 # ── safety, over every run above ─────────────────────────────────────────────
 all="$(cat "$ALLCALLS")"
