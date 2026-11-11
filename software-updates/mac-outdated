@@ -28,6 +28,7 @@ LOG="" LOG_PID="" OUT_FD="" ERR_FD=""
 MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
 STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N", restart, unverified, stilloffered, unconfirmed
+MACOS_FAILED=""
 MACOS_STAGED=""  # macOS labels still offered after install because they wait for a restart
 
 SOURCES=(brew taps vulns scripts msupdate adobe mas macos pipx uv vscode xxh sparkle unmanaged)
@@ -866,17 +867,30 @@ install_macos() {
   still=$(labels_still_offered "$list" "$after")
   [ -n "$still" ] || return 0
   [ "$tty" -eq 1 ] || { STEP_STATUS=unconfirmed; return 1; }
-  if grep -qi restart <<< "$text"; then STEP_STATUS=restart; MACOS_STAGED=$still; return 0; fi
+  local needs=() other=() staged=0
+  while IFS= read -r t; do
+    if grep -A1 -xF "* Label: $t" <<< "$list" | grep -q 'Action: restart'; then needs+=("$t"); else other+=("$t"); fi
+  done <<< "$still"
+  if [ "${#needs[@]}" -gt 0 ] && grep -qi restart <<< "$text"; then
+    staged=1
+    MACOS_STAGED=$(join_labels "${needs[@]}")
+  else
+    other+=("${needs[@]}")
+  fi
+  [ "${#other[@]}" -gt 0 ] || { STEP_STATUS=restart; return 0; }
+  MACOS_FAILED=$(join_labels "${other[@]}")
+  [ "$staged" -eq 1 ] || MACOS_FAILED+="; owner password empty or wrong?"
   STEP_STATUS=stilloffered
   return 1
 }
+join_labels() { local out=$1 l; shift; for l in "$@"; do out+=", $l"; done; printf '%s' "$out"; }
 to_terminal() {  # past the log pipe, so sudo puts the terminal in raw mode and its prompts stay hidden
   if [ -n "$OUT_FD" ]; then "$@" 1>&"$OUT_FD" 2>&"$ERR_FD"; else "$@"; fi
 }
 log_lines() { local l; while IFS= read -r l; do log_only "$l"; done; }
-labels_still_offered() {  # labels_still_offered <list before> <list after>: labels from before still offered after, comma separated
+labels_still_offered() {  # labels_still_offered <list before> <list after>: labels from before still offered after, one per line
   local l out=""
-  while IFS= read -r l; do grep -qF "* Label: $l" <<< "$2" && out+="${out:+, }$l"; done < <(sed -n 's/^\* Label: //p' <<< "$1")
+  while IFS= read -r l; do grep -qF "* Label: $l" <<< "$2" && out+="${out:+$'\n'}$l"; done < <(sed -n 's/^\* Label: //p' <<< "$1")
   printf '%s' "$out"
 }
 run_noting() {  # run_noting <pattern> <command…>: the command's exit code; on success, output matching <pattern> (nothing updated) marks the step up to date
@@ -963,7 +977,7 @@ install_pipx() {
   return "$rc"
 }
 pipx_link_conflicts() {  # pipx wraps its warnings; prints "<package>\t<path>" per "File exists at" warning
-  perl -0777 -ne 's/\n[ \t]*//g; my $p = ""; while (/upgrading (\S+) from|File exists at (\S+?) ?and points to/g) { if (defined $1) { $p = $1 } else { print "$p\t$2\n" } }'
+  perl -0777 -ne 's/\n[ \t]*//g; my $p = ""; while (/upgrading ?(\S+?) ?from|File ?exists ?at ?(\S+?) ?and ?points ?to/gi) { if (defined $1) { $p = $1 } else { print "$p\t$2\n" } }'
 }
 install_uv() {
   command -v uv >/dev/null || { STEP_STATUS=missing; return 0; }
@@ -1140,7 +1154,8 @@ install_mode() {
         hand "$label: skipped, admin expires in ${STEP_STATUS#expires } min: click Privileges, then mac-outdated --install" ;;
       restart:*) RESULT[$src]="installed, restart required"; hand "$MACOS_STAGED: restart the Mac when it suits you" ;;
       unverified:*) RESULT[$src]="installed (not verified: softwareupdate --list failed)" ;;
-      stilloffered:*) RESULT[$src]="failed (still offered after install: owner password empty or wrong?)"; FAILED=1 ;;
+      stilloffered:*) RESULT[$src]="failed (still offered after install: $MACOS_FAILED)"; FAILED=1
+        [ -z "$MACOS_STAGED" ] || hand "$MACOS_STAGED: restart the Mac when it suits you" ;;
       unconfirmed:*) RESULT[$src]="not verified (still offered, no terminal: restart if macOS asks, else rerun in a terminal)"; FAILED=1 ;;
       :0) RESULT[$src]=installed ;;
       :130) RESULT[$src]=interrupted ;;

@@ -1,0 +1,4 @@
+upgrading example-tool from spec '/Users/jane/dev/example-tool'...
+⚠️  File exists at
+    /Users/jane/.local/bin/example-tool and points to /Users/jane/dev/example-tool/.venv/bin/example-tool.
+upgraded package example-tool from 0.1.0 to 1.0.1

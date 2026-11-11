@@ -97,8 +97,9 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
   | By hand lists | Example |
   |---|---|
   | self-updating apps | `discord: open the app, it updates itself` |
-  | restart required | `macOS <label>: restart the Mac when it suits you` |
+  | restart required (only labels marked `Action: restart`) | `macOS <label>: restart the Mac when it suits you` |
   | skipped (admin expired) | `App Store: skipped, admin expired: click Privileges, then mac-outdated --install` |
+  | skipped (admin nearly out) | `App Store: skipped, admin expires in 1 min: click Privileges, then mac-outdated --install` |
   | pipx link conflict | `pipx example-tool: ~/.local/bin/example-tool links elsewhere: rm it, then pipx reinstall example-tool` |
   | held third-party formulae | `yabai: third-party tap, held for review (mac-outdated lists it)` |
 
@@ -145,7 +146,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | Microsoft AutoUpdate | `msupdate --list`, lines `<app ID>  <title> Update <version> (<build>)`: app ID -> app (`MSWD2019` Word, `XCEL2019` Excel, `PPT32019` PowerPoint, `OPIM2019` Outlook, `ONMC2019` OneNote, `ONDR18` OneDrive, `MSau04` AutoUpdate, Teams, Defender, Edge, …; unknown ID: the title), installed = the app's `CFBundleShortVersionString`, latest = the title's version (the build only without one) | `msupdate --list` first: no updates -> `up to date`; else `msupdate --install --wait 600` (without a wait it can hang until the MAU window is clicked) |
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
 | App Store | `mas outdated --json` (note if `mas` is missing) | `mas outdated` first: nothing -> `up to date`; else `sudo mas upgrade` (mas needs root to update apps) |
-| macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all` through `script -q`, never restarts; then `--list` again: nothing left -> `installed`; still offered + restart text -> `installed, restart required`; still offered otherwise -> `failed (still offered after install: owner password empty or wrong?)`; `--list` failing -> `installed (not verified: …)`; stdin not a terminal and still offered -> `not verified (still offered, no terminal: restart if macOS asks, else rerun in a terminal)`, counts as failed |
+| macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all` through `script -q`, never restarts; then `--list` again: nothing left -> `installed`; still offered: labels whose `--list` entry says `Action: restart` count as staged when the output mentions restart, all others (Command Line Tools, …) as failed; nothing failed -> `installed, restart required`, else `failed (still offered after install: <labels>)` plus `; owner password empty or wrong?` when no restart label was staged; `--list` failing -> `installed (not verified: …)`; stdin not a terminal and still offered -> `not verified (still offered, no terminal: restart if macOS asks, else rerun in a terminal)`, counts as failed |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | uv tools | `uv tool list --outdated` (`none installed` without tools; skipped when uv is missing) | `uv tool upgrade --all` |
 | VS Code extensions | count on the progress line, then a section with every extension and its version (`code --list-extensions --show-versions`), shown also when nothing is outdated; no outdated check | `code --update-extensions` (all) |

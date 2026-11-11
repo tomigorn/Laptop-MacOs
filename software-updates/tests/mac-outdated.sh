@@ -169,6 +169,7 @@ fixtures_outdated() {
   jq --arg k token '.casks |= map({($k): (.name[0] | ascii_downcase | gsub(" "; "-")), auto_updates: (.name[0] == "Discord")} + .)' \
     "$FIXTURES/brew-info-installed.json" > "$FIX/brew-info-installed.json"
   cp "$FIX/pip-index-fail.txt" "$FIX/pip-index-example-tool.txt"
+  head -6 "$FIXTURES/softwareupdate-list.txt" > "$FIX/softwareupdate-after.txt"
   cp "$FIX/pip-index-xxh.txt" "$FIX/pip-index-xxh-xxh.txt"
   make_app Fork com.example.fork 2.70.2 https://example.com/fork/appcast.xml sparkle
   make_app Current com.example.current 2.71.1 https://example.com/current/appcast.xml sparkle
@@ -1013,7 +1014,7 @@ check "macOS: still offered + restart text -> restart required" has "$out" "macO
 
 fixtures_outdated; admin_setup admin 20
 touch "$FIX/su-norestart"; run --install; rm -f "$FIX/su-norestart"
-check "macOS: still offered, no restart -> failed" has "$out" "macOS \.+ failed \(still offered after install: owner password empty or wrong\?\)"
+check "macOS: still offered, no restart -> failed" has "$out" "macOS \.+ failed \(still offered after install: macOS Golden Gate 27.2.1-27C123; owner password empty or wrong\?\)"
 check "macOS: still offered -> exit 1" equals "$rc" 1
 
 fixtures_outdated; admin_setup admin 20
@@ -1331,20 +1332,41 @@ check "end: self-updating cask by hand" contains "$out" "discord: open the app, 
 
 fixtures_outdated; admin_setup admin 20
 touch "$FIX/su-norestart"; run --install; rm -f "$FIX/su-norestart"
-check "end: failed line names macOS" contains "$out" "✗ failed: macOS (still offered after install: owner password empty or wrong?)"
+check "end: failed line names macOS" contains "$out" "✗ failed: macOS (still offered after install: macOS Golden Gate 27.2.1-27C123; owner password empty or wrong?)"
 check "end: failed line has the log path" has "$out" "details: .*/logs/.*-install\\.log"
 check "end: failed line has the rerun hint" contains "$out" "rerun: mac-outdated --install"
 check "end: failed, nothing nothing-failed" lacks "$out" "nothing failed"
 
 fixtures_outdated; admin_setup admin 20
+rm -f "$FIX/softwareupdate-after.txt"
 run --install
-check "end: restart by hand" has "$out" "macOS .*: restart the Mac when it suits you"
-check "end: restart names the label" has "$out" "^ .+-.+: restart the Mac when it suits you"
+check "macOS: restart + CLT still offered -> failed naming CLT only" has "$out" "macOS \.+ failed \(still offered after install: Command Line Tools for Xcode-27.2\)$"
+check "macOS: mixed -> restart by hand names only the restart label" contains "$(sed -n '/By hand/,$p' "$WORK/out")" "  macOS Golden Gate 27.2.1-27C123: restart the Mac when it suits you"
+check "macOS: mixed -> CLT not in the restart line" no_match "$out" "Command Line Tools.*: restart the Mac"
+check "macOS: mixed -> exit 1" equals "$rc" 1
+
+fixtures_outdated; admin_setup admin 20
+{ head -4 "$FIXTURES/softwareupdate-list.txt"; sed -n 7,8p "$FIXTURES/softwareupdate-list.txt"; } > "$FIX/softwareupdate-after.txt"
+run --install
+check "macOS: only CLT still offered + restart text -> failed naming CLT" has "$out" "macOS \.+ failed \(still offered after install: Command Line Tools for Xcode-27.2; owner password empty or wrong\?\)$"
+check "macOS: only CLT still offered -> no restart line" lacks "$(sed -n '/By hand/,$p' "$WORK/out")" "restart the Mac"
+
+fixtures_outdated; admin_setup admin 20
+run --install
+check "end: restart by hand" contains "$out" "macOS Golden Gate 27.2.1-27C123: restart the Mac when it suits you"
+check "end: restart names only the staged label" lacks "$out" "Command Line Tools for Xcode-27.2: restart"
+check "end: restart only -> installed, restart required" has "$out" "macOS \.+ installed, restart required"
 
 fixtures_outdated; admin_setup admin 20
 sed "s#/Users/jane#$HOME#g" "$FIXTURES/pipx-upgrade-conflict.txt" > "$FIX/pipx-upgrade.txt"
 run --install
 check "end: pipx link conflict by hand" contains "$out" "pipx example-tool: ~/.local/bin/example-tool links elsewhere: rm it, then pipx reinstall example-tool"
+for v in after-at and-points; do
+  fixtures_outdated; admin_setup admin 20
+  sed "s#/Users/jane#$HOME#g" "$FIXTURES/pipx-upgrade-conflict-$v.txt" > "$FIX/pipx-upgrade.txt"
+  run --install
+  check "end: pipx link conflict, line break at a space ($v)" contains "$out" "pipx example-tool: ~/.local/bin/example-tool links elsewhere: rm it, then pipx reinstall example-tool"
+done
 
 fixtures_outdated; admin_setup admin 20
 echo 2 > "$FIX/privileges-expire-after"
