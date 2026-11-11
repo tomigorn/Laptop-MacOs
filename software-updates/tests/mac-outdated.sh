@@ -220,8 +220,11 @@ admin_setup() {
 }
 
 out="" rc=0
-run() { : > "$CALLS"; rm -f "$FIX/privileges-count"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 < /dev/null; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
-run_input() { local input="$1"; shift; : > "$CALLS"; rm -f "$FIX/privileges-count"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 <<< "$input"; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
+STAGED="$HOME/.local/state/mac-outdated/macos-staged"
+stage() { printf 'macOS Golden Gate 27.2.1-27C123\n' > "$STAGED"; }
+# every run starts without a staged macOS update: stage right before a run that needs one
+run() { : > "$CALLS"; rm -f "$FIX/privileges-count" "$STAGED"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 < /dev/null; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
+run_input() { local input="$1"; shift; : > "$CALLS"; rm -f "$FIX/privileges-count" "$STAGED"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 <<< "$input"; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
 calls() { cat "$CALLS"; }
 install_calls() { grep -E '^(sudo|softwareupdate --install|RemoteUpdateManager --action=install|brew (update|upgrade)|msupdate --install|mas upgrade|pipx upgrade-all|uv tool upgrade|code --update-extensions)' "$CALLS"; }
 
@@ -1553,6 +1556,51 @@ fixtures_outdated; admin_setup admin 20
 run --install
 check "mas user-owned: warning before upgrade" contains "$out" "mas is owned by your user (Homebrew) and runs as root here: residual risk, see software-updates.md"
 check "mas user-owned: still upgraded" contains "$(calls)" "sudo mas upgrade"
+
+# ── macOS staged: remembered until restart ──────────────────────────────────
+# staged_run: run, but keeps the staged file
+staged_run() { : > "$CALLS"; rm -f "$FIX/privileges-count"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 < /dev/null; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
+fixtures_outdated; admin_setup admin 20
+run --install
+check "staged: file lists the staged label" equals "$(cat "$STAGED" 2>/dev/null)" "macOS Golden Gate 27.2.1-27C123"
+check "staged: file is private" equals "$(stat -f %Lp "$STAGED" 2>/dev/null)" 600
+staged_run
+check "staged check: restart note by hand" contains "$out" "macOS Golden Gate 27.2.1: installed, restart the Mac to finish"
+check "staged check: not an outdated row" lacks "$out" "macOS Golden Gate 27.2.1 27.2 → 27.2.1"
+check "staged check: summary by-hand row" has "$out" "^ macOS by hand 1 restart the Mac$"
+check "staged check: no install hint for macOS" no_match "$out" "^ macOS [0-9]+ mac-outdated --install"
+check "staged check: file kept" test -f "$STAGED"
+fixtures_current; stage
+head -6 "$FIXTURES/softwareupdate-list.txt" > "$FIX/softwareupdate-list.txt"
+staged_run
+check "staged check, nothing else: no next --install" lacks "$out" "next: mac-outdated --install"
+check "staged check, nothing else: macOS by hand" has "$out" "macOS \\.+ 1 by hand$"
+fixtures_outdated; admin_setup admin 20; stage
+head -6 "$FIXTURES/softwareupdate-list.txt" > "$FIX/softwareupdate-list.txt"
+staged_run --install
+check "staged install: no softwareupdate --install" no_match "$(calls)" "softwareupdate --install"
+check "staged install: no script" no_match "$(calls)" "^script "
+check "staged install: result" has "$out" "macOS \\.+ staged, restart required$"
+check "staged install: by hand" contains "$(sed -n '/By hand/,$p' "$WORK/out")" "  macOS Golden Gate 27.2.1-27C123: restart the Mac when it suits you"
+check "staged install: counted as up to date" has "$out" "total 7 installed · 1 up to date"
+check "staged install: exit 0" equals "$rc" 0
+MAC_OUTDATED_COLOR=always staged_run --install
+check "staged install: green" grep -q $'\033\\[32mstaged, restart required' "$WORK/out"
+cp "$FIXTURES/softwareupdate-list.txt" "$FIX/softwareupdate-list.txt"
+touch "$FIX/su-norestart"; staged_run --install; rm -f "$FIX/su-norestart"
+check "staged + new label: installs" contains "$(calls)" "softwareupdate --install --all"
+check "staged + new label: staged one still counts as staged" has "$out" "macOS \\.+ installed, restart required$"
+fixtures_outdated; stage
+cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
+staged_run
+check "staged gone (check): file removed" test ! -e "$STAGED"
+check "staged gone (check): macOS up to date" has "$out" "macOS \\.+ up to date$"
+fixtures_outdated; admin_setup admin 20; stage
+cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
+staged_run --install
+check "staged gone (install): file removed" test ! -e "$STAGED"
+check "staged gone (install): up to date" has "$out" "macOS \\.+ up to date$"
+rm -f "$STAGED"
 
 # ── safety, over every run above ─────────────────────────────────────────────
 all="$(cat "$ALLCALLS")"

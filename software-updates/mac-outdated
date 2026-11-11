@@ -28,13 +28,14 @@ if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; nev
   REPO_ROOT=${MAC_OUTDATED_REPO:-$REPO_ROOT}
 fi
 STAMP="$HOME/.local/state/mac-outdated/last-check"
+STAGED_FILE="$HOME/.local/state/mac-outdated/macos-staged"
 LOG_DIR="$HOME/.local/state/mac-outdated/logs"
 LOG_KEEP=20
 LOG="" LOG_PID="" OUT_FD="" ERR_FD=""
 TMP_DIR=""
 MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
-STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N", restart, unverified, stilloffered, unconfirmed
+STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N", restart, staged, unverified, stilloffered, unconfirmed
 MACOS_FAILED=""
 MACOS_STAGED=""  # macOS labels still offered after install because they wait for a restart
 
@@ -464,16 +465,37 @@ check_mas() {
 
 check_macos() {
   [ -x "$SOFTWAREUPDATE" ] || { note macos "softwareupdate not found" "skipped (softwareupdate not found)" – "softwareupdate missing"; return; }
-  local out current
+  local out current line label="" t v inst staged
   out=$("$SOFTWAREUPDATE" --list 2>&1) || { check_failed macos "softwareupdate --list failed"; return; }
+  staged=$(staged_offered "$out")
   current=$(sw_vers -productVersion 2>/dev/null)
-  awk -v cur="$current" '
-    /Title: / {
-      t = $0; sub(/.*Title: /, "", t); sub(/, Version: .*/, "", t)
-      v = $0; sub(/.*Version: /, "", v); sub(/,.*/, "", v)
-      inst = (t ~ /^macOS/ && cur != "") ? cur : "?"
-      print "macos|" t "|" inst "|" v "|" ($0 ~ /Action: restart/ ? "restart required" : "")
-    }' <<< "$out"
+  while IFS= read -r line; do
+    case $line in
+      "* Label: "*) label=${line#"* Label: "} ;;
+      *"Title: "*)
+        t=${line#*Title: }; t=${t%%, Version: *}
+        v=${line#*Version: }; v=${v%%,*}
+        if [ -n "$label" ] && is_listed "$staged" "$label"; then
+          note macos "${t:-$label}: installed, restart the Mac to finish" "" + "restart the Mac"
+        else
+          inst="?"; [[ $t != macOS* || -z $current ]] || inst=$current
+          item macos "$t" "$inst" "$v" "$([[ $line == *"Action: restart"* ]] && echo "restart required")"
+        fi
+        label="" ;;
+    esac
+  done <<< "$out"
+}
+staged_offered() {  # staged_offered <softwareupdate --list>: staged labels still offered; removes the file when none is
+  [ -f "$STAGED_FILE" ] || return 0
+  local l out=""
+  while IFS= read -r l; do
+    [ -n "$l" ] && grep -qxF "* Label: $l" <<< "$1" && out+="${out:+$'\n'}$l"
+  done < "$STAGED_FILE"
+  [ -n "$out" ] || rm -f -- "$STAGED_FILE"
+  printf '%s' "$out"
+}
+write_staged() {  # write_staged <label>...: one per line, private
+  (umask 077; mkdir -p "$(dirname "$STAGED_FILE")" && printf '%s\n' "$@" > "$STAGED_FILE") 2>/dev/null && chmod 600 "$STAGED_FILE" 2>/dev/null
 }
 
 check_pipx() {
@@ -889,9 +911,16 @@ still_admin() {  # before each sudo step; unknown time passes, the start already
 # ── install_<src>: the tool's exit code; a step that does not run sets STEP_STATUS and returns 0 ──
 install_macos() {
   [ -x "$SOFTWAREUPDATE" ] || { STEP_STATUS=missing; return 0; }
-  local list after rc t="" text="" still tty=1
+  local list after rc t="" text="" still tty=1 prev offered l
   list=$("$SOFTWAREUPDATE" --list 2>&1) || { rc=$?; printf '%s\n' "$list" | indent; return "$rc"; }
+  prev=$(staged_offered "$list")
   grep -q 'No new software available' <<< "$list" && { STEP_STATUS=uptodate; return 0; }
+  offered=$(sed -n 's/^\* Label: //p' <<< "$list")
+  if [ -n "$prev" ] && [ -n "$offered" ]; then
+    local all=1 labels=()
+    while IFS= read -r l; do is_listed "$prev" "$l" || all=0; labels+=("$l"); done <<< "$offered"
+    [ "$all" -eq 0 ] || { MACOS_STAGED=$(join_labels "${labels[@]}"); STEP_STATUS=staged; return 0; }
+  fi
   still_admin || return 0
   { echo "softwareupdate --list before:"; printf '%s\n' "$list"; } | log_lines
   if { [ -t 0 ] || [ "$STDIN_TTY" = 1 ]; } && [ -x "$SCRIPT_CMD" ] && t=$(tmpfile); then
@@ -914,9 +943,9 @@ install_macos() {
   while IFS= read -r t; do
     entry=$(grep -A1 -xF "* Label: $t" <<< "$list")
     title=$(sed -n 's/^[[:space:]]*Title: \([^,]*\),.*/\1/p' <<< "$entry")
-    if grep -q 'Action: restart' <<< "$entry" && { grep -qi restart <<< "$text" || has_downloaded "$text" "$title"; }; then staged+=("$t"); else other+=("$t"); fi
+    if grep -q 'Action: restart' <<< "$entry" && { is_listed "$prev" "$t" || grep -qi restart <<< "$text" || has_downloaded "$text" "$title"; }; then staged+=("$t"); else other+=("$t"); fi
   done <<< "$still"
-  [ "${#staged[@]}" -eq 0 ] || MACOS_STAGED=$(join_labels "${staged[@]}")
+  [ "${#staged[@]}" -eq 0 ] || { MACOS_STAGED=$(join_labels "${staged[@]}"); write_staged "${staged[@]}"; }
   [ "${#other[@]}" -gt 0 ] || { STEP_STATUS=restart; return 0; }
   MACOS_FAILED=$(join_labels "${other[@]}")
   [ "${#staged[@]}" -gt 0 ] || MACOS_FAILED+="; owner password empty or wrong?"
@@ -1124,7 +1153,7 @@ install_summary() {
     r=${RESULT[$src]:-not run}
     case $r in
       installed*) n_inst=$((n_inst + 1)); word=$(c 32 "$r") ;;
-      "up to date") n_up=$((n_up + 1)); word=$(c 32 "$r") ;;
+      "up to date"|staged*) n_up=$((n_up + 1)); word=$(c 32 "$r") ;;
       skipped*) n_skip=$((n_skip + 1)); word=$(c 33 "$r") ;;
       "some updates failed"*|"not verified"*) n_fail=$((n_fail + 1)); word=$(c 33 "$r") ;;
       interrupted) n_int=$((n_int + 1)); word=$(c 31 "$r") ;;
@@ -1204,6 +1233,7 @@ install_mode() {
       expires*) RESULT[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; FAILED=1
         hand "$label: skipped, admin expires in ${STEP_STATUS#expires } min: click Privileges, then mac-outdated --install" ;;
       restart:*) RESULT[$src]="installed, restart required"; hand "$MACOS_STAGED: restart the Mac when it suits you" ;;
+      staged:*) RESULT[$src]="staged, restart required"; hand "$MACOS_STAGED: restart the Mac when it suits you" ;;
       unverified:*) RESULT[$src]="installed (not verified: softwareupdate --list failed)" ;;
       stilloffered:*) RESULT[$src]="failed (still offered after install: $MACOS_FAILED)"; FAILED=1
         [ -z "$MACOS_STAGED" ] || hand "$MACOS_STAGED: restart the Mac when it suits you" ;;
@@ -1216,7 +1246,7 @@ install_mode() {
     esac
     log_only "step $src: end $(date +%H:%M:%S), $((SECONDS - t0))s, exit $rc, ${RESULT[$src]}"
     case ${RESULT[$src]} in
-      installed*|"up to date") word=$(c 32 "${RESULT[$src]}") ;;
+      installed*|"up to date"|staged*) word=$(c 32 "${RESULT[$src]}") ;;
       skipped*|"some updates failed"*|"not verified"*) word=$(c 33 "${RESULT[$src]}") ;;
       *) word=$(c 31 "${RESULT[$src]}") ;;
     esac

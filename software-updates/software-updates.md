@@ -198,4 +198,5 @@ New fish shells show `software not checked for N days: mac-outdated` when the la
 | `software-updates/completions/mac-outdated.fish` | fish tab completion: `--install`, `--version`, `--help` |
 | `software-updates/tests/mac-outdated.sh` | offline tests, every tool stubbed |
 | `~/.local/state/mac-outdated/last-check` | epoch of the last check without a failed source |
+| `~/.local/state/mac-outdated/macos-staged` | macOS labels installed and waiting for a restart (0600): the check shows them by hand (`<title>: installed, restart the Mac to finish`), `--install` skips them (`staged, restart required`, counted as up to date); removed once `softwareupdate --list` no longer offers any |
 | `~/.local/state/mac-outdated/logs/` | one log per run (0600, dir 0700), newest 20 kept |
