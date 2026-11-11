@@ -973,7 +973,10 @@ install_macos() {
 }
 known_lines() {  # the pty echoes typed text: only softwareupdate's own lines reach the log, a password prompt without anything after it
   awk '/^Password:/ { print "Password:"; next }
-    /^(Software Update Tool|Finding available software|Downloading|Downloaded: |Installing|Installed|Done|Restart|Please restart|Error|Failed|No updates|No new software)/'
+    /^Software Update Tool$/ || /^Finding available software$/ || /^Done\.?$/ || /^No new software available\.?$/ { print; next }
+    /^Downloading [^:]+$/ || /^Downloading( .+)?: [0-9.]+%$/ || /^Downloaded: [^[:cntrl:]]+$/ || /^Installing( .+)?: [0-9.]+%$/ { print; next }
+    /^Restart is required to complete installation\.?$/ || /^Please restart immediately\.?$/ || /^Restarting\.*$/ { print; next }
+    /^Error downloading [^:]+: [^[:cntrl:]]+$/ || /^Failed to (download|install) [^[:cntrl:]]+$/'
 }
 has_downloaded() { [ -n "$2" ] && awk -v l="Downloaded: $2" '{ sub(/[[:space:]]+$/, "") } $0 == l { f = 1 } END { exit !f }' <<< "$1"; }  # has_downloaded <transcript> <title>
 join_labels() { local out=$1 l; shift; for l in "$@"; do out+=", $l"; done; printf '%s' "$out"; }

@@ -1148,6 +1148,16 @@ check "typed ahead: not in the log" lacks "$log" "hunter2"
 check "typed ahead: password prompt logged bare" has "$log" "^Password:$"
 check "typed ahead: softwareupdate lines logged" contains "$log" "Downloaded: macOS Golden Gate 27.2.1"
 check "typed ahead: result unchanged" has "$out" "macOS \\.+ installed, restart required$"
+fixtures_outdated; admin_setup admin 20
+printf 'Software Update Toolhunter2\nFinding available software\nDownloading macOS 27.2.1: 45%%hunter2\nDownloading macOS 27.2.1: 100.00%%\nDownloading macOS 27.2.1\nDone.\nRestart is required to complete installationhunter2\nRestart is required to complete installation.\n' > "$FIX/softwareupdate-install-output.txt"
+run --install
+log=$(cat "$(logpath)")
+check "typed ahead on a known line: not in the log" lacks "$log" "hunter2"
+check "typed ahead on a known line: exact lines still logged" equals "$(sed -n '/softwareupdate --install output:/,/softwareupdate --list after:/p' <<< "$log" | sed '1d;$d')" "Finding available software
+Downloading macOS 27.2.1: 100.00%
+Downloading macOS 27.2.1
+Done.
+Restart is required to complete installation."
 
 fixtures_outdated; admin_setup admin 20
 MAC_OUTDATED_STDIN_TTY='' run --install
