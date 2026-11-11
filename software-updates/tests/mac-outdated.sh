@@ -874,6 +874,12 @@ check "scripts: all tapped -> up to date" has "$out" "^ Install scripts \.+ up t
 MAC_OUTDATED_REPO="$WORK/no-repo" run
 check "scripts: repo not found" has "$out" "^ Install scripts \.+ repo not found$"
 rm -rf "$REPO" "$FIX/brew-tap.txt" "$FIX/brew-list-full.txt"; mkdir -p "$REPO"
+# a file name that perl's 2-arg open would run as a command
+printf 'brew install evil/tap/x\n' > "$REPO/install x; touch \"\$PWNED\" |"
+PWNED="$WORK/pwned" run
+check "scripts: file name never run as a command" test ! -e "$WORK/pwned"
+check "scripts: odd file name still read" contains "$out" "names tap evil/tap, which is not tapped"
+rm -rf "$REPO" "$WORK/pwned"; mkdir -p "$REPO"
 
 # ── uv tools ────────────────────────────────────────────────────────────────
 fixtures_outdated

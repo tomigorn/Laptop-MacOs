@@ -346,16 +346,21 @@ check_taps() {  # third-party taps nothing is installed from or without a commit
 
 # shellcheck disable=SC2016
 TAP_REFS='
-  next if /^\s*#/;
-  for my $seg (split /&&|\|\||[;|)]/) {
-    next unless $seg =~ /\bbrew\s+(?:install|reinstall|upgrade|tap)\b(.*)/;
-    my $rest = $1;
-    while ($rest =~ m{(?:^|[\s"\x27])([A-Za-z0-9][\w.-]*)/([\w.-]+)(?:/[\w.@+\$-]+)?(?=[\s"\x27]|$)}g) {
-      my ($o, $t) = (lc $1, lc $2);
-      $t =~ s/^homebrew-//;
-      print "$ARGV\t$o/$t\n" unless $o eq "homebrew";
+for my $f (@ARGV) {
+  open(my $h, "<", $f) or next;
+  while (<$h>) {
+    next if /^\s*#/;
+    for my $seg (split /&&|\|\||[;|)]/) {
+      next unless $seg =~ /\bbrew\s+(?:install|reinstall|upgrade|tap)\b(.*)/;
+      my $rest = $1;
+      while ($rest =~ m{(?:^|[\s"\x27])([A-Za-z0-9][\w.-]*)/([\w.-]+)(?:/[\w.@+\$-]+)?(?=[\s"\x27]|$)}g) {
+        my ($o, $t) = (lc $1, lc $2);
+        $t =~ s/^homebrew-//;
+        print "$f\t$o/$t\n" unless $o eq "homebrew";
+      }
     }
   }
+}
 '
 check_scripts() {  # the repo's install scripts naming a tap that is not tapped: brew install <owner>/<tap>/<name> or brew tap <owner>/<tap>
   command -v brew >/dev/null || { note scripts "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
@@ -368,7 +373,7 @@ check_scripts() {  # the repo's install scripts naming a tap that is not tapped:
   while IFS=$'\t' read -r file tap; do
     grep -qxF "$tap" <<< "$taps" && continue
     note scripts "${file#"$REPO_ROOT"/} names tap $tap, which is not tapped: fix the script" "" + "fix the script"
-  done < <(perl -ne "$TAP_REFS" "${files[@]}" | sort -u)
+  done < <(perl -e "$TAP_REFS" -- "${files[@]}" | sort -u)
 }
 
 declare -A MAU_APPS=(  # msupdate app ID -> app bundle name
