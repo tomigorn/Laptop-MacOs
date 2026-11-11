@@ -24,6 +24,7 @@ export MAC_OUTDATED_RUM="$BIN/RemoteUpdateManager"
 export MAC_OUTDATED_SUDO="$BIN/sudo"
 export MAC_OUTDATED_SOFTWAREUPDATE="$BIN/softwareupdate"
 export MAC_OUTDATED_APP_DIRS="$APPS"
+export MAC_OUTDATED_BOOTTIME=1700000000
 export REPO="$WORK/repo"
 export MAC_OUTDATED_REPO="$REPO"
 mkdir -p "$REPO"
@@ -229,7 +230,7 @@ admin_setup() {
 
 out="" rc=0
 STAGED="$HOME/.local/state/mac-outdated/macos-staged"
-stage() { printf 'macOS Golden Gate 27.2.1-27C123\n' > "$STAGED"; }
+stage() { printf 'boot %s\nmacOS Golden Gate 27.2.1-27C123\n' "${1:-$MAC_OUTDATED_BOOTTIME}" > "$STAGED"; }  # stage [boot time]
 # every run starts without a staged macOS update: stage right before a run that needs one
 run() { : > "$CALLS"; rm -f "$FIX/privileges-count" "$STAGED"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 < /dev/null; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
 run_input() { local input="$1"; shift; : > "$CALLS"; rm -f "$FIX/privileges-count" "$STAGED"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 <<< "$input"; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
@@ -1630,7 +1631,8 @@ rm -rf "$WORK/fakecellar"
 staged_run() { : > "$CALLS"; rm -f "$FIX/privileges-count"; "$SCRIPT" "$@" > "$WORK/out" 2>&1 < /dev/null; rc=$?; out="$(tr -s ' ' < "$WORK/out")"; }
 fixtures_outdated; admin_setup admin 20
 run --install
-check "staged: file lists the staged label" equals "$(cat "$STAGED" 2>/dev/null)" "macOS Golden Gate 27.2.1-27C123"
+check "staged: file has the boot time, then the staged label" equals "$(cat "$STAGED" 2>/dev/null)" "boot 1700000000
+macOS Golden Gate 27.2.1-27C123"
 check "staged: file is private" equals "$(stat -f %Lp "$STAGED" 2>/dev/null)" 600
 staged_run
 check "staged check: restart note by hand" contains "$out" "macOS Golden Gate 27.2.1: installed, restart the Mac to finish"
@@ -1668,6 +1670,22 @@ cp "$FIX/softwareupdate-none.txt" "$FIX/softwareupdate-list.txt"
 staged_run --install
 check "staged gone (install): file removed" test ! -e "$STAGED"
 check "staged gone (install): up to date" has "$out" "macOS \\.+ up to date$"
+fixtures_outdated; stage 1600000000
+head -6 "$FIXTURES/softwareupdate-list.txt" > "$FIX/softwareupdate-list.txt"
+staged_run
+check "staged before a reboot (check): outdated again" contains "$out" "macOS Golden Gate 27.2.1 27.2 → 27.2.1"
+check "staged before a reboot (check): --install hint" has "$out" "^ macOS 1 mac-outdated --install"
+check "staged before a reboot (check): file removed" test ! -e "$STAGED"
+fixtures_outdated; admin_setup admin 20; stage 1600000000
+head -6 "$FIXTURES/softwareupdate-list.txt" > "$FIX/softwareupdate-list.txt"
+touch "$FIX/su-norestart"; staged_run --install; rm -f "$FIX/su-norestart"
+check "staged before a reboot (install): installs" contains "$(calls)" "softwareupdate --install --all"
+check "staged before a reboot (install): not marked staged again" has "$out" "macOS \\.+ failed \\(still offered after install: macOS Golden Gate 27.2.1-27C123; owner password empty or wrong\\?\\)$"
+fixtures_outdated; admin_setup admin 20
+printf 'Software Update Tool\nFinding available software\nwill restart later\n' > "$FIX/softwareupdate-install-output.txt"
+run --install
+check "restart only in typed text: not staged" has "$out" "macOS \\.+ failed \\(still offered after install: macOS Golden Gate 27.2.1-27C123; owner password empty or wrong\\?\\)$"
+check "restart only in typed text: nothing remembered" test ! -e "$STAGED"
 rm -f "$STAGED"
 
 # ── safety, over every run above ─────────────────────────────────────────────

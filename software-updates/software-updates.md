@@ -164,7 +164,7 @@ macOS results (`--install`):
 |---|---|
 | `up to date` | `--list` finds nothing new (no admin, no sudo) |
 | `installed` | nothing offered after the install |
-| `installed, restart required` | still offered, but only `Action: restart` labels, each staged: the output mentions restart, has `Downloaded: <Title>`, or the label was staged before; By hand: restart |
+| `installed, restart required` | still offered, but only `Action: restart` labels, each staged: a logged output line mentions restart or is `Downloaded: <Title>`, or the label was staged in this boot; By hand: restart |
 | `staged, restart required` | every offered label is in `macos-staged`: nothing runs, counts as up to date; By hand: restart |
 | `failed (still offered after install: <labels>)` | other labels still offered (Command Line Tools, …); `; owner password empty or wrong?` when none was staged |
 | `not verified (still offered, no terminal: …)` | stdin not a terminal and still offered; counts as failed |
@@ -190,7 +190,7 @@ Run it as your own user, never with sudo: `--install` asks for the password itse
 - Never asks for or changes admin rights itself: elevation is your click in Privileges (menu bar lock icon).
 - No sudo keep-alive, no `sudo -S`, no stored password, no restart.
 - `sudo`, `softwareupdate` and `mas` run by absolute path (`/usr/bin/sudo`, `/usr/sbin/softwareupdate`, `/opt/homebrew/bin/mas`), never from `PATH`.
-- The tests' path overrides (`MAC_OUTDATED_RUM`, `…_MSUPDATE`, `…_PRIVILEGESCLI`, `…_APP_DIRS`, …) count only with `MAC_OUTDATED_TEST=1`; those for what runs under sudo (`…_RUM`, `…_SOFTWAREUPDATE`, `…_SCRIPT`, `…_MAS`, `…_MAS_CELLAR`) only with a stub `MAC_OUTDATED_SUDO`, so nothing from the environment picks what runs under sudo.
+- The tests' path overrides (`MAC_OUTDATED_RUM`, `…_MSUPDATE`, `…_PRIVILEGESCLI`, `…_APP_DIRS`, `…_BOOTTIME`, …) count only with `MAC_OUTDATED_TEST=1`; those for what runs under sudo (`…_RUM`, `…_SOFTWAREUPDATE`, `…_SCRIPT`, `…_MAS`, `…_MAS_CELLAR`) only with a stub `MAC_OUTDATED_SUDO`, so nothing from the environment picks what runs under sudo.
 - Residual risk: `mas` is Homebrew's, owned by your user, and `sudo mas upgrade` runs it as root; whoever can write it as you gets root at the next `--install` (`/opt/homebrew` is user-writable).
 - Before each sudo step (Adobe, App Store, macOS) `PrivilegesCLI --status` is checked again, the others go on, exit 1:
   - admin gone -> `skipped (admin expired: click Privileges and rerun)`
@@ -213,5 +213,5 @@ New fish shells show `software not checked for N days: mac-outdated` when the la
 | `software-updates/completions/mac-outdated.fish` | fish tab completion: `--install`, `--version`, `--help` |
 | `software-updates/tests/mac-outdated.sh` | offline tests, every tool stubbed |
 | `~/.local/state/mac-outdated/last-check` | epoch of the last check without a failed source |
-| `~/.local/state/mac-outdated/macos-staged` | macOS labels installed and waiting for a restart (0600): the check shows them by hand (`<title>: installed, restart the Mac to finish`), `--install` skips them (`staged, restart required`, counted as up to date); removed once `softwareupdate --list` no longer offers any |
+| `~/.local/state/mac-outdated/macos-staged` | first line `boot <kern.boottime sec>`, then the macOS labels installed and waiting for a restart (0600); from another boot: deleted, the labels count as usual; the check shows them by hand (`<title>: installed, restart the Mac to finish`), `--install` skips them (`staged, restart required`, counted as up to date); removed once `softwareupdate --list` no longer offers any |
 | `~/.local/state/mac-outdated/logs/` | one log per run (0600, dir 0700), newest 20 kept |

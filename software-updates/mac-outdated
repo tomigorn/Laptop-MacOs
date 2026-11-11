@@ -12,6 +12,7 @@ SOFTWAREUPDATE=/usr/sbin/softwareupdate
 MAS=/opt/homebrew/bin/mas
 MAS_CELLAR=/opt/homebrew/Cellar/mas/
 STDIN_TTY=""
+BOOTTIME=""
 APP_DIRS=/Applications:$HOME/Applications
 REPO_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." 2>/dev/null && pwd -P)
 VERSION=$(cat "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/VERSION" 2>/dev/null) || VERSION=""
@@ -28,6 +29,7 @@ if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; nev
     SCRIPT_CMD=${MAC_OUTDATED_SCRIPT:-$SCRIPT_CMD}
   fi
   STDIN_TTY=${MAC_OUTDATED_STDIN_TTY:-}
+  BOOTTIME=${MAC_OUTDATED_BOOTTIME:-}
   APP_DIRS=${MAC_OUTDATED_APP_DIRS:-$APP_DIRS}
   REPO_ROOT=${MAC_OUTDATED_REPO:-$REPO_ROOT}
 fi
@@ -489,17 +491,26 @@ check_macos() {
     esac
   done <<< "$out"
 }
-staged_offered() {  # staged_offered <softwareupdate --list>: staged labels still offered; removes the file when none is
+boot_time() {  # seconds of the current boot, from "{ sec = N, usec = M } …"
+  [ -z "$BOOTTIME" ] || { printf '%s' "$BOOTTIME"; return; }
+  sysctl -n kern.boottime 2>/dev/null | sed -n 's/^{ sec = \([0-9][0-9]*\),.*/\1/p'
+}
+staged_offered() {  # staged_offered <softwareupdate --list>: staged labels still offered; removes the file when none is or it is from an earlier boot
   [ -f "$STAGED_FILE" ] || return 0
-  local l out=""
+  local l boot out=""
+  boot=$(boot_time)
+  { IFS= read -r l; [ -n "$boot" ] && [ "$l" = "boot $boot" ]; } < "$STAGED_FILE" || { rm -f -- "$STAGED_FILE"; return 0; }
   while IFS= read -r l; do
     [ -n "$l" ] && grep -qxF "* Label: $l" <<< "$1" && out+="${out:+$'\n'}$l"
-  done < "$STAGED_FILE"
+  done < <(tail -n +2 "$STAGED_FILE")
   [ -n "$out" ] || rm -f -- "$STAGED_FILE"
   printf '%s' "$out"
 }
-write_staged() {  # write_staged <label>...: one per line, private
-  (umask 077; mkdir -p "$(dirname "$STAGED_FILE")" && printf '%s\n' "$@" > "$STAGED_FILE") 2>/dev/null && chmod 600 "$STAGED_FILE" 2>/dev/null
+write_staged() {  # write_staged <label>...: the boot time, then one label per line, private
+  local boot
+  boot=$(boot_time)
+  [ -n "$boot" ] || return 0
+  (umask 077; mkdir -p "$(dirname "$STAGED_FILE")" && printf 'boot %s\n' "$boot" > "$STAGED_FILE" && printf '%s\n' "$@" >> "$STAGED_FILE") 2>/dev/null && chmod 600 "$STAGED_FILE" 2>/dev/null
 }
 
 check_pipx() {
@@ -933,7 +944,8 @@ install_macos() {
     [ "$rc" -ne 0 ] && LC_ALL=C grep -qE $'\x03|\\^C' "$t" && rc=130
     text=$(LC_ALL=C tr -d '\004\010' < "$t" | tr '\r' '\n' | sed -e $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' -e 's/\^D//g' | grep -v '^[[:space:]]*$' | uniq)
     rm -f "$t"
-    { echo "softwareupdate --install output:"; known_lines <<< "$text"; } | log_lines
+    text=$(known_lines <<< "$text")
+    { echo "softwareupdate --install output:"; printf '%s\n' "$text"; } | log_lines
   else
     to_terminal "$SUDO" "$SOFTWAREUPDATE" --install --all; rc=$?; tty=0
   fi
