@@ -148,9 +148,11 @@ stub script '[ "$1" = -q ] || exit 9; f=$2; shift 2; if [ -f "$FIX/interrupt-scr
 export MAC_OUTDATED_SCRIPT="$BIN/script"
 export MAC_OUTDATED_STDIN_TTY=1
 # $FIX/privileges-expire-after N: admin for the first N --status calls, afterwards $FIX/privileges-status-later.txt or standard
+# $FIX/int-on-status N: the Nth --status call sends Ctrl-C to the pid in $FIX/script-pid
 stub PrivilegesCLI '
 [ "$1" = --status ] || exit 0
 n=$(($(cat "$FIX/privileges-count" 2>/dev/null || echo 0) + 1)); echo "$n" > "$FIX/privileges-count"
+[ -f "$FIX/int-on-status" ] && [ "$n" -eq "$(cat "$FIX/int-on-status")" ] && kill -INT "$(cat "$FIX/script-pid")"
 if [ -f "$FIX/privileges-expire-after" ] && [ "$n" -gt "$(cat "$FIX/privileges-expire-after")" ]; then
   cat "$FIX/privileges-status-later.txt" 2>/dev/null || cat "$FIX/privileges-status-standard.txt"
 else
@@ -1351,6 +1353,30 @@ check "group Ctrl-C: no log-only end line on the terminal" no_match "$raw" "end 
 check "group Ctrl-C: log line last" has "$(tail -n 1 "$WORK/out")" "^log: "
 check "group Ctrl-C: rest of the brew step not run" no_match "$(calls)" "^brew upgrade --cask"
 check "group Ctrl-C: later steps not run" no_match "$(calls)" "^(msupdate --install|pipx upgrade-all|code --update-extensions|softwareupdate --install)"
+
+# Ctrl-C during the admin check before a sudo step: that sudo never starts
+int_on_status() {  # int_on_status <N>: run --install, Ctrl-C at the Nth PrivilegesCLI --status call
+  echo "$1" > "$FIX/int-on-status"
+  : > "$CALLS"; rm -f "$FIX/privileges-count" "$STAGED"
+  set -m
+  sh -c 'echo $$ > "$FIX/script-pid"; exec "$0" --install' "$SCRIPT" > "$WORK/out" 2>&1 < /dev/null &
+  pid=$!
+  set +m
+  wait "$pid"; rc=$?
+  out="$(tr -s ' ' < "$WORK/out")"
+  rm -f "$FIX/int-on-status" "$FIX/script-pid"
+}
+fixtures_outdated; admin_setup admin 20
+int_on_status 2
+check "Ctrl-C before Adobe's sudo: exit 130" equals "$rc" 130
+check "Ctrl-C before Adobe's sudo: no sudo for it" no_match "$(calls)" "^sudo RemoteUpdateManager"
+check "Ctrl-C before Adobe's sudo: interrupted" has "$out" "Adobe \\.+ interrupted$"
+check "Ctrl-C before Adobe's sudo: later steps not run" no_match "$(calls)" "^(sudo mas|brew upgrade|softwareupdate --install)"
+fixtures_outdated; admin_setup admin 20
+int_on_status 4
+check "Ctrl-C before macOS's sudo: exit 130" equals "$rc" 130
+check "Ctrl-C before macOS's sudo: no install" no_match "$(calls)" "softwareupdate --install|^script "
+check "Ctrl-C before macOS's sudo: interrupted" has "$out" "macOS \\.+ interrupted$"
 
 # Adobe exit 2: some updates could not be installed, a warning, not a plain failure
 echo 2 > "$FIX/exit-rum"

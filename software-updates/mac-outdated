@@ -915,9 +915,11 @@ require_admin() {
   fi
 }
 
-still_admin() {  # before each sudo step; unknown time passes, the start already checked it
+still_admin() {  # before each sudo step; unknown time passes, the start already checked it; after Ctrl-C no sudo step starts
   local status left
+  [ "$INTERRUPTED" -eq 0 ] || return 1
   status=$("$PRIVILEGESCLI" --status 2>&1)
+  [ "$INTERRUPTED" -eq 0 ] || return 1
   is_admin_status "$status" || { STEP_STATUS=expired; return 1; }
   left=$(admin_minutes_left "$status") || return 0
   [ "$left" -ge "$MIN_STEP_ADMIN_MINUTES" ] || { STEP_STATUS="expires $left"; return 1; }
@@ -938,6 +940,7 @@ install_macos() {
   fi
   still_admin || return 0
   { echo "softwareupdate --list before:"; printf '%s\n' "$list"; } | log_lines
+  [ "$INTERRUPTED" -eq 0 ] || return 130
   if { [ -t 0 ] || [ "$STDIN_TTY" = 1 ]; } && [ -x "$SCRIPT_CMD" ] && t=$(tmpfile); then
     to_terminal "$SCRIPT_CMD" -q "$t" "$SUDO" "$SOFTWAREUPDATE" --install --all; rc=$?
     # in raw mode Ctrl-C goes into the pty, not to our INT trap; at the sudo prompt script exits 1
