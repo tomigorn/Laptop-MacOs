@@ -1384,6 +1384,24 @@ admin_setup admin 20
 run --install
 check "end: held formula by hand" has "$(sed -n '/By hand/,$p' "$WORK/out")" "yabai: third-party tap, held for review"
 
+# ── log: version, step times, exit codes, total time ────────────────────────
+logs_dir="$HOME/.local/state/mac-outdated/logs"
+fixtures_outdated; admin_setup admin 20
+rm -f "$logs_dir"/*.log
+run --install
+logf=$(ls -t "$logs_dir"/*-install.log | head -1); log=$(cat "$logf")
+check "log: version and mode first" has "$(head -1 "$logf")" "^mac-outdated $(cat "$HERE/../VERSION") · install · [0-9-]+ [0-9:]+$"
+check "log: step start" has "$log" "^step brew: start [0-9:]+$"
+check "log: step end with exit and result" has "$log" "^step brew: end [0-9:]+, [0-9]+s, exit 0, installed$"
+check "log: total time last" has "$(tail -1 "$logf")" "^end [0-9:]+, [0-9]+s total$"
+check "terminal: no step lines" no_match "$out" "^step brew:"
+fixtures_outdated
+rm -f "$logs_dir"/*.log
+run
+logf=$(ls -t "$logs_dir"/*-check.log | head -1)
+check "log (check): version first" has "$(head -1 "$logf")" "^mac-outdated $(cat "$HERE/../VERSION") · check · [0-9-]+ [0-9:]+$"
+check "log (check): total time last" has "$(tail -1 "$logf")" "^end [0-9:]+, [0-9]+s total$"
+
 # ── safety, over every run above ─────────────────────────────────────────────
 all="$(cat "$ALLCALLS")"
 check "PrivilegesCLI only ever --status" no_match "$all" '^PrivilegesCLI .*(--add|--remove)'

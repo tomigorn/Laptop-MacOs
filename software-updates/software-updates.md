@@ -124,7 +124,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 
 - Adobe exit 2 (an update could not be installed, often because an Adobe app is open; details in Adobe's RUM log) shows yellow `some updates failed (Adobe exit 2: …)`, still exit 1; exit 1 is `failed (exit 1)`.
 - Ctrl-C during `--install` stops the whole run: the current step ends, then `interrupted — remaining steps not run`, the summary so far (`interrupted` / `not run`), exit 130. A step ending with 130 counts the same.
-- Every run (check and `--install`) writes its full output without colour codes to `~/.local/state/mac-outdated/logs/<YYYY-MM-DD-HHMMSS>-<check|install>.log`; the newest 20 are kept. Last line on the terminal: `log: <path>`. sudo prompts go to the terminal only; `softwareupdate --install` output and `softwareupdate --list` before/after go to the log.
+- Every run (check and `--install`) writes its full output without colour codes to `~/.local/state/mac-outdated/logs/<YYYY-MM-DD-HHMMSS>-<check|install>.log`; the newest 20 are kept. Last line on the terminal: `log: <path>`. Log only: first line `mac-outdated <version> · <mode> · <date time>`, per `--install` step `step <src>: start <time>` and `step <src>: end <time>, <N>s, exit <rc>, <result>`, last line `end <time>, <N>s total`. sudo prompts go to the terminal only; `softwareupdate --install` output and `softwareupdate --list` before/after go to the log.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
 - Colours (traffic light):
 

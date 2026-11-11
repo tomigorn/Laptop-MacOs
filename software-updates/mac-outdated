@@ -202,10 +202,12 @@ start_log() {  # start_log <check|install>: from here on stdout and stderr also 
   exec {OUT_FD}>&1 {ERR_FD}>&2
   exec > >(trap '' INT; exec perl -e "$SPLITTER" "$LOG") 2>&1
   LOG_PID=$!
+  log_only "mac-outdated $VERSION · $1 · $(date '+%Y-%m-%d %H:%M:%S')"
   trap finish_log EXIT
 }
 finish_log() {  # waits up to 5 s for the log writer, then names the log as the last line
   [ -n "$LOG_PID" ] || return 0
+  log_only "end $(date +%H:%M:%S), ${SECONDS}s total"
   exec >&"$OUT_FD"
   exec 2>&"$ERR_FD"
   local i=0
@@ -1133,12 +1135,13 @@ install_mode() {
   echo "  sudo asks again before a step when the last sudo was over a minute ago; the macOS step asks for your sudo password and then the owner password (both your login password)"
   sudo -v || { echo "sudo failed"; exit 2; }
   trap install_abort INT
-  local src rc label word
+  local src rc label word t0
   for src in "${INSTALL_ORDER[@]}"; do
     label=${LABELS[$src]}
     STEP=$src
     printf '\n%s\n' "$(c 1 "── $label")"
     STEP_STATUS=""
+    t0=$SECONDS; log_only "step $src: start $(date +%H:%M:%S)"
     if [ "$src" = macos ]; then
       install_macos; rc=$?
     else
@@ -1163,6 +1166,7 @@ install_mode() {
           else RESULT[$src]="failed (exit $rc)"; fi; FAILED=1 ;;
       *) RESULT[$src]="failed (exit $rc)"; FAILED=1 ;;
     esac
+    log_only "step $src: end $(date +%H:%M:%S), $((SECONDS - t0))s, exit $rc, ${RESULT[$src]}"
     case ${RESULT[$src]} in
       installed*|"up to date") word=$(c 32 "${RESULT[$src]}") ;;
       skipped*|"some updates failed"*|"not verified"*) word=$(c 33 "${RESULT[$src]}") ;;
