@@ -10,7 +10,8 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/mac-outdated.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 BIN="$WORK/bin" FIX="$WORK/fix" APPS="$WORK/apps"
 CALLS="$WORK/calls" ALLCALLS="$WORK/allcalls"
-mkdir -p "$BIN" "$WORK/home"
+mkdir -p "$BIN" "$WORK/home" "$WORK/tmp"
+export TMPDIR="$WORK/tmp"
 touch "$ALLCALLS"
 
 export HOME="$WORK/home"
@@ -74,7 +75,12 @@ esac'
 stub RemoteUpdateManager '
 case "$1" in
   --action=list) cat "$FIX/rum-list.txt" ;;
-  --action=install) if [ -f "$FIX/rum-install.txt" ]; then cat "$FIX/rum-install.txt"; else echo "Successfully installed (AdobeAcrobatDC)"; fi; [ -f "$FIX/exit-rum" ] && exit "$(cat "$FIX/exit-rum")"; [ -f "$FIX/fail-rum" ] && exit 1; exit 0 ;;
+  --action=install)
+    if [ -f "$FIX/prompt-rum" ]; then
+      printf "Proceed? "; i=0
+      while [ ! -f "$FIX/go" ] && [ "$i" -lt 60 ]; do sleep 0.1; i=$((i + 1)); done; echo
+    fi
+    if [ -f "$FIX/rum-install.txt" ]; then cat "$FIX/rum-install.txt"; else echo "Successfully installed (AdobeAcrobatDC)"; fi; [ -f "$FIX/exit-rum" ] && exit "$(cat "$FIX/exit-rum")"; [ -f "$FIX/fail-rum" ] && exit 1; exit 0 ;;
 esac'
 stub mas '
 case "$1" in
@@ -229,6 +235,8 @@ lacks() { [[ "$1" != *"$2"* ]]; }
 equals() { [ "$1" = "$2" ]; }
 has() { grep -qE "$2" <<< "$1"; }
 no_match() { ! grep -qE "$2" <<< "$1"; }
+tmp_left() { find "$WORK/tmp" -name 'mac-outdated.*' | grep -q .; }
+no_tmp_left() { ! tmp_left; }
 only_allowed_sudo() {
   local bad
   bad=$(grep '^sudo ' <<< "$1" | grep -vE '^sudo (-v|softwareupdate --install --all|RemoteUpdateManager --action=install|mas upgrade)$')
@@ -331,6 +339,23 @@ run
 check "log: pruned to 20" equals "$(find "$LOGS" -name '*.log' | wc -l | tr -d ' ')" 20
 check "log: oldest deleted" test ! -e "$LOGS/2000-01-01-000001-check.log"
 check "log: newest kept" test -s "$(logpath)"
+check "log: file private (600)" equals "$(stat -f %Lp "$(logpath)")" 600
+check "log: dir private (700)" equals "$(stat -f %Lp "$LOGS")" 700
+chmod 755 "$LOGS"; run
+check "log: wider dir tightened to 700" equals "$(stat -f %Lp "$LOGS")" 700
+check "check: no temp files left" no_tmp_left
+mkdir -p "$WORK/fixdate"
+printf '#!/bin/sh\n[ "$1" = +%%Y-%%m-%%d-%%H%%M%%S ] && { echo 2099-01-01-000000; exit 0; }\nexec /bin/date "$@"\n' > "$WORK/fixdate/date"
+chmod +x "$WORK/fixdate/date"
+PATH="$WORK/fixdate:$PATH" run; first=$(logpath)
+PATH="$WORK/fixdate:$PATH" run; second=$(logpath)
+PATH="$WORK/fixdate:$PATH" run; third=$(logpath)
+check "log: same second -> first name kept" equals "$first" "$LOGS/2099-01-01-000000-check.log"
+check "log: same second -> -2" equals "$second" "$LOGS/2099-01-01-000000-2-check.log"
+check "log: same second -> -3" equals "$third" "$LOGS/2099-01-01-000000-3-check.log"
+check "log: same second -> first not overwritten" contains "$(cat "$first")" "next: mac-outdated --install"
+check "log: suffixed one private (600)" equals "$(stat -f %Lp "$second")" 600
+rm -rf "$WORK/fixdate" "$LOGS"/2099-*.log
 
 # msupdate "Name" + "Version:" lines layout
 printf 'Updates available:\nMicrosoft Word\n\t Version: 16.115.26110212\n\t Application ID: MSWD2019\n\t Size: 1.32 GB\n' > "$FIX/msupdate-list.txt"
@@ -1198,6 +1223,7 @@ check "step exit 130: interrupted step" has "$out" "^ brew interrupted$"
 check "step exit 130: failures line and by hand still print" has "$out" "nothing failed|✗ failed:"
 check "step exit 130: by hand block" contains "$out" "By hand"
 check "step exit 130: remaining steps listed as not run" has "$out" "^ macOS not run$"
+check "step exit 130: no temp files left" no_tmp_left
 
 # Ctrl-C while a step runs: the step finishes, nothing after it runs
 touch "$FIX/prompt-brew"
@@ -1217,6 +1243,23 @@ check "Ctrl-C: later steps not run" no_match "$(calls)" "^(msupdate --install|pi
 check "Ctrl-C: message" contains "$out" "interrupted — remaining steps not run"
 check "Ctrl-C: summary" contains "$out" "Summary"
 check "Ctrl-C: log complete" contains "$(cat "$(logpath)" 2>/dev/null)" "interrupted — remaining steps not run"
+check "Ctrl-C: no temp files left" no_tmp_left
+
+# Ctrl-C while a step's output is being captured to a temp file
+touch "$FIX/prompt-rum"
+: > "$CALLS"
+set -m
+"$SCRIPT" --install > "$WORK/out" 2>&1 < /dev/null &
+pid=$!
+set +m
+for _ in $(seq 40); do grep -q 'Proceed?' "$WORK/out" && break; sleep 0.1; done
+check "Ctrl-C in Adobe: temp file exists meanwhile" tmp_left
+kill -INT "$pid"
+touch "$FIX/go"
+wait "$pid"; rc=$?
+rm -f "$FIX/prompt-rum" "$FIX/go"
+check "Ctrl-C in Adobe: exit 130" equals "$rc" 130
+check "Ctrl-C in Adobe: no temp files left" no_tmp_left
 
 # Adobe exit 2: some updates could not be installed, a warning, not a plain failure
 echo 2 > "$FIX/exit-rum"

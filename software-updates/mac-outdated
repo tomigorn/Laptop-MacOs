@@ -31,6 +31,7 @@ STAMP="$HOME/.local/state/mac-outdated/last-check"
 LOG_DIR="$HOME/.local/state/mac-outdated/logs"
 LOG_KEEP=20
 LOG="" LOG_PID="" OUT_FD="" ERR_FD=""
+TMP_DIR=""
 MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
 STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N", restart, unverified, stilloffered, unconfirmed
@@ -200,16 +201,25 @@ while (sysread(STDIN, my $buf, 65536)) {
 logline($line) if length $line;
 '
 start_log() {  # start_log <check|install>: from here on stdout and stderr also go to the log
-  mkdir -p "$LOG_DIR" 2>/dev/null || return 0
-  LOG="$LOG_DIR/$(date +%Y-%m-%d-%H%M%S)-$1.log"
-  : 2>/dev/null > "$LOG" || { LOG=""; return 0; }
+  local base n=1
+  (umask 077; mkdir -p "$LOG_DIR") 2>/dev/null && chmod 700 "$LOG_DIR" 2>/dev/null || return 0
+  base="$LOG_DIR/$(date +%Y-%m-%d-%H%M%S)"
+  LOG="$base-$1.log"
+  until (set -C; umask 077; : > "$LOG") 2>/dev/null; do
+    [ -e "$LOG" ] && [ "$n" -lt 100 ] || { LOG=""; return 0; }
+    n=$((n + 1)); LOG="$base-$n-$1.log"
+  done
   local logs=("$LOG_DIR"/*.log)
   [ "${#logs[@]}" -le "$LOG_KEEP" ] || rm -f -- "${logs[@]:0:${#logs[@]}-LOG_KEEP}"
   exec {OUT_FD}>&1 {ERR_FD}>&2
   exec > >(trap '' INT; exec perl -e "$SPLITTER" "$LOG") 2>&1
   LOG_PID=$!
   log_only "mac-outdated $VERSION · $1 · $(date '+%Y-%m-%d %H:%M:%S')"
-  trap finish_log EXIT
+}
+tmpfile() { mktemp "${TMP_DIR:-${TMPDIR:-/tmp}}/mac-outdated.XXXXXX"; }  # in the run's dir, so on_exit also removes files made in subshells
+on_exit() {
+  finish_log
+  [ -z "$TMP_DIR" ] || rm -rf -- "$TMP_DIR"
 }
 finish_log() {  # waits up to 5 s for the log writer, then names the log as the last line
   [ -n "$LOG_PID" ] || return 0
@@ -288,7 +298,7 @@ check_vulns() {
 check_brew() {
   command -v brew >/dev/null || { note brew "brew not installed" "skipped (brew not installed)" – "install brew"; return; }
   local json err tap list third
-  err=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX")
+  err=$(tmpfile)
   brew update --quiet >/dev/null 2>"$err" || note brew "brew update failed, the list may be stale"
   json=$(brew outdated --greedy --json=v2 2>>"$err") || { rm -f "$err"; check_failed brew "brew outdated failed"; return; }
   while IFS= read -r tap; do
@@ -864,7 +874,7 @@ install_macos() {
   grep -q 'No new software available' <<< "$list" && { STEP_STATUS=uptodate; return 0; }
   still_admin || return 0
   { echo "softwareupdate --list before:"; printf '%s\n' "$list"; } | log_lines
-  if { [ -t 0 ] || [ "$STDIN_TTY" = 1 ]; } && [ -x "$SCRIPT_CMD" ] && t=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX"); then
+  if { [ -t 0 ] || [ "$STDIN_TTY" = 1 ]; } && [ -x "$SCRIPT_CMD" ] && t=$(tmpfile); then
     to_terminal "$SCRIPT_CMD" -q "$t" "$SUDO" "$SOFTWAREUPDATE" --install --all; rc=$?
     # in raw mode Ctrl-C goes into the pty, not to our INT trap
     { [ "$rc" -eq 2 ] || [ "$rc" -gt 128 ]; } && LC_ALL=C grep -qE $'\x03|\\^C' "$t" && rc=130
@@ -910,7 +920,7 @@ run_noting() {  # run_noting <pattern> <command…>: the command's exit code; on
   local pattern=$1 out rc
   shift
   RUN_OUT=""
-  out=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX") || { "$@"; return; }
+  out=$(tmpfile) || { "$@"; return; }
   "$@" 2>&1 | tee -i "$out"
   rc=${PIPESTATUS[0]}
   [ "$rc" -ne 0 ] || ! grep -qE "$pattern" "$out" || STEP_STATUS=uptodate
@@ -1195,14 +1205,19 @@ install_mode() {
   exit "$FAILED"
 }
 
+setup_run() {
+  setup_color
+  TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/mac-outdated.XXXXXX") || TMP_DIR=""
+  trap on_exit EXIT
+}
 main() {
   if [ "$(id -u)" -eq 0 ]; then
     echo "run mac-outdated --install as your own user, not with sudo: it asks for your password itself (brew must not run as root)" >&2
     exit 2
   fi
   case "${1:-}" in
-    "") setup_color; start_log check; check_mode; exit $? ;;
-    --install) [ $# -eq 1 ] || { usage >&2; exit 2; }; setup_color; start_log install; install_mode ;;
+    "") setup_run; start_log check; check_mode; exit $? ;;
+    --install) [ $# -eq 1 ] || { usage >&2; exit 2; }; setup_run; start_log install; install_mode ;;
     --version) [ $# -eq 1 ] || { usage >&2; exit 2; }; echo "mac-outdated $VERSION" ;;
     -h|--help) usage ;;
     *) usage >&2; exit 2 ;;
