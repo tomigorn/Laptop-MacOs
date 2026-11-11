@@ -464,6 +464,16 @@ check "casks install: no greedy upgrade" lacks "$(calls)" "--greedy"
 jq '.casks = [{name: "utm", installed_versions: ["4.7.5"], current_version: "5.0.8", pinned: false}]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
 run --install
 check "casks install: nothing to upgrade, no cask call" lacks "$(calls)" "brew upgrade --cask"
+cp "$FIX/brew-info-installed.json" "$FIX/brew-info-installed.bak"
+jq '(.casks[] | select(.token == "xquartz")) |= . + {auto_updates: true, artifacts: [{pkg: ["XQuartz.pkg"]}]}' "$FIX/brew-info-installed.bak" > "$FIX/brew-info-installed.json"
+jq '.casks = [{name: "xquartz", installed_versions: ["2.8.5"], current_version: "2.8.6", pinned: false}]' "$FIXTURES/brew-outdated-none.json" > "$FIX/brew-outdated.json"
+run
+check "cask without app, self-updating: under Open to update" has "$(sed -n '/Open to update/,/Summary/p' <<< "$out")" "xquartz 2.8.5 → 2.8.6"
+check "cask without app, self-updating: not installable" lacks "$(sed -n "/^ casks$/,/Open to update/p" <<< "$out")" "xquartz"
+run --install
+check "cask without app, self-updating: not upgraded" lacks "$(calls)" "brew upgrade --cask"
+check "cask without app, self-updating: by hand" contains "$out" "xquartz: open the app, it updates itself"
+mv "$FIX/brew-info-installed.bak" "$FIX/brew-info-installed.json"
 rm -rf "$APPS/UTM.app" "$APPS/BetterDisplay.app"
 make_app Discord com.hammerandchisel.discord 0.0.389
 cp "$FIXTURES/brew-outdated.json" "$FIX/brew-outdated.json"

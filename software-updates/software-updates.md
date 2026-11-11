@@ -88,7 +88,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | Real app | Shown | Counts |
 |---|---|---|
 | at or above brew's latest | dim `<token>: app already at <ver> (brew's record is stale)`, in the brew section, else under "Open to update" | no |
-| older, cask `auto_updates` | "Open to update" | by hand |
+| older (or no app, e.g. a pkg cask), cask `auto_updates` | "Open to update" | by hand |
 | older (or unknown), no `auto_updates` | casks row | via `--install` |
 
 - brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.

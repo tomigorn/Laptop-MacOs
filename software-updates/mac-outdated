@@ -49,7 +49,7 @@ REVIEW_DAYS=14
 SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian Docker Steam zoom.us Element "Autodesk Fusion" "iStat Menus")
 MANAGED_IDS=('com.apple.*' 'com.microsoft.*' 'com.adobe.*' 'com.jamf*' '*ethz*' 'corp.sap.privileges' 'nl.root3.support')
 BREW_APPS=""
-CASK_TABLE=""  # token<TAB>app bundle name<TAB>auto_updates, from brew info --installed
+CASK_TABLE=""  # token, app bundle name, auto_updates separated by \x1f, from brew info --installed
 declare -A CASK_BY_APP=()  # lowercased app bundle name -> token|version|auto_updates, from Homebrew's API cache
 declare -A HINTS=(
   [brew]="mac-outdated --install" [msupdate]="mac-outdated --install" [adobe]="mac-outdated --install" [mas]="mac-outdated --install"
@@ -157,11 +157,11 @@ load_brew_apps() {
   local json
   json=$(brew info --cask --json=v2 --installed 2>/dev/null)
   BREW_APPS=$(jq -r '.casks[].artifacts[]? | objects | .app? // empty | .[] | strings' <<< "$json" 2>/dev/null)
-  CASK_TABLE=$(jq -r '.casks[] | [.token, ([.artifacts[]? | objects | .app? // empty | .[] | strings][0] // ""), (.auto_updates == true)] | @tsv' <<< "$json" 2>/dev/null)
+  CASK_TABLE=$(jq -r '.casks[] | [.token, ([.artifacts[]? | objects | .app? // empty | .[] | strings][0] // ""), (.auto_updates == true | tostring)] | map(gsub("[[:cntrl:]]"; "")) | join("\u001f")' <<< "$json" 2>/dev/null)
 }
 cask_state() {  # cask_state <token> <latest>: prints "<state>|<app name>|<app version>", state stale (app already current), self (updates itself), install
   local token=$1 latest=${2%%,*} t app auto dirs d ver=""
-  IFS=$'\t' read -r t app auto < <(awk -F'\t' -v t="$token" '$1 == t' <<< "$CASK_TABLE")
+  IFS=$'\x1f' read -r t app auto < <(awk -F$'\x1f' -v t="$token" '$1 == t' <<< "$CASK_TABLE")
   if [ -n "${app:-}" ]; then
     IFS=: read -ra dirs <<< "$APP_DIRS"
     for d in "${dirs[@]}"; do [ -d "$d/$app" ] && { ver=$(app_version "$d/$app"); break; }; done
@@ -317,7 +317,7 @@ check_brew() {
       IFS='|' read -r state app ver < <(cask_state "$name" "$latest")
       case $state in
         stale) note brew "$name: app already at $ver (brew's record is stale)" "" i; continue ;;
-        self) item brew "$app" "$ver" "${latest%%,*}" open; continue ;;
+        self) [ "$ver" != "?" ] || ver=$inst; item brew "${app:-$name}" "$ver" "${latest%%,*}" open; continue ;;
       esac
     elif is_listed "$third" "${name##*/}"; then
       note brew "$(review_text "$name" "$inst" "$latest")" "" + "review, then brew upgrade ${name##*/}"
