@@ -149,7 +149,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | Microsoft AutoUpdate | `msupdate --list`, lines `<app ID>  <title> Update <version> (<build>)`: app ID -> app (`MSWD2019` Word, `XCEL2019` Excel, `PPT32019` PowerPoint, `OPIM2019` Outlook, `ONMC2019` OneNote, `ONDR18` OneDrive, `MSau04` AutoUpdate, Teams, Defender, Edge, …; unknown ID: the title), installed = the app's `CFBundleShortVersionString`, latest = the title's version (the build only without one) | `msupdate --list` first: no updates -> `up to date`; else `msupdate --install --wait 600` (without a wait it can hang until the MAU window is clicked) |
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
 | App Store | `/opt/homebrew/bin/mas outdated --json` (note if it is missing) | `mas outdated` first: nothing -> `up to date`; mas not resolving into `/opt/homebrew/Cellar/mas/` -> `skipped (mas not from Homebrew)`, no sudo; else `sudo mas upgrade` (mas needs root to update apps) |
-| macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all` through `script -q`, never restarts; then `--list` again: nothing left -> `installed`; still offered: labels whose `--list` entry says `Action: restart` count as staged when the output mentions restart or has a `Downloaded: <Title>` line for that label, all others (Command Line Tools, …) as failed; nothing failed -> `installed, restart required`, else `failed (still offered after install: <labels>)` plus `; owner password empty or wrong?` when no restart label was staged; `--list` failing -> `installed (not verified: …)`; stdin not a terminal and still offered -> `not verified (still offered, no terminal: restart if macOS asks, else rerun in a terminal)`, counts as failed |
+| macOS | `softwareupdate --list` (labels in `macos-staged`: by hand, `<title>: installed, restart the Mac to finish`) | `softwareupdate --list` first; then `sudo softwareupdate --install --all` through `script -q` (never restarts), `--list` again: results below |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | uv tools | `uv tool list --outdated` (`none installed` without tools; skipped when uv is missing) | `uv tool upgrade --all` |
 | VS Code extensions | count on the progress line, then a section with every extension and its version (`code --list-extensions --show-versions`), shown also when nothing is outdated; no outdated check | `code --update-extensions` (all) |
@@ -157,6 +157,20 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | Sparkle apps | appcast from `SUFeedURL`, only `http(s)` (beta channel skipped; other schemes: a note, not fetched); no `SUFeedURL` (VLC, TeamViewer): the cask that installs the app, as for apps without an updater | none: "Open to update"; no feed and cask without `auto_updates`: `brew install --cask --force <token>` |
 | Apps without an updater | cask that installs the app (see below) | none: `brew install --cask --force <token>` (replaces the older app, settings stay; `--adopt` only takes an identical version); `auto_updates` cask -> "Open to update" |
 | Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion, iStat Menus) | listed once | none: update on start |
+
+macOS results (`--install`):
+
+| Result | When |
+|---|---|
+| `up to date` | `--list` finds nothing new (no admin, no sudo) |
+| `installed` | nothing offered after the install |
+| `installed, restart required` | still offered, but only `Action: restart` labels, each staged: the output mentions restart, has `Downloaded: <Title>`, or the label was staged before; By hand: restart |
+| `staged, restart required` | every offered label is in `macos-staged`: nothing runs, counts as up to date; By hand: restart |
+| `failed (still offered after install: <labels>)` | other labels still offered (Command Line Tools, …); `; owner password empty or wrong?` when none was staged |
+| `not verified (still offered, no terminal: …)` | stdin not a terminal and still offered; counts as failed |
+| `installed (not verified: softwareupdate --list failed)` | the second `--list` fails |
+| `interrupted` | Ctrl-C in `script`, also at the sudo prompt |
+| `failed (exit N)` | the first `--list` or the install fails |
 
 App -> cask lookup (no network, no `brew info` per app):
 
