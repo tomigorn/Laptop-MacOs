@@ -90,7 +90,7 @@ esac'
 stub softwareupdate '
 case "$1" in
   --list) [ -f "$FIX/fail-softwareupdate-list" ] && { echo "Cannot connect to the Apple Software Update server." >&2; exit 1; }; cat "$FIX/softwareupdate-list.txt" >&2 ;;
-  --install) [ -f "$FIX/su-norestart" ] || echo "Restart is required to complete installation"; [ -f "$FIX/softwareupdate-after.txt" ] && cp "$FIX/softwareupdate-after.txt" "$FIX/softwareupdate-list.txt"; [ -f "$FIX/fail-softwareupdate-list-after" ] && touch "$FIX/fail-softwareupdate-list"; [ -f "$FIX/fail-softwareupdate" ] && exit 1; exit 0 ;;
+  --install) if [ -f "$FIX/softwareupdate-install-output.txt" ]; then cat "$FIX/softwareupdate-install-output.txt"; elif [ ! -f "$FIX/su-norestart" ]; then echo "Restart is required to complete installation"; fi; [ -f "$FIX/softwareupdate-after.txt" ] && cp "$FIX/softwareupdate-after.txt" "$FIX/softwareupdate-list.txt"; [ -f "$FIX/fail-softwareupdate-list-after" ] && touch "$FIX/fail-softwareupdate-list"; [ -f "$FIX/fail-softwareupdate" ] && exit 1; exit 0 ;;
 esac'
 stub sw_vers 'echo 27.2'
 stub pipx '
@@ -1445,6 +1445,20 @@ fixtures_outdated; admin_setup admin 20
 run --install
 check "macOS: only CLT still offered + restart text -> failed naming CLT" has "$out" "macOS \.+ failed \(still offered after install: Command Line Tools for Xcode-27.2; owner password empty or wrong\?\)$"
 check "macOS: only CLT still offered -> no restart line" lacks "$(sed -n '/By hand/,$p' "$WORK/out")" "restart the Mac"
+
+# staged without the word restart: the "Downloaded: <title>" line counts
+fixtures_outdated; admin_setup admin 20
+cp "$FIXTURES/softwareupdate-list-downloaded.txt" "$FIX/softwareupdate-list.txt"
+cp "$FIXTURES/softwareupdate-list-downloaded.txt" "$FIX/softwareupdate-after.txt"
+cp "$FIXTURES/softwareupdate-install-downloaded.txt" "$FIX/softwareupdate-install-output.txt"
+run --install
+check "macOS Downloaded line: installed, restart required" has "$out" "macOS \.+ installed, restart required$"
+check "macOS Downloaded line: exit 0" equals "$rc" 0
+check "macOS Downloaded line: restart by hand" contains "$(sed -n '/By hand/,$p' "$WORK/out")" "  macOS 27.2.1-26B131: restart the Mac when it suits you"
+cp "$FIXTURES/softwareupdate-install-downloading.txt" "$FIX/softwareupdate-install-output.txt"
+run --install
+check "macOS only Downloading: failed with the password hint" has "$out" "macOS \.+ failed \(still offered after install: macOS 27.2.1-26B131; owner password empty or wrong\?\)$"
+check "macOS only Downloading: no restart line" lacks "$(sed -n '/By hand/,$p' "$WORK/out")" "restart the Mac"
 
 fixtures_outdated; admin_setup admin 20
 run --install

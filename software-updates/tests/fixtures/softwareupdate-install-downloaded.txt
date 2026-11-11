@@ -1,0 +1,6 @@
+Password:
+Software Update Tool
+Finding available software
+Downloading macOS 27.2.1
+Password: 
+Downloaded: macOS 27.2.1

@@ -890,22 +890,20 @@ install_macos() {
   still=$(labels_still_offered "$list" "$after")
   [ -n "$still" ] || return 0
   [ "$tty" -eq 1 ] || { STEP_STATUS=unconfirmed; return 1; }
-  local needs=() other=() staged=0
+  local staged=() other=() entry title
   while IFS= read -r t; do
-    if grep -A1 -xF "* Label: $t" <<< "$list" | grep -q 'Action: restart'; then needs+=("$t"); else other+=("$t"); fi
+    entry=$(grep -A1 -xF "* Label: $t" <<< "$list")
+    title=$(sed -n 's/^[[:space:]]*Title: \([^,]*\),.*/\1/p' <<< "$entry")
+    if grep -q 'Action: restart' <<< "$entry" && { grep -qi restart <<< "$text" || has_downloaded "$text" "$title"; }; then staged+=("$t"); else other+=("$t"); fi
   done <<< "$still"
-  if [ "${#needs[@]}" -gt 0 ] && grep -qi restart <<< "$text"; then
-    staged=1
-    MACOS_STAGED=$(join_labels "${needs[@]}")
-  else
-    other+=("${needs[@]}")
-  fi
+  [ "${#staged[@]}" -eq 0 ] || MACOS_STAGED=$(join_labels "${staged[@]}")
   [ "${#other[@]}" -gt 0 ] || { STEP_STATUS=restart; return 0; }
   MACOS_FAILED=$(join_labels "${other[@]}")
-  [ "$staged" -eq 1 ] || MACOS_FAILED+="; owner password empty or wrong?"
+  [ "${#staged[@]}" -gt 0 ] || MACOS_FAILED+="; owner password empty or wrong?"
   STEP_STATUS=stilloffered
   return 1
 }
+has_downloaded() { [ -n "$2" ] && awk -v l="Downloaded: $2" '{ sub(/[[:space:]]+$/, "") } $0 == l { f = 1 } END { exit !f }' <<< "$1"; }  # has_downloaded <transcript> <title>
 join_labels() { local out=$1 l; shift; for l in "$@"; do out+=", $l"; done; printf '%s' "$out"; }
 to_terminal() {  # past the log pipe, so sudo puts the terminal in raw mode and its prompts stay hidden
   if [ -n "$OUT_FD" ]; then "$@" 1>&"$OUT_FD" 2>&"$ERR_FD"; else "$@"; fi

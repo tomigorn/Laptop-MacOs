@@ -1,0 +1,4 @@
+Password:
+Software Update Tool
+Finding available software
+Downloading: 100.00%
