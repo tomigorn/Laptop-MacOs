@@ -1046,7 +1046,9 @@ fixtures_outdated; admin_setup admin 20
 MAC_OUTDATED_STDIN_TTY='' run --install
 check "macOS: stdin not a terminal -> no script" no_match "$(calls)" '^script '
 check "macOS: stdin not a terminal -> plain sudo" has "$(calls)" '^sudo softwareupdate --install --all$'
-check "macOS: stdin not a terminal -> still verified" has "$out" "macOS \\.+ installed, restart required"
+check "macOS: stdin not a terminal, still offered -> not verified" has "$out" "macOS \\.+ not verified \\(still offered, no terminal: restart if macOS asks, else rerun in a terminal\\)$"
+check "macOS: stdin not a terminal, still offered -> exit 1" equals "$rc" 1
+check "macOS: stdin not a terminal, still offered -> counted as failed" has "$out" "total 7 installed · 1 failed"
 
 fixtures_outdated; admin_setup admin 20
 
@@ -1319,7 +1321,8 @@ check "brew never via sudo" no_match "$all" '^sudo brew'
 check "brew upgrade never greedy" no_match "$all" '^brew upgrade .*--greedy'
 check "only sudo -v, macOS, Adobe and mas upgrade via sudo" only_allowed_sudo "$all"
 check "softwareupdate never restarts" no_match "$all" '^softwareupdate .*(-R|--restart|--reboot)'
-check "script never records input" no_match "$all" '^script -[a-z]*r'
+check "script never records input" no_match "$all" '^script( -[A-Za-z]+)* -[A-Za-z]*r'
+check "safety regex catches a later -r" has "script -q -r f sudo x" '^script( -[A-Za-z]+)* -[A-Za-z]*r'
 check "script only ever as script -q" equals "$(grep '^script' <<< "$all" | grep -vc '^script -q ')" 0
 
 echo

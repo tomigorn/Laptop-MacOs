@@ -27,7 +27,7 @@ LOG_KEEP=20
 LOG="" LOG_PID="" OUT_FD="" ERR_FD=""
 MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
-STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N", restart, unverified, stilloffered
+STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N", restart, unverified, stilloffered, unconfirmed
 MACOS_STAGED=""  # macOS labels still offered after install because they wait for a restart
 
 SOURCES=(brew taps vulns scripts msupdate adobe mas macos pipx uv vscode xxh sparkle unmanaged)
@@ -845,7 +845,7 @@ still_admin() {  # before each sudo step; unknown time passes, the start already
 # ── install_<src>: the tool's exit code; a step that does not run sets STEP_STATUS and returns 0 ──
 install_macos() {
   command -v softwareupdate >/dev/null || { STEP_STATUS=missing; return 0; }
-  local list after rc t="" text="" still
+  local list after rc t="" text="" still tty=1
   list=$(softwareupdate --list 2>&1) || { rc=$?; printf '%s\n' "$list" | indent; return "$rc"; }
   grep -q 'No new software available' <<< "$list" && { STEP_STATUS=uptodate; return 0; }
   still_admin || return 0
@@ -858,14 +858,14 @@ install_macos() {
     rm -f "$t"
     { echo "softwareupdate --install output:"; printf '%s\n' "$text"; } | log_lines
   else
-    to_terminal sudo softwareupdate --install --all; rc=$?
-    text=$(grep 'Action: restart' <<< "$list")  # no transcript: the restart need from --list
+    to_terminal sudo softwareupdate --install --all; rc=$?; tty=0
   fi
   [ "$rc" -eq 0 ] || return "$rc"
   after=$(softwareupdate --list 2>&1) || { STEP_STATUS=unverified; return 0; }
   { echo "softwareupdate --list after:"; printf '%s\n' "$after"; } | log_lines
   still=$(labels_still_offered "$list" "$after")
   [ -n "$still" ] || return 0
+  [ "$tty" -eq 1 ] || { STEP_STATUS=unconfirmed; return 1; }
   if grep -qi restart <<< "$text"; then STEP_STATUS=restart; MACOS_STAGED=$still; return 0; fi
   STEP_STATUS=stilloffered
   return 1
@@ -1044,7 +1044,7 @@ install_summary() {
       installed*) n_inst=$((n_inst + 1)); word=$(c 32 "$r") ;;
       "up to date") n_up=$((n_up + 1)); word=$(c 32 "$r") ;;
       skipped*) n_skip=$((n_skip + 1)); word=$(c 33 "$r") ;;
-      "some updates failed"*) n_fail=$((n_fail + 1)); word=$(c 33 "$r") ;;
+      "some updates failed"*|"not verified"*) n_fail=$((n_fail + 1)); word=$(c 33 "$r") ;;
       interrupted) n_int=$((n_int + 1)); word=$(c 31 "$r") ;;
       "not run") n_not=$((n_not + 1)); word=$(c 31 "$r") ;;
       *) n_fail=$((n_fail + 1)); word=$(c 31 "$r") ;;
@@ -1098,6 +1098,7 @@ install_mode() {
       restart:*) RESULT[$src]="installed, restart required" ;;
       unverified:*) RESULT[$src]="installed (not verified: softwareupdate --list failed)" ;;
       stilloffered:*) RESULT[$src]="failed (still offered after install: owner password empty or wrong?)"; FAILED=1 ;;
+      unconfirmed:*) RESULT[$src]="not verified (still offered, no terminal: restart if macOS asks, else rerun in a terminal)"; FAILED=1 ;;
       :0) RESULT[$src]=installed ;;
       :130) RESULT[$src]=interrupted ;;
       :2) if [ "$src" = adobe ]; then RESULT[$src]="some updates failed (Adobe exit 2: often an open Adobe app; see Adobe's RUM log)"
@@ -1106,7 +1107,7 @@ install_mode() {
     esac
     case ${RESULT[$src]} in
       installed*|"up to date") word=$(c 32 "${RESULT[$src]}") ;;
-      skipped*|"some updates failed"*) word=$(c 33 "${RESULT[$src]}") ;;
+      skipped*|"some updates failed"*|"not verified"*) word=$(c 33 "${RESULT[$src]}") ;;
       *) word=$(c 31 "${RESULT[$src]}") ;;
     esac
     progress_start "$label"
