@@ -1016,7 +1016,7 @@ RemoteUpdateManager --action=install
 sudo mas upgrade
 mas upgrade
 brew update
-brew upgrade --formula
+brew upgrade --formula aom bash btop
 brew upgrade --cask ghostty
 msupdate --install --wait 600
 pipx upgrade-all
@@ -1350,9 +1350,31 @@ cp "$FIXTURES/mas-outdated.json" "$FIX/mas-outdated.json"
 run --install
 rm -f "$FIX/fail-pipx" "$FIX/fail-mas-outdated"
 check "nothing updated but failing: still failed" has "$out" "^ pipx \\.+ failed \\(exit 1\\)$"
-check "App Store list failing: upgrade still runs" contains "$(calls)" "mas upgrade"
-check "App Store list failing: installed" has "$out" "^ App Store \\.+ installed$"
+check "App Store list failing: no upgrade" lacks "$(calls)" "mas upgrade"
+check "App Store list failing: failed" has "$out" "^ App Store \\.+ failed \\(exit 1\\)$"
+check "App Store list failing: error shown" contains "$out" "Error: offline"
 rm -f "$FIX/rum-install.txt" "$FIX/pipx-upgrade.txt" "$FIX/uv-upgrade.txt" "$FIX/code-update.txt"
+
+# brew: nothing to upgrade is up to date, a failed update or a missing jq is a failure
+fixtures_current; admin_setup admin 20
+run --install
+check "brew nothing to upgrade: up to date" has "$out" "^ brew \\.+ up to date$"
+check "brew nothing to upgrade: no upgrade call" no_match "$(calls)" "^brew upgrade"
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/fail-brew-update"
+run --install
+rm -f "$FIX/fail-brew-update"
+check "brew update failing: failed" has "$out" "^ brew \\.+ failed \\(exit 1\\)$"
+check "brew update failing: message" contains "$out" "brew update failed, upgrading anyway"
+check "brew update failing: still upgrades" contains "$(calls)" "brew upgrade --formula"
+check "brew update failing: exit 1" equals "$rc" 1
+mkdir -p "$WORK/nojq"
+for f in /bin/* /usr/bin/* "$BIN"/*; do [ "$(basename "$f")" = jq ] || ln -sf "$f" "$WORK/nojq/"; done
+PATH="$WORK/nojq" run --install
+check "jq missing: brew failed" has "$out" "^ brew \\.+ failed \\(exit 1\\)$"
+check "jq missing: hint" contains "$out" "jq not found: brew install jq"
+check "jq missing: no brew upgrade" no_match "$(calls)" "^brew upgrade"
+rm -rf "$WORK/nojq"
 
 # a missing tool is skipped, not a failure
 mkdir -p "$WORK/nomas"

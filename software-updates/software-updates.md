@@ -109,7 +109,8 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | Source | Signal |
 |---|---|
 | Adobe | `No new applicable Updates` |
-| App Store | `mas outdated` lists nothing (then no `mas upgrade`, no admin check) |
+| App Store | `mas outdated` lists nothing (then no `mas upgrade`, no admin check); `mas outdated` failing -> `failed`, no `mas upgrade` |
+| brew | `brew outdated` lists no formula and no cask to upgrade (third-party held, self-updating and stale casks don't count); `brew update` failing -> `failed` (still upgrades); no `jq` -> `failed`, `jq not found: brew install jq`, no upgrade |
 | pipx | `No packages upgraded` |
 | uv tools | `Nothing to upgrade` |
 | VS Code extensions | `No extension to update` |
@@ -139,7 +140,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 
 | Source | Check | Install |
 |---|---|---|
-| brew (formulae + casks) | `brew outdated --greedy --json=v2` (after `brew update`), casks checked against the real app | `brew upgrade --formula` (naming the formulae when a third-party tap formula is installed, those are held), then `brew upgrade --cask <tokens>` only for non-auto-updating casks whose app is older; never `--greedy`, never under sudo |
+| brew (formulae + casks) | `brew outdated --greedy --json=v2` (after `brew update`), casks checked against the real app | `brew upgrade --formula <names>` from `brew outdated --formula` (third-party tap formulae held), then `brew upgrade --cask <tokens>` only for non-auto-updating casks whose app is older; never `--greedy`, never under sudo |
 | brew taps | `brew tap` minus core/cask: by hand when nothing installed comes from the tap (`brew list --full-name`; installed under the tap's old owner counts, e.g. `koekeishiya/formulae/yabai` for `asmvik/formulae`) or its last commit is over 2 years old (`git log` in `brew --repo <tap>`); loads no formula from the tap | none: `brew untap <tap>` |
 | brew vulnerabilities | `brew vulns --json` (OSV.dev; formulae only, some skipped), info only | none |
 | Install scripts | `*.sh` and `install*` files of this repo (found from the script's real path; `.git`, `tests`, `fixtures` skipped) naming `brew install <owner>/<tap>/<name>` or `brew tap <owner>/<tap>` for a tap that is not tapped (comments and `homebrew/*` skipped) | none: fix the script |
