@@ -1,6 +1,6 @@
 #!/opt/homebrew/bin/bash
 # Lists outdated software from every update source on this Mac; --install installs the updates.
-#   mac-outdated [--install | --help]
+#   mac-outdated [--install | --version | --help]
 set -uo pipefail
 
 PRIVILEGESCLI=/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI
@@ -8,6 +8,8 @@ MSUPDATE="/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app
 RUM=/usr/local/bin/RemoteUpdateManager
 APP_DIRS=/Applications:$HOME/Applications
 REPO_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." 2>/dev/null && pwd -P)
+VERSION=$(cat "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/VERSION" 2>/dev/null) || VERSION=""
+VERSION=${VERSION:-?}
 if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; never honoured otherwise, RUM runs under sudo
   PRIVILEGESCLI=${MAC_OUTDATED_PRIVILEGESCLI:-$PRIVILEGESCLI}
   MSUPDATE=${MAC_OUTDATED_MSUPDATE:-$MSUPDATE}
@@ -48,10 +50,12 @@ THIN=$(printf '─%.0s' {1..32})
 COLOR=0
 
 usage() {
+  echo "mac-outdated $VERSION"
   cat <<'EOF'
 usage: mac-outdated [--install]
   (none)     check every source, print what is outdated (no admin needed)
   --install  install every available update except third-party tap formulae, held for review (needs admin from the Privileges app, >= 15 min left)
+  --version  print the version
   -h, --help this text
 exit: 0 nothing outdated / all installed, 1 something outdated / something failed, 2 usage or admin precondition, 130 interrupted (Ctrl-C)
 
@@ -747,7 +751,7 @@ check_mode() {
   command -v jq >/dev/null || { echo "jq not found: brew install jq" >&2; exit 2; }
   load_brew_apps
   load_cask_map
-  header "mac-outdated"
+  header "mac-outdated v$VERSION"
   local src block
   declare -A LINES
   for src in "${SOURCES[@]}"; do
@@ -1038,7 +1042,7 @@ install_abort() {  # Ctrl-C or a step ending with 130: no further steps
 }
 
 install_mode() {
-  header "mac-outdated --install"
+  header "mac-outdated v$VERSION --install"
   require_admin || exit 2
   echo "  sudo may ask for your password at the start, during brew (some casks), and again for later steps"
   sudo -v || { echo "sudo failed"; exit 2; }
@@ -1089,6 +1093,7 @@ main() {
   case "${1:-}" in
     "") setup_color; start_log check; check_mode; exit $? ;;
     --install) [ $# -eq 1 ] || { usage >&2; exit 2; }; setup_color; start_log install; install_mode ;;
+    --version) [ $# -eq 1 ] || { usage >&2; exit 2; }; echo "mac-outdated $VERSION" ;;
     -h|--help) usage ;;
     *) usage >&2; exit 2 ;;
   esac

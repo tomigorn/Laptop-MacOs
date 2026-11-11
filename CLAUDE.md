@@ -24,3 +24,9 @@ Global rules apply (`~/.claude/CLAUDE.md`). Only what is special here:
 - tag: `window-manager-X.Y.Z`, annotated (`window manager X.Y.Z`)
 - bumps: only changes under `window-manager/`
 - extra steps: none
+
+## Version (mac-outdated)
+- file: `software-updates/VERSION`
+- tag: `mac-outdated-X.Y.Z`, annotated (`mac-outdated X.Y.Z`)
+- bumps: only changes under `software-updates/`
+- extra steps: `mac-outdated --version` shows it

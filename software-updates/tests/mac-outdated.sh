@@ -231,6 +231,7 @@ only_allowed_sudo() {
 # ── check mode: parsers ──────────────────────────────────────────────────────
 fixtures_outdated
 run
+check "check: header with version" has "$out" "^mac-outdated v$(cat "$HERE/../VERSION") · "
 check "check: something outdated -> exit 1" equals "$rc" 1
 check "brew: formula, last installed version" contains "$out" "aom 3.15.2 → 3.15.3"
 check "brew: formula" contains "$out" "bash 5.3.15 → 5.3.20"
@@ -666,7 +667,7 @@ check "xxh: outdated tool" contains "$out" "starship 1.27.0 → 1.28.0"
 check "xxh: tag without v" contains "$out" "fastfetch 2.70.0 → 2.71.0"
 check "xxh: same version in both stores listed once" equals "$(grep -c 'starship 1.27.0' <<< "$out")" 1
 check "xxh: current tool not listed" lacks "$out" "fish 4.9.3 →"
-check "xxh: backup store ignored" lacks "$out" "1.0.0"
+check "xxh: backup store ignored" lacks "$out" "starship 1.0.0"
 check "xxh: progress" has "$out" "^ xxh remote binaries \.+ 2 outdated$"
 check "xxh: section" contains "$out" "xxh remote binaries · 2 outdated"
 check "xxh: section hint" contains "$out" "bump the pin in terminal/remote-binaries.conf, then terminal/install.sh --refresh-remote"
@@ -908,6 +909,14 @@ check "--help: exit 0" equals "$rc" 0
 check "--help: usage" contains "$out" "usage: mac-outdated [--install]"
 check "--help: lists -h" contains "$out" "-h, --help"
 check "--help: examples" contains "$out" "examples:"
+run --version
+check "--version: exit 0" equals "$rc" 0
+check "--version: prints the VERSION file" equals "$out" "mac-outdated $(cat "$HERE/../VERSION")"
+run --help
+check "help: version on the first line" has "$out" "^mac-outdated $(cat "$HERE/../VERSION")"
+mkdir -p "$WORK/nover"; cp "$SCRIPT" "$WORK/nover/mac-outdated"
+"$WORK/nover/mac-outdated" --version > "$WORK/out" 2>&1
+check "--version without VERSION file: ?" equals "$(cat "$WORK/out")" "mac-outdated ?"
 run -h
 check "-h: usage" contains "$out" "usage: mac-outdated [--install]"
 run --bogus
@@ -922,8 +931,9 @@ done
 FISH="$(PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" command -v fish)"
 if [ -n "$FISH" ]; then
   complete_line() { "$FISH" --no-config -c "source '$COMPLETION'; complete -C '$1'" | cut -f1 | tr '\n' ' '; }
-  check "completion: first word offers --install and --help" equals "$(complete_line 'mac-outdated --')" "--help --install "
-  check "completion: flags offered without typing a dash" equals "$(complete_line 'mac-outdated ')" "--help --install "
+  check "completion: --version" contains "$(cat "$HERE/../completions/mac-outdated.fish")" "-l version"
+  check "completion: first word offers --install, --help, --version" equals "$(complete_line 'mac-outdated --')" "--help --install --version "
+  check "completion: flags offered without typing a dash" equals "$(complete_line 'mac-outdated ')" "--help --install --version "
   check "completion: nothing after a flag" equals "$(complete_line 'mac-outdated --install --')" ""
 fi
 HOME="$WORK/inst-home" "$HERE/../install.sh" > /dev/null 2>&1
@@ -971,7 +981,7 @@ check "admin 20 min: no password-once promise" lacks "$out" "password once"
 check "admin 20 min: sudo prompts named" contains "$out" "sudo may ask for your password at the start, during brew (some casks), and again for later steps"
 check "admin 20 min: restart required shown" contains "$out" "restart required"
 check "admin 20 min: summary" has "$out" "pipx \\.+ installed"
-check "admin 20 min: header" has "$out" "^mac-outdated --install · [0-9-]+ [0-9:]+"
+check "admin 20 min: header" has "$out" "^mac-outdated v$(cat "$HERE/../VERSION") --install · [0-9-]+ [0-9:]+"
 check "admin 20 min: subheader per source" contains "$out" "── brew"
 check "admin 20 min: summary section" contains "$out" "Summary"
 check "admin 20 min: summary total" has "$out" "total 8 installed"
