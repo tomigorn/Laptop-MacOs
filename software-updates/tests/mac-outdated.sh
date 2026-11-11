@@ -1280,6 +1280,8 @@ check "Ctrl-C: exit 130" equals "$rc" 130
 check "Ctrl-C: later steps not run" no_match "$(calls)" "^(msupdate --install|pipx upgrade-all|code --update-extensions|softwareupdate --install)"
 check "Ctrl-C: message" contains "$out" "interrupted — remaining steps not run"
 check "Ctrl-C: summary" contains "$out" "Summary"
+check "Ctrl-C: summary not indented" has "$(cat "$WORK/out")" "^ Summary$"
+check "Ctrl-C: no log-only end line on the terminal" no_match "$(cat "$WORK/out")" "end [0-9:]+, [0-9]+s total"
 check "Ctrl-C: log complete" contains "$(cat "$(logpath)" 2>/dev/null)" "interrupted — remaining steps not run"
 check "Ctrl-C: no temp files left" no_tmp_left
 
@@ -1298,6 +1300,33 @@ wait "$pid"; rc=$?
 rm -f "$FIX/prompt-rum" "$FIX/go"
 check "Ctrl-C in Adobe: exit 130" equals "$rc" 130
 check "Ctrl-C in Adobe: no temp files left" no_tmp_left
+
+# Ctrl-C to the whole process group (as a terminal sends it) while an indented step runs
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/prompt-brew"
+: > "$CALLS"
+set -m
+"$SCRIPT" --install > "$WORK/out" 2>&1 < /dev/null &
+pid=$!
+set +m
+for _ in $(seq 40); do grep -q 'Proceed?' "$WORK/out" && break; sleep 0.1; done
+t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+kill -INT -- "-$pid"
+wait "$pid"; rc=$?
+ms=$(( $(perl -MTime::HiRes=time -e 'printf "%d", time * 1000') - t0 ))
+raw=$(cat "$WORK/out")
+rm -f "$FIX/prompt-brew"
+check "group Ctrl-C: exit 130" equals "$rc" 130
+check "group Ctrl-C: ends within 3 s" test "$ms" -lt 3000
+check "group Ctrl-C: brew interrupted" has "$raw" "^  brew \\.+ interrupted$"
+check "group Ctrl-C: message not indented" has "$raw" "^  interrupted — remaining steps not run$"
+check "group Ctrl-C: summary not indented" has "$raw" "^ Summary$"
+check "group Ctrl-C: summary rows not indented" has "$raw" "^  brew {2,}interrupted$"
+check "group Ctrl-C: by hand not indented" has "$raw" "^ By hand$"
+check "group Ctrl-C: no log-only end line on the terminal" no_match "$raw" "end [0-9:]+, [0-9]+s total"
+check "group Ctrl-C: log line last" has "$(tail -n 1 "$WORK/out")" "^log: "
+check "group Ctrl-C: rest of the brew step not run" no_match "$(calls)" "^brew upgrade --cask"
+check "group Ctrl-C: later steps not run" no_match "$(calls)" "^(msupdate --install|pipx upgrade-all|code --update-extensions|softwareupdate --install)"
 
 # Adobe exit 2: some updates could not be installed, a warning, not a plain failure
 echo 2 > "$FIX/exit-rum"

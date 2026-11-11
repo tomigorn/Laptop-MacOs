@@ -1011,6 +1011,7 @@ install_brew() {
       self) echo "$token: updates itself on start, open the app"; selfs+=("$token") ;;
     esac
   done < <(jq -r '.casks[] | select(.pinned | not) | [.name, .current_version] | @tsv' <<< "$json")
+  [ "$INTERRUPTED" -eq 0 ] || return 130
   if [ "${#casks[@]}" -gt 0 ]; then
     did=1
     brew upgrade --cask "${casks[@]}"; r=$?
@@ -1142,7 +1143,7 @@ indent() {  # indents tool output as it arrives; a line without newline (a promp
 }
 
 declare -A RESULT
-STEP="" FAILED=0
+STEP="" FAILED=0 INTERRUPTED=0
 BY_HAND=()
 hand() { BY_HAND+=("$1"); }
 
@@ -1197,7 +1198,7 @@ install_summary() {
 }
 
 install_abort() {  # Ctrl-C or a step ending with 130: no further steps
-  trap - INT
+  trap '' INT
   [ -z "$STEP" ] || [ -n "${RESULT[$STEP]:-}" ] || RESULT[$STEP]=interrupted
   printf '\n  %s\n' "$(c 31 "interrupted — remaining steps not run")"
   install_summary
@@ -1209,9 +1210,10 @@ install_mode() {
   require_admin || exit 2
   echo "  sudo asks again before a step when the last sudo was over a minute ago; the macOS step asks for your sudo password and then the owner password (both your login password)"
   "$SUDO" -v || { echo "sudo failed"; exit 2; }
-  trap install_abort INT
+  trap 'INTERRUPTED=1' INT  # the step ends first, then the loop stops from the main shell's own stdout
   local src rc label word t0 ifd ipid
   for src in "${INSTALL_ORDER[@]}"; do
+    [ "$INTERRUPTED" -eq 0 ] || install_abort
     label=${LABELS[$src]}
     STEP=$src
     printf '\n%s\n' "$(c 1 "── $label")"
@@ -1220,11 +1222,12 @@ install_mode() {
     if [ "$src" = macos ]; then
       install_macos; rc=$?
     else
-      exec {ifd}> >(indent); ipid=$!
+      exec {ifd}> >(trap '' INT; indent); ipid=$!
       "install_$src" >&"$ifd" 2>&1; rc=$?
       exec {ifd}>&-
-      wait "$ipid"
+      while kill -0 "$ipid" 2>/dev/null; do wait "$ipid"; done
     fi
+    [ "$INTERRUPTED" -eq 0 ] || { STEP_STATUS=""; rc=130; }
     case $STEP_STATUS:$rc in
       uptodate:*) RESULT[$src]="up to date" ;;
       missing:*) RESULT[$src]="skipped ($src not installed)" ;;
@@ -1255,6 +1258,7 @@ install_mode() {
     [ "${RESULT[$src]}" != interrupted ] || install_abort
   done
   STEP=""
+  [ "$INTERRUPTED" -eq 0 ] || install_abort
   trap - INT
   install_summary
   exit "$FAILED"
