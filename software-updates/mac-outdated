@@ -9,6 +9,8 @@ RUM=/usr/local/bin/RemoteUpdateManager
 SCRIPT_CMD=/usr/bin/script
 SUDO=/usr/bin/sudo
 SOFTWAREUPDATE=/usr/sbin/softwareupdate
+MAS=/opt/homebrew/bin/mas
+MAS_CELLAR=/opt/homebrew/Cellar/mas/
 STDIN_TTY=""
 APP_DIRS=/Applications:$HOME/Applications
 REPO_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." 2>/dev/null && pwd -P)
@@ -21,6 +23,8 @@ if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; nev
     SUDO=$MAC_OUTDATED_SUDO
     RUM=${MAC_OUTDATED_RUM:-$RUM}
     SOFTWAREUPDATE=${MAC_OUTDATED_SOFTWAREUPDATE:-$SOFTWAREUPDATE}
+    MAS=${MAC_OUTDATED_MAS:-$MAS}
+    MAS_CELLAR=${MAC_OUTDATED_MAS_CELLAR:-$MAS_CELLAR}
     SCRIPT_CMD=${MAC_OUTDATED_SCRIPT:-$SCRIPT_CMD}
   fi
   STDIN_TTY=${MAC_OUTDATED_STDIN_TTY:-}
@@ -35,7 +39,7 @@ LOG="" LOG_PID="" OUT_FD="" ERR_FD=""
 TMP_DIR=""
 MIN_ADMIN_MINUTES=15
 MIN_STEP_ADMIN_MINUTES=2
-STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N", restart, staged, unverified, stilloffered, unconfirmed
+STEP_STATUS=""  # set by an install step instead of its exit code: missing, uptodate, expired, "expires N", foreign, restart, staged, unverified, stilloffered, unconfirmed
 MACOS_FAILED=""
 MACOS_STAGED=""  # macOS labels still offered after install because they wait for a restart
 
@@ -455,9 +459,9 @@ check_adobe() {
 }
 
 check_mas() {
-  command -v mas >/dev/null || { note mas "mas not installed: brew install mas" "skipped (mas not installed)" – "brew install mas"; return; }
+  [ -x "$MAS" ] || { note mas "mas not installed: brew install mas" "skipped (mas not installed)" – "brew install mas"; return; }
   local json
-  json=$(mas outdated --json 2>/dev/null) || { check_failed mas "mas outdated failed"; return; }
+  json=$("$MAS" outdated --json 2>/dev/null) || { check_failed mas "mas outdated failed"; return; }
   jq -r 'select(type == "object" and .newVersion != null and (.name // "") != "")
     | "mas|\(.name)|\(.version // "?")|\(.newVersion)|"' <<< "$json" \
     || check_failed mas "could not read mas outdated output"
@@ -1032,14 +1036,13 @@ install_msupdate() {
   "$MSUPDATE" --install --wait 600
 }
 install_mas() {
-  local mas
-  mas=$(command -v mas) || { STEP_STATUS=missing; return 0; }
-  mas=$(readlink -f "$mas") || { STEP_STATUS=missing; return 0; }
-  local list rc
+  local mas list rc
+  [ -x "$MAS" ] || { STEP_STATUS=missing; return 0; }
+  mas=$(readlink -f "$MAS") || { STEP_STATUS=missing; return 0; }
+  [[ $mas == "$MAS_CELLAR"* ]] || { STEP_STATUS=foreign; hand "App Store: skipped, mas is not from Homebrew ($mas): brew install mas"; return 0; }
   list=$("$mas" outdated --json 2>&1) || { rc=$?; printf '%s\n' "$list"; echo "mas outdated failed, nothing upgraded"; return "$rc"; }
   grep -q newVersion <<< "$list" || { STEP_STATUS=uptodate; return 0; }
   still_admin || return 0
-  [ "$(stat -f %u "$mas")" = 0 ] || echo "mas is owned by your user (Homebrew) and runs as root here: residual risk, see software-updates.md"
   "$SUDO" "$mas" upgrade
 }
 install_pipx() {
@@ -1233,6 +1236,7 @@ install_mode() {
     case $STEP_STATUS:$rc in
       uptodate:*) RESULT[$src]="up to date" ;;
       missing:*) RESULT[$src]="skipped ($src not installed)" ;;
+      foreign:*) RESULT[$src]="skipped ($src not from Homebrew)" ;;
       expired:*) RESULT[$src]="skipped (admin expired: click Privileges and rerun)"; FAILED=1
         hand "$label: skipped, admin expired: click Privileges, then mac-outdated --install" ;;
       expires*) RESULT[$src]="skipped (admin expires in ${STEP_STATUS#expires } min: click Privileges and rerun)"; FAILED=1

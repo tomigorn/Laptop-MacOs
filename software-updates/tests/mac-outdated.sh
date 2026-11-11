@@ -87,6 +87,14 @@ case "$1" in
   outdated) [ "$2" = --json ] || exit 9; [ -f "$FIX/fail-mas-outdated" ] && { echo "Error: offline" >&2; exit 1; }; echo "Warning: Found a likely App Store app that is not indexed in Spotlight" >&2; cat "$FIX/mas-outdated.json" ;;
   upgrade) [ -f "$FIX/fail-mas" ] && exit 1; exit 0 ;;
 esac'
+# mas runs from a Homebrew-like layout: <prefix>/bin/mas -> <prefix>/Cellar/mas/<v>/bin/mas
+HB="$WORK/hb"
+mkdir -p "$HB/Cellar/mas/9.9.9/bin" "$HB/bin"
+cp "$BIN/mas" "$HB/Cellar/mas/9.9.9/bin/mas"
+ln -s ../Cellar/mas/9.9.9/bin/mas "$HB/bin/mas"
+export MAC_OUTDATED_MAS="$HB/bin/mas"
+MAC_OUTDATED_MAS_CELLAR="$(cd "$HB/Cellar/mas" && pwd -P)/"
+export MAC_OUTDATED_MAS_CELLAR
 stub softwareupdate '
 case "$1" in
   --list) [ -f "$FIX/fail-softwareupdate-list" ] && { echo "Cannot connect to the Apple Software Update server." >&2; exit 1; }; cat "$FIX/softwareupdate-list.txt" >&2 ;;
@@ -599,7 +607,7 @@ fixtures_outdated
 SAVED_PATH=$PATH
 mkdir -p "$WORK/empty"
 ln -sf "$BIN/curl" "$BIN/sw_vers" "$WORK/empty/"
-PATH="$WORK/empty:/usr/bin:/bin" MAC_OUTDATED_MSUPDATE="$WORK/none/msupdate" MAC_OUTDATED_RUM="$WORK/none/rum" MAC_OUTDATED_SOFTWAREUPDATE="$WORK/none/softwareupdate" run
+PATH="$WORK/empty:/usr/bin:/bin" MAC_OUTDATED_MAS="$WORK/none/mas" MAC_OUTDATED_MSUPDATE="$WORK/none/msupdate" MAC_OUTDATED_RUM="$WORK/none/rum" MAC_OUTDATED_SOFTWAREUPDATE="$WORK/none/softwareupdate" run
 PATH=$SAVED_PATH
 check "missing tools: no crash" equals "$rc" 1
 check "missing brew: note" contains "$out" "skipped (brew not installed)"
@@ -1444,9 +1452,7 @@ check "jq missing: no brew upgrade" no_match "$(calls)" "^brew upgrade"
 rm -rf "$WORK/nojq"
 
 # a missing tool is skipped, not a failure
-mkdir -p "$WORK/nomas"
-for f in "$BIN"/*; do [ "$(basename "$f")" = mas ] || ln -sf "$f" "$WORK/nomas/"; done
-PATH="$WORK/nomas:/usr/bin:/bin" run --install
+MAC_OUTDATED_MAS="$WORK/none/mas" run --install
 check "mas missing: install exit 0" equals "$rc" 0
 check "mas missing: skipped" has "$out" "App Store \\.+ skipped \\(mas not installed\\)"
 
@@ -1576,21 +1582,33 @@ check "log (check): total time last" has "$(tail -1 "$logf")" "^end [0-9:]+, [0-
 
 # ── planted sudo, softwareupdate, script on PATH: never used ───────────────
 mkdir -p "$WORK/planted"
-for n in sudo softwareupdate script; do printf '#!/bin/sh\necho "planted %s $*" | tee -a "$CALLS" >> "$ALLCALLS"\n' "$n" > "$WORK/planted/$n"; chmod +x "$WORK/planted/$n"; done
+for n in sudo softwareupdate script mas; do printf '#!/bin/sh\necho "planted %s $*" | tee -a "$CALLS" >> "$ALLCALLS"\n' "$n" > "$WORK/planted/$n"; chmod +x "$WORK/planted/$n"; done
 fixtures_outdated; admin_setup admin 20
 PATH="$WORK/planted:$PATH" run --install
 check "planted on PATH: never run" no_match "$(calls)" "^planted"
 check "planted on PATH: install still ran" contains "$(calls)" "softwareupdate --install --all"
+check "planted on PATH: Homebrew's mas upgraded" contains "$(calls)" "sudo mas upgrade"
 fixtures_outdated
 PATH="$WORK/planted:$PATH" run
 check "planted on PATH, check: never run" no_match "$(calls)" "^planted"
 rm -rf "$WORK/planted"
 
-# ── mas owned by the user runs as root: warned ─────────────────────────────
+# ── mas: only Homebrew's, resolved into its Cellar ─────────────────────────
 fixtures_outdated; admin_setup admin 20
 run --install
-check "mas user-owned: warning before upgrade" contains "$out" "mas is owned by your user (Homebrew) and runs as root here: residual risk, see software-updates.md"
-check "mas user-owned: still upgraded" contains "$(calls)" "sudo mas upgrade"
+check "mas from Homebrew: upgraded" contains "$(calls)" "sudo mas upgrade"
+check "mas from Homebrew: no ownership warning" lacks "$out" "mas is owned by your user"
+MAC_OUTDATED_MAS="$BIN/mas" run --install
+check "mas outside the Cellar: skipped" has "$out" "App Store \\.+ skipped \\(mas not from Homebrew\\)$"
+check "mas outside the Cellar: no sudo" no_match "$(calls)" "^sudo mas"
+check "mas outside the Cellar: by hand" contains "$(sed -n '/By hand/,$p' "$WORK/out")" "App Store: skipped, mas is not from Homebrew"
+check "mas outside the Cellar: exit 0" equals "$rc" 0
+mkdir -p "$WORK/fakecellar/mas/1.0/bin"
+ln -sf "$BIN/mas" "$WORK/fakecellar/mas/1.0/bin/mas"
+MAC_OUTDATED_MAS="$WORK/fakecellar/mas/1.0/bin/mas" run --install
+check "mas linking out of the Cellar: skipped" has "$out" "App Store \\.+ skipped \\(mas not from Homebrew\\)$"
+check "mas linking out of the Cellar: no sudo" no_match "$(calls)" "^sudo mas"
+rm -rf "$WORK/fakecellar"
 
 # ── macOS staged: remembered until restart ──────────────────────────────────
 # staged_run: run, but keeps the staged file

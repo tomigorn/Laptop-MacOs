@@ -101,6 +101,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
   | restart required (only labels marked `Action: restart`) | `macOS <label>: restart the Mac when it suits you` |
   | skipped (admin expired) | `App Store: skipped, admin expired: click Privileges, then mac-outdated --install` |
   | skipped (admin nearly out) | `App Store: skipped, admin expires in 1 min: click Privileges, then mac-outdated --install` |
+  | mas not from Homebrew | `App Store: skipped, mas is not from Homebrew (<path>): brew install mas` |
   | pipx link conflict | `pipx example-tool: ~/.local/bin/example-tool links elsewhere: rm it, then pipx reinstall example-tool` |
   | held third-party formulae | `yabai: third-party tap, held for review (mac-outdated lists it)` |
 
@@ -147,7 +148,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | Install scripts | `*.sh` and `install*` files of this repo (found from the script's real path; `.git`, `tests`, `fixtures` skipped) naming `brew install <owner>/<tap>/<name>` or `brew tap <owner>/<tap>` for a tap that is not tapped (comments and `homebrew/*` skipped) | none: fix the script |
 | Microsoft AutoUpdate | `msupdate --list`, lines `<app ID>  <title> Update <version> (<build>)`: app ID -> app (`MSWD2019` Word, `XCEL2019` Excel, `PPT32019` PowerPoint, `OPIM2019` Outlook, `ONMC2019` OneNote, `ONDR18` OneDrive, `MSau04` AutoUpdate, Teams, Defender, Edge, …; unknown ID: the title), installed = the app's `CFBundleShortVersionString`, latest = the title's version (the build only without one) | `msupdate --list` first: no updates -> `up to date`; else `msupdate --install --wait 600` (without a wait it can hang until the MAU window is clicked) |
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
-| App Store | `mas outdated --json` (note if `mas` is missing) | `mas outdated` first: nothing -> `up to date`; else `sudo mas upgrade` (mas needs root to update apps) |
+| App Store | `/opt/homebrew/bin/mas outdated --json` (note if it is missing) | `mas outdated` first: nothing -> `up to date`; mas not resolving into `/opt/homebrew/Cellar/mas/` -> `skipped (mas not from Homebrew)`, no sudo; else `sudo mas upgrade` (mas needs root to update apps) |
 | macOS | `softwareupdate --list` | `softwareupdate --list` first: nothing new -> `up to date` (no admin, no sudo); else `sudo softwareupdate --install --all` through `script -q`, never restarts; then `--list` again: nothing left -> `installed`; still offered: labels whose `--list` entry says `Action: restart` count as staged when the output mentions restart or has a `Downloaded: <Title>` line for that label, all others (Command Line Tools, …) as failed; nothing failed -> `installed, restart required`, else `failed (still offered after install: <labels>)` plus `; owner password empty or wrong?` when no restart label was staged; `--list` failing -> `installed (not verified: …)`; stdin not a terminal and still offered -> `not verified (still offered, no terminal: restart if macOS asks, else rerun in a terminal)`, counts as failed |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | uv tools | `uv tool list --outdated` (`none installed` without tools; skipped when uv is missing) | `uv tool upgrade --all` |
@@ -174,9 +175,9 @@ Run it as your own user, never with sudo: `--install` asks for the password itse
 
 - Never asks for or changes admin rights itself: elevation is your click in Privileges (menu bar lock icon).
 - No sudo keep-alive, no `sudo -S`, no stored password, no restart.
-- `sudo` and `softwareupdate` run by absolute path (`/usr/bin/sudo`, `/usr/sbin/softwareupdate`), never from `PATH`.
-- The tests' path overrides (`MAC_OUTDATED_RUM`, `…_MSUPDATE`, `…_PRIVILEGESCLI`, `…_APP_DIRS`, …) count only with `MAC_OUTDATED_TEST=1`; those for what runs under sudo (`…_RUM`, `…_SOFTWAREUPDATE`, `…_SCRIPT`) only with a stub `MAC_OUTDATED_SUDO`, so nothing from the environment picks what runs under sudo.
-- Residual risk: `mas` is Homebrew's, owned by your user, and `sudo mas upgrade` runs it as root; whoever can write it as you gets root at the next `--install`. Not owned by root -> a warning line before `sudo mas upgrade`, which still runs.
+- `sudo`, `softwareupdate` and `mas` run by absolute path (`/usr/bin/sudo`, `/usr/sbin/softwareupdate`, `/opt/homebrew/bin/mas`), never from `PATH`.
+- The tests' path overrides (`MAC_OUTDATED_RUM`, `…_MSUPDATE`, `…_PRIVILEGESCLI`, `…_APP_DIRS`, …) count only with `MAC_OUTDATED_TEST=1`; those for what runs under sudo (`…_RUM`, `…_SOFTWAREUPDATE`, `…_SCRIPT`, `…_MAS`, `…_MAS_CELLAR`) only with a stub `MAC_OUTDATED_SUDO`, so nothing from the environment picks what runs under sudo.
+- Residual risk: `mas` is Homebrew's, owned by your user, and `sudo mas upgrade` runs it as root; whoever can write it as you gets root at the next `--install` (`/opt/homebrew` is user-writable).
 - Before each sudo step (Adobe, App Store, macOS) `PrivilegesCLI --status` is checked again, the others go on, exit 1:
   - admin gone -> `skipped (admin expired: click Privileges and rerun)`
   - under 2 min left -> `skipped (admin expires in N min: click Privileges and rerun)`
