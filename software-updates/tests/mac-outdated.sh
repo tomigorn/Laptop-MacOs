@@ -1131,6 +1131,16 @@ fixtures_outdated; admin_setup admin 20
 touch "$FIX/script-eof"; run --install; rm -f "$FIX/script-eof"
 check "macOS: ^D and backspaces not in the log" no_match "$(cat "$(logpath)")" $'\\^D|\x08|\x04'
 
+# text typed ahead of the password prompt (echoed by the pty) never reaches the log
+fixtures_outdated; admin_setup admin 20
+printf 'hunter2\nPassword:hunter2\nSoftware Update Tool\nFinding available software\nDownloading macOS Golden Gate 27.2.1\nhunter2Password:\nDownloaded: macOS Golden Gate 27.2.1\nhunter2\n' > "$FIX/softwareupdate-install-output.txt"
+run --install
+log=$(cat "$(logpath)")
+check "typed ahead: not in the log" lacks "$log" "hunter2"
+check "typed ahead: password prompt logged bare" has "$log" "^Password:$"
+check "typed ahead: softwareupdate lines logged" contains "$log" "Downloaded: macOS Golden Gate 27.2.1"
+check "typed ahead: result unchanged" has "$out" "macOS \\.+ installed, restart required$"
+
 fixtures_outdated; admin_setup admin 20
 MAC_OUTDATED_STDIN_TTY='' run --install
 check "macOS: stdin not a terminal -> no script" no_match "$(calls)" '^script '

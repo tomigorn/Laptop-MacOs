@@ -933,7 +933,7 @@ install_macos() {
     { [ "$rc" -eq 2 ] || [ "$rc" -gt 128 ]; } && LC_ALL=C grep -qE $'\x03|\\^C' "$t" && rc=130
     text=$(LC_ALL=C tr -d '\004\010' < "$t" | tr '\r' '\n' | sed -e $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' -e 's/\^D//g' | grep -v '^[[:space:]]*$' | uniq)
     rm -f "$t"
-    { echo "softwareupdate --install output:"; printf '%s\n' "$text"; } | log_lines
+    { echo "softwareupdate --install output:"; known_lines <<< "$text"; } | log_lines
   else
     to_terminal "$SUDO" "$SOFTWAREUPDATE" --install --all; rc=$?; tty=0
   fi
@@ -955,6 +955,10 @@ install_macos() {
   [ "${#staged[@]}" -gt 0 ] || MACOS_FAILED+="; owner password empty or wrong?"
   STEP_STATUS=stilloffered
   return 1
+}
+known_lines() {  # the pty echoes typed text: only softwareupdate's own lines reach the log, a password prompt without anything after it
+  awk '/^Password:/ { print "Password:"; next }
+    /^(Software Update Tool|Finding available software|Downloading|Downloaded: |Installing|Installed|Done|Restart|Please restart|Error|Failed|No updates|No new software)/'
 }
 has_downloaded() { [ -n "$2" ] && awk -v l="Downloaded: $2" '{ sub(/[[:space:]]+$/, "") } $0 == l { f = 1 } END { exit !f }' <<< "$1"; }  # has_downloaded <transcript> <title>
 join_labels() { local out=$1 l; shift; for l in "$@"; do out+=", $l"; done; printf '%s' "$out"; }
