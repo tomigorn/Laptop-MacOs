@@ -929,8 +929,8 @@ install_macos() {
   { echo "softwareupdate --list before:"; printf '%s\n' "$list"; } | log_lines
   if { [ -t 0 ] || [ "$STDIN_TTY" = 1 ]; } && [ -x "$SCRIPT_CMD" ] && t=$(tmpfile); then
     to_terminal "$SCRIPT_CMD" -q "$t" "$SUDO" "$SOFTWAREUPDATE" --install --all; rc=$?
-    # in raw mode Ctrl-C goes into the pty, not to our INT trap
-    { [ "$rc" -eq 2 ] || [ "$rc" -gt 128 ]; } && LC_ALL=C grep -qE $'\x03|\\^C' "$t" && rc=130
+    # in raw mode Ctrl-C goes into the pty, not to our INT trap; at the sudo prompt script exits 1
+    [ "$rc" -ne 0 ] && LC_ALL=C grep -qE $'\x03|\\^C' "$t" && rc=130
     text=$(LC_ALL=C tr -d '\004\010' < "$t" | tr '\r' '\n' | sed -e $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' -e 's/\^D//g' | grep -v '^[[:space:]]*$' | uniq)
     rm -f "$t"
     { echo "softwareupdate --install output:"; known_lines <<< "$text"; } | log_lines

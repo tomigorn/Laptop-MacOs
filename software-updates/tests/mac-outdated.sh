@@ -142,8 +142,8 @@ echo "sudo $n $*" | tee -a "$CALLS" >> "$ALLCALLS"
 exec "$(dirname "$0")/$n" "$@"
 EOF
 chmod +x "$BIN/sudo"
-# $FIX/interrupt-script: Ctrl-C typed into the pty, script echoes ^C and exits 2
-stub script '[ "$1" = -q ] || exit 9; f=$2; shift 2; if [ -f "$FIX/interrupt-script" ]; then printf "^C\n" | tee "$f"; exit 2; fi; "$@" > "$f" 2>&1; rc=$?; [ -f "$FIX/script-eof" ] && printf "^D\\010\\010\\004\\n" >> "$f"; cat "$f"; exit $rc'
+# $FIX/interrupt-script: Ctrl-C typed into the pty, script echoes ^C and exits 2 (or the code in the file)
+stub script '[ "$1" = -q ] || exit 9; f=$2; shift 2; if [ -f "$FIX/interrupt-script" ]; then printf "^C\n" | tee "$f"; r=$(cat "$FIX/interrupt-script"); exit "${r:-2}"; fi; "$@" > "$f" 2>&1; rc=$?; [ -f "$FIX/script-eof" ] && printf "^D\\010\\010\\004\\n" >> "$f"; cat "$f"; exit $rc'
 export MAC_OUTDATED_SCRIPT="$BIN/script"
 export MAC_OUTDATED_STDIN_TTY=1
 # $FIX/privileges-expire-after N: admin for the first N --status calls, afterwards $FIX/privileges-status-later.txt or standard
@@ -1126,6 +1126,11 @@ check "macOS: Ctrl-C in script -> interrupted" has "$out" "macOS \\.+ interrupte
 check "macOS: Ctrl-C in script -> exit 130" equals "$rc" 130
 check "macOS: Ctrl-C in script -> summary" contains "$out" "Summary"
 check "macOS: Ctrl-C in script -> no second --list" equals "$(grep -c '^softwareupdate --list' "$CALLS")" 1
+
+fixtures_outdated; admin_setup admin 20
+echo 1 > "$FIX/interrupt-script"; run --install; rm -f "$FIX/interrupt-script"
+check "macOS: Ctrl-C at the sudo prompt (exit 1) -> interrupted" has "$out" "macOS \\.+ interrupted$"
+check "macOS: Ctrl-C at the sudo prompt (exit 1) -> exit 130" equals "$rc" 130
 
 fixtures_outdated; admin_setup admin 20
 touch "$FIX/script-eof"; run --install; rm -f "$FIX/script-eof"
