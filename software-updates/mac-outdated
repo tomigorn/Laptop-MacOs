@@ -7,6 +7,7 @@ PRIVILEGESCLI=/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI
 MSUPDATE="/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/msupdate"
 RUM=/usr/local/bin/RemoteUpdateManager
 SCRIPT_CMD=/usr/bin/script
+STDIN_TTY=""
 APP_DIRS=/Applications:$HOME/Applications
 REPO_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." 2>/dev/null && pwd -P)
 VERSION=$(cat "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/VERSION" 2>/dev/null) || VERSION=""
@@ -16,6 +17,7 @@ if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; nev
   MSUPDATE=${MAC_OUTDATED_MSUPDATE:-$MSUPDATE}
   RUM=${MAC_OUTDATED_RUM:-$RUM}
   SCRIPT_CMD=${MAC_OUTDATED_SCRIPT:-$SCRIPT_CMD}
+  STDIN_TTY=${MAC_OUTDATED_STDIN_TTY:-}
   APP_DIRS=${MAC_OUTDATED_APP_DIRS:-$APP_DIRS}
   REPO_ROOT=${MAC_OUTDATED_REPO:-$REPO_ROOT}
 fi
@@ -848,13 +850,16 @@ install_macos() {
   grep -q 'No new software available' <<< "$list" && { STEP_STATUS=uptodate; return 0; }
   still_admin || return 0
   { echo "softwareupdate --list before:"; printf '%s\n' "$list"; } | log_lines
-  if [ -x "$SCRIPT_CMD" ] && t=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX"); then
+  if { [ -t 0 ] || [ "$STDIN_TTY" = 1 ]; } && [ -x "$SCRIPT_CMD" ] && t=$(mktemp "${TMPDIR:-/tmp}/mac-outdated.XXXXXX"); then
     to_terminal "$SCRIPT_CMD" -q "$t" sudo softwareupdate --install --all; rc=$?
-    text=$(tr '\r' '\n' < "$t" | sed $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' | grep -v '^[[:space:]]*$' | uniq)
+    # in raw mode Ctrl-C goes into the pty, not to our INT trap
+    { [ "$rc" -eq 2 ] || [ "$rc" -gt 128 ]; } && LC_ALL=C grep -qE $'\x03|\\^C' "$t" && rc=130
+    text=$(LC_ALL=C tr -d '\004\010' < "$t" | tr '\r' '\n' | sed -e $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' -e 's/\^D//g' | grep -v '^[[:space:]]*$' | uniq)
     rm -f "$t"
     { echo "softwareupdate --install output:"; printf '%s\n' "$text"; } | log_lines
   else
     to_terminal sudo softwareupdate --install --all; rc=$?
+    text=$(grep 'Action: restart' <<< "$list")  # no transcript: the restart need from --list
   fi
   [ "$rc" -eq 0 ] || return "$rc"
   after=$(softwareupdate --list 2>&1) || { STEP_STATUS=unverified; return 0; }
@@ -1070,7 +1075,7 @@ install_abort() {  # Ctrl-C or a step ending with 130: no further steps
 install_mode() {
   header "mac-outdated v$VERSION --install"
   require_admin || exit 2
-  echo "  sudo asks again before a step when the last sudo was over a minute ago; the macOS step also asks for the owner password (your login password)"
+  echo "  sudo asks again before a step when the last sudo was over a minute ago; the macOS step asks for your sudo password and then the owner password (both your login password)"
   sudo -v || { echo "sudo failed"; exit 2; }
   trap install_abort INT
   local src rc label word

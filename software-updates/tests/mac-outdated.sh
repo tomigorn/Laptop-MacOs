@@ -126,8 +126,10 @@ echo "sudo $n $*" | tee -a "$CALLS" >> "$ALLCALLS"
 exec "$(dirname "$0")/$n" "$@"
 EOF
 chmod +x "$BIN/sudo"
-stub script '[ "$1" = -q ] || exit 9; f=$2; shift 2; "$@" > "$f" 2>&1; rc=$?; cat "$f"; exit $rc'
+# $FIX/interrupt-script: Ctrl-C typed into the pty, script echoes ^C and exits 2
+stub script '[ "$1" = -q ] || exit 9; f=$2; shift 2; if [ -f "$FIX/interrupt-script" ]; then printf "^C\n" | tee "$f"; exit 2; fi; "$@" > "$f" 2>&1; rc=$?; [ -f "$FIX/script-eof" ] && printf "^D\\010\\010\\004\\n" >> "$f"; cat "$f"; exit $rc'
 export MAC_OUTDATED_SCRIPT="$BIN/script"
+export MAC_OUTDATED_STDIN_TTY=1
 # $FIX/privileges-expire-after N: admin for the first N --status calls, afterwards $FIX/privileges-status-later.txt or standard
 stub PrivilegesCLI '
 [ "$1" = --status ] || exit 0
@@ -980,7 +982,7 @@ check "admin 20 min: exit 0" equals "$rc" 0
 check "admin 20 min: sudo -v once, short sudo steps first, macOS last" equals "$(install_calls)" "$expected"
 check "admin 20 min: admin re-checked before each sudo step" equals "$(grep -c '^PrivilegesCLI --status' "$CALLS")" 4
 check "admin 20 min: no password-once promise" lacks "$out" "password once"
-check "admin 20 min: sudo hint" contains "$out" "sudo asks again before a step when the last sudo was over a minute ago; the macOS step also asks for the owner password (your login password)"
+check "admin 20 min: sudo hint" contains "$out" "sudo asks again before a step when the last sudo was over a minute ago; the macOS step asks for your sudo password and then the owner password (both your login password)"
 check "admin 20 min: restart required shown" contains "$out" "restart required"
 check "admin 20 min: summary" has "$out" "pipx \\.+ installed"
 check "admin 20 min: header" has "$out" "^mac-outdated v$(cat "$HERE/../VERSION") --install · [0-9-]+ [0-9:]+"
@@ -1028,6 +1030,23 @@ fixtures_outdated; admin_setup admin 20
 touch "$FIX/fail-softwareupdate-list-after"; run --install; rm -f "$FIX/fail-softwareupdate-list-after" "$FIX/fail-softwareupdate-list"
 check "macOS: --list failing after install -> not verified" has "$out" "macOS \.+ installed \(not verified: softwareupdate --list failed\)"
 check "macOS: --list failing after install -> exit 0" equals "$rc" 0
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/interrupt-script"; run --install; rm -f "$FIX/interrupt-script"
+check "macOS: Ctrl-C in script -> interrupted" has "$out" "macOS \\.+ interrupted$"
+check "macOS: Ctrl-C in script -> exit 130" equals "$rc" 130
+check "macOS: Ctrl-C in script -> summary" contains "$out" "Summary"
+check "macOS: Ctrl-C in script -> no second --list" equals "$(grep -c '^softwareupdate --list' "$CALLS")" 1
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/script-eof"; run --install; rm -f "$FIX/script-eof"
+check "macOS: ^D and backspaces not in the log" no_match "$(cat "$(logpath)")" $'\\^D|\x08|\x04'
+
+fixtures_outdated; admin_setup admin 20
+MAC_OUTDATED_STDIN_TTY='' run --install
+check "macOS: stdin not a terminal -> no script" no_match "$(calls)" '^script '
+check "macOS: stdin not a terminal -> plain sudo" has "$(calls)" '^sudo softwareupdate --install --all$'
+check "macOS: stdin not a terminal -> still verified" has "$out" "macOS \\.+ installed, restart required"
 
 fixtures_outdated; admin_setup admin 20
 
@@ -1300,7 +1319,8 @@ check "brew never via sudo" no_match "$all" '^sudo brew'
 check "brew upgrade never greedy" no_match "$all" '^brew upgrade .*--greedy'
 check "only sudo -v, macOS, Adobe and mas upgrade via sudo" only_allowed_sudo "$all"
 check "softwareupdate never restarts" no_match "$all" '^softwareupdate .*(-R|--restart|--reboot)'
-check "script never records input" no_match "$all" '^script .*-[a-z]*r'
+check "script never records input" no_match "$all" '^script -[a-z]*r'
+check "script only ever as script -q" equals "$(grep '^script' <<< "$all" | grep -vc '^script -q ')" 0
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

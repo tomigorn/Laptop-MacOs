@@ -5,7 +5,7 @@ One command for every outdated piece of software on this Mac. Install: `software
 | Command | Admin | Does |
 |---|---|---|
 | `mac-outdated` | no | check all sources, print progress, details and a summary, write the last-check stamp (not when a check failed) |
-| `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update except third-party tap formulae (held for review); sudo asks again before a step when the last sudo was over a minute ago; the macOS step also asks for the owner password (your login password) |
+| `mac-outdated --install` | yes, >= 15 min left | `sudo -v`, install every available update except third-party tap formulae (held for review); sudo asks again before a step when the last sudo was over a minute ago; the macOS step asks for your sudo password and then the owner password (both your login password) |
 | `mac-outdated --help`, `-h` | no | usage and examples |
 | `mac-outdated --version` | no | print the version (from `software-updates/VERSION`) |
 
@@ -92,7 +92,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | older (or unknown), no `auto_updates` | casks row | via `--install` |
 
 - brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.
-- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs through `script(1)` straight on the terminal, not indented: both password prompts stay hidden), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
+- `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs through `script(1)` straight on the terminal, not indented: both password prompts stay hidden; stdin not a terminal: plain `sudo softwareupdate`; Ctrl-C there -> `interrupted`), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary.
 - `up to date` instead of `installed` when nothing was updated:
 
 | Source | Signal |
