@@ -97,10 +97,15 @@ if test -f $CURRENT_DIR/bin/starship
     starship init fish | source
 end
 
-# Over SSH fastfetch reports $SSH_TTY plus the sshd version as the terminal; without it, it uses the TERM_PROGRAM pair xxhc forwards from the Mac.
+# Over SSH fastfetch finds sshd as the parent and prints the tty plus the sshd version as the terminal; a per-session config names the terminal xxhc forwards from the Mac instead.
 function _xxhc_fastfetch
-    if test -n "$XXH_TERM_PROGRAM"
-        env -u SSH_TTY TERM_PROGRAM=$XXH_TERM_PROGRAM TERM_PROGRAM_VERSION=$XXH_TERM_PROGRAM_VERSION fastfetch $argv
+    set -l term (string trim -- "$XXH_TERM_PROGRAM $XXH_TERM_PROGRAM_VERSION")
+    if test -n "$XXH_TERM_PROGRAM"; and string match -qr '^[A-Za-z0-9._ -]+$' -- $term
+        set -l cfg $XDG_CONFIG_HOME/fastfetch/xxhc.jsonc
+        mkdir -p (dirname $cfg)
+        # fastfetch's default module list, with only the terminal line replaced
+        printf '{"modules":["title","separator","os","host","kernel","uptime","packages","shell","display","de","wm","wmtheme","theme","icons","font","cursor",{"type":"terminal","format":"%s"},"terminalfont","cpu","gpu","memory","swap","disk","localip","battery","poweradapter","locale","break","colors"]}\n' $term > $cfg
+        fastfetch -c $cfg $argv
     else
         fastfetch $argv
     end

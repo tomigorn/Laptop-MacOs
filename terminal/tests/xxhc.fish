@@ -165,21 +165,30 @@ set -gx STUB_PROBE '9999999999.0\nx86_64'
 set out (xxhc aheadhost 2>&1 | plain | string collect)
 check "xxhc: skew says ahead" has $out "ahead of this Mac — connect timer corrected for it."
 
-# _xxhc_fastfetch: the Mac's terminal instead of the remote tty + sshd version
+# _xxhc_fastfetch: over SSH fastfetch finds sshd as the parent and prints the tty plus the sshd version; a per-session config names the Mac's terminal instead
 awk '/^function _xxhc_fastfetch/{p=1} p{print} p&&/^end/{exit}' $XXHCONF_SRC > $WORK/ff.fish
 check "fastfetch wrapper extracted" test -s $WORK/ff.fish
 source $WORK/ff.fish
-printf '#!/bin/sh\necho "tty=$SSH_TTY prog=$TERM_PROGRAM ver=$TERM_PROGRAM_VERSION args=$*"\n' > $WORK/bin/fastfetch
+set -l real_ff (command -s fastfetch)
+printf '#!/bin/sh\necho "args=$*"\n' > $WORK/bin/fastfetch
 chmod +x $WORK/bin/fastfetch
-set -gx SSH_TTY /dev/pts/4
-set -gx TERM_PROGRAM remote-prog
-set -e TERM_PROGRAM_VERSION
+set -gx XDG_CONFIG_HOME $WORK/xdg
+set -l ffcfg $XDG_CONFIG_HOME/fastfetch/xxhc.jsonc
 set -gx XXH_TERM_PROGRAM ghostty
 set -gx XXH_TERM_PROGRAM_VERSION 1.4.0
-check "fastfetch: Mac terminal forwarded" eq (_xxhc_fastfetch -x) "tty= prog=ghostty ver=1.4.0 args=-x"
-set -e XXH_TERM_PROGRAM XXH_TERM_PROGRAM_VERSION
-check "fastfetch: nothing forwarded -> env untouched" eq (_xxhc_fastfetch) "tty=/dev/pts/4 prog=remote-prog ver= args="
-set -e SSH_TTY TERM_PROGRAM
+check "fastfetch: Mac terminal -> session config" eq (_xxhc_fastfetch -x) "args=-c $ffcfg -x"
+check "fastfetch: config sets the terminal line" string match -q -- '*{"type":"terminal","format":"ghostty 1.4.0"}*' (cat $ffcfg)
+if test -n "$real_ff"
+    check "fastfetch: real fastfetch reads the config" string match -q -- '*Terminal: ghostty 1.4.0*' ($real_ff -c $ffcfg --logo none --pipe 2>&1)
+end
+set -e XXH_TERM_PROGRAM_VERSION
+_xxhc_fastfetch >/dev/null
+check "fastfetch: no version -> name only" string match -q -- '*"format":"ghostty"}*' (cat $ffcfg)
+set -gx XXH_TERM_PROGRAM 'evil"}{x'
+check "fastfetch: odd characters -> plain fastfetch" eq (_xxhc_fastfetch) "args="
+set -e XXH_TERM_PROGRAM
+check "fastfetch: nothing forwarded -> plain fastfetch" eq (_xxhc_fastfetch) "args="
+set -e XDG_CONFIG_HOME
 rm $WORK/bin/fastfetch
 
 # full connect: xxh stubbed, the history export comes back through the scp stub
