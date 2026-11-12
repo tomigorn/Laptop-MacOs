@@ -61,6 +61,9 @@ run() { rm -f "$LOG"; /opt/homebrew/bin/bash "$APP/install.sh" "$@" > "$WORK/out
 run; rc=$?
 check "default: exit 0" eq "$rc" 0; [ "$rc" -eq 0 ] || cat "$WORK/out"
 check "default: stores built without refresh" eq "$(log | grep "^remote-binaries")" "remote-binaries "
+# `env bash` finds macOS's bash 3.2 when Homebrew's is not first on PATH
+rm -f "$LOG"; /bin/bash "$APP/install.sh" > "$WORK/out" 2>&1; rc=$?
+check "bash 3.2: exit 0" eq "$rc" 0; [ "$rc" -eq 0 ] || cat "$WORK/out"
 check "plugin: default home at pinned commit" eq "$(git -C "$HOME/.xxh/$PKG" rev-parse HEAD 2>/dev/null)" "$PIN"
 check "plugin: x86_64 home at pinned commit" eq "$(git -C "$HOME/.xxh-homes/x86_64/$PKG" rev-parse HEAD 2>/dev/null)" "$PIN"
 check "plugin: aarch64 home at pinned commit" eq "$(git -C "$HOME/.xxh-homes/aarch64/$PKG" rev-parse HEAD 2>/dev/null)" "$PIN"

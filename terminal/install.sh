@@ -106,7 +106,7 @@ symlink "$SCRIPT_DIR/.config/starship.toml"  ~/.xxh/.xxh/shells/xxh-shell-fish/b
 # Versions and sha256 are pinned in remote-binaries.conf.
 step "Per-architecture binary stores (uploaded to remote on connect)"
 
-"$SCRIPT_DIR/remote-binaries.sh" "${REFRESH_REMOTE[@]}"
+"$SCRIPT_DIR/remote-binaries.sh" ${REFRESH_REMOTE[@]+"${REFRESH_REMOTE[@]}"}
 
 # ── 7. Stage default (x86_64) binaries in xxh build dir ──────────────────────
 # This keeps a bare `xxh <host>` (without xxhc) working on x86_64 remotes. `xxhc`
