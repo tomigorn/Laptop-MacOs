@@ -23,8 +23,14 @@ printf '%s\n' \
     'esac' \
     'exit 1' > $WORK/bin/ssh
 printf '#!/bin/sh\nexit "${STUB_AGENT_RC:-0}"\n' > $WORK/bin/ssh-add
-printf '#!/bin/sh\necho XXH-CALLED >> "$SSH_LOG"\nexit 1\n' > $WORK/bin/xxh
-chmod +x $WORK/bin/ssh $WORK/bin/xxh $WORK/bin/ssh-add
+printf '#!/bin/sh\necho "XXH-CALLED $*" >> "$SSH_LOG"\nexit 1\n' > $WORK/bin/xxh
+# scp: uploads succeed, the history export is served from $REMOTE_DB, its -wal/-shm sidecars are absent
+printf '%s\n' \
+    '#!/bin/sh' \
+    'for last; do :; done' \
+    'case "$last" in *:*) exit 0 ;; *-wal|*-shm) exit 1 ;; esac' \
+    'cp "$REMOTE_DB" "$last"' > $WORK/bin/scp
+chmod +x $WORK/bin/ssh $WORK/bin/xxh $WORK/bin/ssh-add $WORK/bin/scp
 set -gx PATH $WORK/bin $PATH
 set -gx SSH_LOG $SSH_LOG
 
@@ -45,6 +51,9 @@ function has -a text pattern
 end
 function lacks -a text pattern
     not string match -q -- "*$pattern*" $text
+end
+function no_line -a line
+    not contains -- $line $argv[2..-1]
 end
 function eq -a got want
     test "$got" = "$want"
@@ -155,5 +164,50 @@ check "xxhc: skew says behind" has $out "behind this Mac — connect timer corre
 set -gx STUB_PROBE '9999999999.0\nx86_64'
 set out (xxhc aheadhost 2>&1 | plain | string collect)
 check "xxhc: skew says ahead" has $out "ahead of this Mac — connect timer corrected for it."
+
+# _xxhc_fastfetch: the Mac's terminal instead of the remote tty + sshd version
+awk '/^function _xxhc_fastfetch/{p=1} p{print} p&&/^end/{exit}' $XXHCONF_SRC > $WORK/ff.fish
+check "fastfetch wrapper extracted" test -s $WORK/ff.fish
+source $WORK/ff.fish
+printf '#!/bin/sh\necho "tty=$SSH_TTY prog=$TERM_PROGRAM ver=$TERM_PROGRAM_VERSION args=$*"\n' > $WORK/bin/fastfetch
+chmod +x $WORK/bin/fastfetch
+set -gx SSH_TTY /dev/pts/4
+set -gx TERM_PROGRAM remote-prog
+set -e TERM_PROGRAM_VERSION
+set -gx XXH_TERM_PROGRAM ghostty
+set -gx XXH_TERM_PROGRAM_VERSION 1.4.0
+check "fastfetch: Mac terminal forwarded" eq (_xxhc_fastfetch -x) "tty= prog=ghostty ver=1.4.0 args=-x"
+set -e XXH_TERM_PROGRAM XXH_TERM_PROGRAM_VERSION
+check "fastfetch: nothing forwarded -> env untouched" eq (_xxhc_fastfetch) "tty=/dev/pts/4 prog=remote-prog ver= args="
+set -e SSH_TTY TERM_PROGRAM
+rm $WORK/bin/fastfetch
+
+# full connect: xxh stubbed, the history export comes back through the scp stub
+set -l fish86 $HOME/.xxh-homes/x86_64/.xxh/shells/xxh-shell-fish/build/fish-portable/bin
+mkdir -p $fish86 $HOME/.local/share/atuin
+touch $fish86/fish
+set -l cols 'id text primary key, timestamp integer, duration integer, exit integer, command text, cwd text, session text, hostname text, deleted_at integer'
+sqlite3 $HOME/.local/share/atuin/history.db "create table history($cols);"
+sqlite3 $WORK/remote.db "create table history($cols); insert into history values('r1',1,0,0,'remote-cmd','/','s','h',null);"
+set -gx REMOTE_DB $WORK/remote.db
+set -gx STUB_PROBE (date +%s)'.0\nx86_64'
+set -gx TERM_PROGRAM ghostty
+set -gx TERM_PROGRAM_VERSION 1.4.0
+: > $SSH_LOG
+set out (xxhc fullhost 2>&1 | plain)
+set -l xxh_call (string match -- 'XXH-CALLED*' < $SSH_LOG)
+check "connect: xxh runs quiet" string match -q -- '* +q *' "$xxh_call "
+check "connect: terminal forwarded" string match -q -- '*+e XXH_TERM_PROGRAM=ghostty +e XXH_TERM_PROGRAM_VERSION=1.4.0*' "$xxh_call"
+check "connect: history merged" string match -q -- '*History from fullhost merged into local atuin*' $out
+check "connect: merged row in local db" eq (sqlite3 $HOME/.local/share/atuin/history.db "select command from history;") remote-cmd
+check "connect: no busy_timeout row printed" no_line 5000 $out
+check "connect: per-host db created" test -f $HOME/.xxh/history/fullhost.db
+
+set -e TERM_PROGRAM TERM_PROGRAM_VERSION
+: > $SSH_LOG
+set out (xxhc fullhost 2>&1 | plain)
+check "reconnect: no terminal forwarded when unset" lacks (cat $SSH_LOG | string collect) XXH_TERM_PROGRAM
+check "reconnect: no busy_timeout row printed" no_line 5000 $out
+check "reconnect: per-host db still one row" eq (sqlite3 $HOME/.xxh/history/fullhost.db "select count(*) from history;") 1
 
 test $fails -eq 0

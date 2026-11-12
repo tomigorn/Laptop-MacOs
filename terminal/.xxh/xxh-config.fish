@@ -97,6 +97,15 @@ if test -f $CURRENT_DIR/bin/starship
     starship init fish | source
 end
 
+# Over SSH fastfetch reports $SSH_TTY plus the sshd version as the terminal; without it, it uses the TERM_PROGRAM pair xxhc forwards from the Mac.
+function _xxhc_fastfetch
+    if test -n "$XXH_TERM_PROGRAM"
+        env -u SSH_TTY TERM_PROGRAM=$XXH_TERM_PROGRAM TERM_PROGRAM_VERSION=$XXH_TERM_PROGRAM_VERSION fastfetch $argv
+    else
+        fastfetch $argv
+    end
+end
+
 if test -f $CURRENT_DIR/bin/fastfetch
     # The version line, shared by every greeting variant below.
     # Passed in by xxhc (+e XXH_SETUP_VERSION) so the remote greeting matches the Mac.
@@ -135,7 +144,7 @@ if test -f $CURRENT_DIR/bin/fastfetch
     end
 
     function fish_greeting
-        fastfetch
+        _xxhc_fastfetch
         _xxhc_version_line
         _xxhc_connect_time_line
         echo ""
@@ -146,7 +155,7 @@ if test -f $CURRENT_DIR/bin/fastfetch
     # Plain `clear` is left alone for a fully blank screen.
     function clear-greet --description "clear the screen, then show the greeting"
         command clear
-        fastfetch
+        _xxhc_fastfetch
         _xxhc_version_line
     end
 
@@ -157,7 +166,7 @@ if test -f $CURRENT_DIR/bin/fastfetch
     function _xxhc_greet_after_ssh --on-event fish_postexec
         if string match -qr '^\s*ssh\s' -- "$argv[1]"
             echo ""
-            fastfetch
+            _xxhc_fastfetch
             _xxhc_version_line
         end
     end

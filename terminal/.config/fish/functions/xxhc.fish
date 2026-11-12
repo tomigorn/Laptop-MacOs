@@ -223,7 +223,15 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         end
     end
 
-    env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target \
+    # The Mac's terminal, so the remote fastfetch names it instead of the tty and the sshd version.
+    set -l term_env
+    if test -n "$TERM_PROGRAM"
+        set term_env +e "XXH_TERM_PROGRAM=$TERM_PROGRAM"
+        test -n "$TERM_PROGRAM_VERSION"; and set -a term_env +e "XXH_TERM_PROGRAM_VERSION=$TERM_PROGRAM_VERSION"
+    end
+
+    # +q drops xxh's own progress lines ("First time upload using scp…"), which are wrong for a fresh home per session; its errors still print.
+    env RSYNC_RSH=~/.xxh/ssh-wrapper.sh xxh $target +q \
         +hh "~/$remote_home" \
         +lh $lxh \
         +e "TERM=xterm-256color" \
@@ -232,6 +240,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         +e "XXH_STAGE_DIR=$stage" \
         +e "XXH_STAGE_ID=$sid" \
         +e "XXH_SETUP_VERSION=$setup_version" \
+        $term_env \
         $argv[2..-1]
 
     # Belt-and-suspenders: remove THIS session's home if the fish_exit handler
