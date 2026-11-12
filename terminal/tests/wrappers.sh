@@ -32,6 +32,7 @@ chmod +x "$WORK/scp-wrapper.sh"
 grep -q "REAL_SCP=$WORK/bin/real-scp" "$WORK/scp-wrapper.sh" || { echo "FAIL  REAL_SCP substitution"; exit 1; }
 
 echo hello > "$WORK/src/file.txt"; echo nested > "$WORK/src/dir/inner.txt"
+xattr -w com.example.tag 1 "$WORK/src/file.txt"
 
 fails=0
 check() {  # check <name> <condition...>
@@ -68,6 +69,8 @@ check "scp tar-pipe: remote mkdir + untar into dest" contains "$out" "mkdir -p '
 list="$(gzip -dc "$TAR_OUT" | tar -tf - 2>/dev/null | sort | tr '\n' ' ')"
 check "scp tar-pipe: payload has file and dir" contains "$list" "file.txt"
 check "scp tar-pipe: payload has nested file" contains "$list" "dir/inner.txt"
+check "scp tar-pipe: fixture carries an xattr" contains "$(xattr "$WORK/src/file.txt")" "com.example.tag"
+check "scp tar-pipe: no xattr headers in payload" test "$(gzip -dc "$TAR_OUT" | grep -ac 'LIBARCHIVE.xattr')" -eq 0
 
 reset
 STUB_PROBE_OUT=zstd "$WORK/scp-wrapper.sh" "$WORK/src/file.txt" host3:/d/ 2> "$WORK/err"

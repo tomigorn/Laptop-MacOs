@@ -119,7 +119,7 @@ An unknown or undetectable architecture aborts with a clear message and **no upl
 | `bat` | ~7 MB | Syntax-highlighting file viewer |
 | `xxh-config.fish`, `starship.toml`, entrypoint | <1 MB | Config and session bootstrap |
 
-The upload goes through `scp-wrapper.sh`, which tar-pipes it through `zstd`, so the ~71 MB on disk crosses the wire as roughly 26 MB. On a remote without `zstd` it uses `gzip` (~27 MB); on one without `tar` it falls back to plain `scp`, where SSH-level `Compression=yes` applies if the server allows it.
+The upload goes through `scp-wrapper.sh`, which tar-pipes it through `zstd`, so the ~71 MB on disk crosses the wire as roughly 26 MB. On a remote without `zstd` it uses `gzip` (~27 MB); on one without `tar` it falls back to plain `scp`, where SSH-level `Compression=yes` applies if the server allows it. The tar runs with `--no-xattrs`: macOS keeps re-tagging files with `com.apple.provenance`, and GNU tar on the remote warned `Ignoring unknown extended header keyword` once per tagged file.
 
 The upload happens on every connect because the remote is always wiped on disconnect — there's nothing to reuse.
 

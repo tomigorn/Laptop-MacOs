@@ -123,6 +123,10 @@ tar_flags=( -h )
 if tar --no-mac-metadata -cf /dev/null -T /dev/null 2>/dev/null; then
     tar_flags+=( --no-mac-metadata )
 fi
+# macOS re-tags files with com.apple.provenance; GNU tar on the remote warns once per tagged file.
+if tar --no-xattrs -cf /dev/null -T /dev/null 2>/dev/null; then
+    tar_flags+=( --no-xattrs )
+fi
 
 rq=$(squote "$rpath")
 if tar "${tar_flags[@]}" -cf - "${tar_args[@]}" \
