@@ -255,8 +255,8 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         # misalign data. sqlite errors are intentionally NOT hidden here — a failed
         # merge should be visible, not silently drop history.
         set -l cols id,timestamp,duration,exit,command,cwd,session,hostname,deleted_at
-        sqlite3 $local_db "
-            PRAGMA busy_timeout=5000;
+        # .timeout, not PRAGMA busy_timeout: the pragma prints its value as a result row.
+        sqlite3 -cmd '.timeout 5000' $local_db "
             ATTACH '$tmp_db' AS remote;
             INSERT OR IGNORE INTO main.history ($cols) SELECT $cols FROM remote.history;
             DETACH remote;
@@ -266,8 +266,7 @@ function xxhc --description "xxh with SSH alias forwarded to remote prompt"
         # Accumulate per-host history for future connects.
         mkdir -p ~/.xxh/history
         if test -f $host_db
-            sqlite3 $host_db "
-                PRAGMA busy_timeout=5000;
+            sqlite3 -cmd '.timeout 5000' $host_db "
                 ATTACH '$tmp_db' AS new_session;
                 INSERT OR IGNORE INTO main.history ($cols) SELECT $cols FROM new_session.history;
                 DETACH new_session;
