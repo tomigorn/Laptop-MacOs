@@ -124,7 +124,8 @@ The optional third field is the workspace (location) for `arrange` lines.
 - Screens covered by a `model` rule are not registered, so desks don't pile up lines.
 - One rule can serve every desk with that model, fixed ones too: `arrange` takes the location from any connected screen, so `arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook` matches as long as the Dell is at `Work5-WEV`.
 - One monitor model can report different product names (HP E34m G4: `HP-E34m-G4` or `HP-534pm`): add a rule for each.
-- Same model at a fixed desk and a shared desk: the fixed screen's `monitor` line (its UUID) wins, so the rule's location only reaches unregistered screens. Point it at the shared desk.
+- A registered screen's `monitor` line (its UUID) wins over the rule, so the rule's location only reaches unregistered screens.
+- Same model at two workspaces (e.g. HP at ETZ with a Dell, HP alone at OCT): point the rule at the one where it is the only external screen. The other gets its location from its other screen (the Dell); without that screen it arranges like the first.
 - Model comes from `ioreg`, matched to the display by aspect ratio. Two connected screens with the same aspect ratio but different models: no match, `default` is used.
 
 ## Screen arrangement per workspace
