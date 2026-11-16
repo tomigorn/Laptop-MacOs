@@ -123,7 +123,7 @@ The optional third field is the workspace (location) for `arrange` lines.
 - Product name from the `model` column of `connected.txt`, or the comment of a registered line (spaces written as `-`).
 - Screens covered by a `model` rule are not registered, so desks don't pile up lines.
 - One rule can serve every desk with that model, fixed ones too: `arrange` takes the location from any connected screen, so `arrange Work5-WEV bottom Work-Dell Work-HP-Ultrawide MacBook` matches as long as the Dell is at `Work5-WEV`.
-- The product name is the panel's, not the marketing name: an HP E34m G4 reports `HP-534pm`.
+- One monitor model can report different product names (HP E34m G4: `HP-E34m-G4` or `HP-534pm`): add a rule for each.
 - Same model at a fixed desk and a shared desk: the fixed screen's `monitor` line (its UUID) wins, so the rule's location only reaches unregistered screens. Point it at the shared desk.
 - Model comes from `ioreg`, matched to the display by aspect ratio. Two connected screens with the same aspect ratio but different models: no match, `default` is used.
 
