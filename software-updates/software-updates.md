@@ -185,6 +185,13 @@ Run it as your own user, never with sudo: `--install` asks for the password itse
 
 `brew upgrade --cask` runs each cask's own uninstall/quit steps: it may quit running apps and show macOS Automation/App Management prompts, and pkg casks (e.g. XQuartz) call sudo themselves. Quit Discord, BetterDisplay, Hiddenbar, UTM, XQuartz and apps launched from Ghostty before running.
 
+| brew error | Cause | Fix |
+|---|---|---|
+| `chown: /Applications/X.app/…: Operation not permitted`, `Permission denied @ apply2files` | the app updated itself and is now owned by root; App Management blocks even `sudo chown` from the terminal | `open -R /Applications/X.app`, ⌘⌫ in Finder, then `brew reinstall --cask <token>` |
+| `It seems there is already an App at '…/Caskroom/<token>/<old>/X.app'` | a leftover backup from an earlier failed upgrade | `rm -rf /opt/homebrew/Caskroom/<token>/<old>/X.app`, then `brew upgrade --cask <token>` |
+
+Check owners: `stat -f '%Su %N' /Applications/*.app`. Update such apps through `mac-outdated`, not their own "Check for Updates".
+
 ## Admin rules
 
 - Never asks for or changes admin rights itself: elevation is your click in Privileges (menu bar lock icon).
