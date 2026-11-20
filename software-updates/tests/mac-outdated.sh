@@ -41,7 +41,8 @@ case "$1" in
   --caskroom) echo "$FIX/caskroom" ;;
   --repo) echo "$FIX/taps/$2" ;;
   tap) [ -f "$FIX/fail-brew-tap" ] && exit 1; cat "$FIX/brew-tap.txt" 2>/dev/null; exit 0 ;;
-  update) [ -f "$FIX/brew-update-stderr.txt" ] && cat "$FIX/brew-update-stderr.txt" >&2; [ -f "$FIX/fail-brew-update" ] && exit 1; exit 0 ;;
+  update) [ -f "$FIX/brew-update-stderr.txt" ] && cat "$FIX/brew-update-stderr.txt" >&2; [ -f "$FIX/fail-brew-update" ] && exit 1
+    [ -f "$FIX/brew-update-cache.json" ] && cp "$FIX/brew-update-cache.json" "$FIX/brew-cache/api/internal/packages.arm64_test.jws.json"; exit 0 ;;
   outdated) [ -f "$FIX/brew-outdated-stderr.txt" ] && cat "$FIX/brew-outdated-stderr.txt" >&2; [ -f "$FIX/fail-brew-outdated" ] && { echo "Error: brew outdated failed" >&2; exit 1; }; cat "$FIX/brew-outdated.json" ;;
   list) cat "$FIX/brew-list-full.txt" 2>/dev/null ;;
   vulns)
@@ -206,10 +207,9 @@ fixtures_outdated() {
   make_app NoCask com.example.nocask 1.0
   make_app Discord com.hammerandchisel.discord 0.0.389
   make_app "iStat Menus" com.bjango.istatmenus 7.0
-  cask_like microsoft-word "Microsoft Word" 99.0
-  cask_like google-chrome "Google Chrome" 999.0
+  cask_like microsoft-word "Microsoft Word" 16.114.3
+  cask_like google-chrome "Google Chrome" 150.0
   cask_like telegram Telegram 99.0
-  cask_like eth-self-service "ETH Self Service" 99.0
 }
 fixtures_current() {
   fixtures_outdated
@@ -305,11 +305,13 @@ check "unmanaged: self-updater excluded" lacks "$out" "--cask --force google-chr
 check "unmanaged: App Store app excluded" lacks "$out" "--cask --force telegram"
 check "unmanaged: Jamf app excluded" lacks "$out" "--cask --force eth-self-service"
 check "unmanaged: no cask, no line" lacks "$out" "NoCask"
-check "self-updating listed once" equals "$(grep -c 'also update themselves on start' <<< "$out")" 1
-check "self-updating names the app" has "$out" "also update themselves on start:.*Google Chrome"
-check "self-updating: iStat Menus listed" has "$out" "also update themselves on start:.*iStat Menus"
+check "self-updating: old catch-all line gone" lacks "$out" "also update themselves on start"
+check "self-updating: not checkable listed once" equals "$(grep -c 'not checkable (no upstream source)' <<< "$out")" 1
+check "self-updating: current app not named" no_match "$out" "Google Chrome"
+check "self-updating: iStat Menus not checkable" has "$out" "not checkable \\(no upstream source\\):.*iStat Menus"
+check "self-updating: Jamf app not checkable" has "$out" "not checkable \\(no upstream source\\):.*ETH Self Service"
 check "self-updating: iStat Menus has no updater warning" lacks "$out" "iStat Menus 7.0"
-check "self-updating: brew-managed Discord left out" lacks "$(grep 'also update themselves on start' <<< "$out")" "Discord"
+check "self-updating: brew-managed Discord left out" lacks "$(grep 'not checkable' <<< "$out")" "Discord"
 check "self-updating: old wording gone" lacks "$out" "updates itself on launch"
 check "open to update: section" contains "$out" "Open to update · 1"
 check "open to update: says why" contains "$out" "These apps update themselves on start: open them by hand."
@@ -317,7 +319,7 @@ check "open to update: sparkle app in it" has "$(sed -n '/Open to update/,/Summa
 check "open to update: no per-item hint" lacks "$out" "open Fork to update"
 check "open to update: Fork listed once" equals "$(grep -c "Fork 2.70.2" <<< "$out")" 1
 check "open to update: Sparkle section only for its note" contains "$out" "Sparkle apps · 1 note"
-check "open to update: also-line after the rows" has "$(sed -n '/Fork 2.70.2/,/Summary/p' <<< "$out")" "also update themselves on start"
+check "open to update: not-checkable line after the rows" has "$(sed -n '/Fork 2.70.2/,/Summary/p' <<< "$out")" "not checkable \\(no upstream source\\)"
 check "unmanaged: install hint under the item replaces the older app" contains "$out" "brew install --cask --force keepassxc"
 check "brew: formulae group" has "$out" "^ formulae$"
 check "brew: casks group" has "$out" "^ casks$"
@@ -521,7 +523,7 @@ check "colour: forced escape sequence" grep -q $'\033\\[' "$WORK/out"
 check "colour: outdated count yellow" grep -q $'\033\\[33m4 outdated' "$WORK/out"
 check "colour: outdated name yellow" grep -q $'\033\\[33mghostty' "$WORK/out"
 check "colour: new version yellow" grep -q $'\033\\[33m1\\.4\\.0' "$WORK/out"
-check "colour: new version not green" no_match "$(cat "$WORK/out")" $'\033\\[32m[0-9]'
+check "colour: new version not green" no_match "$(cat "$WORK/out")" $'\033\\[32m[0-9.]+\033'
 check "colour: old version dim" grep -q $'\033\\[2m1\\.3\\.1' "$WORK/out"
 check "colour: informational dim" grep -q $'\033\\[2mchecked during --install' "$WORK/out"
 check "colour: open to update line yellow" grep -q $'\033\\[33mThese apps update themselves on start' "$WORK/out"
@@ -550,10 +552,16 @@ check "colour: up to date green" grep -q $'\033\\[32mup to date' "$WORK/out"
 check "colour: everything up to date green" grep -q $'\033\\[32meverything up to date' "$WORK/out"
 make_app "Google Chrome" com.google.Chrome 150.0
 run
-check "nothing outdated: self-updating line still shown" has "$out" "also update themselves on start: Google Chrome"
+check "nothing outdated: self-updating apps checked" has "$out" "^ Self-updating apps \\.+ 1 checked, all current$"
+check "nothing outdated: current self-updating app not named" no_match "$out" "Google Chrome"
 check "nothing outdated: no Open to update section" lacks "$out" "Open to update"
 check "nothing outdated with self-updating apps: exit 0" equals "$rc" 0
+check "nothing outdated with self-updating apps: everything up to date" contains "$out" "everything up to date"
+MAC_OUTDATED_COLOR=always run
+check "colour: all current green" grep -q $'\033\\[32m1 checked, all current' "$WORK/out"
 rm -rf "$APPS/Google Chrome.app"
+run
+check "no self-updating app installed: up to date" has "$out" "^ Self-updating apps \\.+ up to date$"
 
 # only an auto-updating cask and a stale record: brew itself is up to date
 jq '.casks = [
@@ -629,6 +637,8 @@ check "missing brew: vulnerabilities skipped" has "$out" "^ brew vulnerabilities
 check "missing brew: install scripts skipped" has "$out" "^ Install scripts \\.+ skipped \\(brew not installed\\)$"
 check "missing uv: note" has "$out" "^ uv tools \\.+ skipped \\(uv not installed\\)$"
 check "missing tools: sparkle still checked" contains "$out" "Fork 2.70.2 → 2.71.1"
+check "missing brew: self-updating apps check failed" has "$out" "^ Self-updating apps \\.+ check failed$"
+check "missing brew: self-updating apps summary row" has "$out" "^ Self-updating apps ! check failed$"
 
 # ── check mode: casks found by app name in Homebrew's API cache ─────────────
 # cask_cache <payload json>: the signed API file of current brew (internal/packages.*.jws.json)
@@ -716,6 +726,90 @@ check "untrusted text: | becomes /, no field shift" contains "$out" "Fo/rk[31m 2
 check "untrusted text: no escape byte" no_match "$(cat "$WORK/out")" $'\e'
 check "file feed: not fetched" lacks "$(calls)" "file:///etc/passwd"
 check "feed fetch: http(s) only" contains "$(calls)" "curl --proto =https,http"
+
+# ── self-updating and managed apps: installed version vs the cask ───────────
+# loosely <installed> <latest>: what the version comparison says
+loosely() { /opt/homebrew/bin/bash -c 'source "$1"; if loosely_newer "$2" "$3"; then echo outdated; else echo current; fi' _ "$SCRIPT" "$1" "$2"; }
+check "compare: Signal outdated" equals "$(loosely 8.35.0 8.36.0)" outdated
+check "compare: Windows App outdated" equals "$(loosely 11.4.4 11.4.5)" outdated
+check "compare: Brave Chromium prefix, same" equals "$(loosely 158.1.100.58 1.100.58.0,200.58)" current
+check "compare: Brave, cask behind" equals "$(loosely 158.1.100.58 1.99.57)" current
+check "compare: Brave, cask newer" equals "$(loosely 158.1.100.58 1.101.3.0,201.3)" outdated
+check "compare: Office build stamp" equals "$(loosely 16.115.1 16.115.26111533)" current
+check "compare: Office newer minor" equals "$(loosely 16.115.1 16.116.26120000)" outdated
+check "compare: Zoom build in brackets" equals "$(loosely '7.2.5 (90525)' 7.2.5.90525)" current
+check "compare: Docker build after comma" equals "$(loosely 4.99.0 4.99.0,245822)" current
+check "compare: KeePassXC suffix after comma" equals "$(loosely 2.8.0 2.8.0,2.8.0-1)" current
+check "compare: TeamViewer, cask behind" equals "$(loosely 15.83.3 15.82.6)" current
+check "compare: short versions still differ" equals "$(loosely 1.2 2.0)" outdated
+
+SELF_CASKS='{"casks": {
+  "signal": {"version": "8.36.0", "auto_updates": true, "raw_artifacts": [[":app", ["Signal.app"]]]},
+  "windows-app": {"version": "11.4.5", "raw_artifacts": [[":uninstall", {":pkgutil": "com.microsoft.rdc.macos"}], [":pkg", ["Windows_App_11.4.5_installer.pkg"]]]},
+  "office-suite": {"version": "16.115.26110837", "raw_artifacts": [[":uninstall", {":delete": ["/Applications/Microsoft 365 Copilot Shim.app", "/Applications/Microsoft Defender.app", "/Applications/Microsoft Outlook.app"], ":pkgutil": ["com.microsoft.m365copilot.shim", "com.microsoft.wdav"]}]]},
+  "steam": {"version": "6.1,1791918634", "auto_updates": true, "raw_artifacts": [[":app", ["Steam.app"]]]},
+  "brave-browser": {"version": "1.100.58.0,200.58", "auto_updates": true, "raw_artifacts": [[":app", ["Brave Browser.app"]]]},
+  "zoom": {"version": "7.2.5.90525", "auto_updates": true, "raw_artifacts": [[":pkg", ["zoomusInstallerFull.pkg"]], [":uninstall", {":delete": ["/Applications/zoom.us.app"]}]]},
+  "docker-desktop": {"version": "4.99.0,245822", "auto_updates": true, "raw_artifacts": [[":app", ["Docker.app"]]]},
+  "google-chrome": {"version": "150.0", "auto_updates": true, "raw_artifacts": [[":app", ["Google Chrome.app"]]]},
+  "microsoft-word": {"version": "99.0", "auto_updates": true, "raw_artifacts": [[":app", ["Microsoft Word.app"]]]},
+  "safari-thing": {"version": "99.0", "raw_artifacts": [[":app", ["Safari.app"]]]},
+  "sparkly": {"version": "99.0", "raw_artifacts": [[":app", ["Sparkly.app"]]]}
+}}'
+fixtures_outdated
+cask_cache "$SELF_CASKS"
+make_app Signal org.whispersystems.signal-desktop 8.35.0
+make_app "Windows App" com.microsoft.rdc.macos 11.4.4
+make_app "Brave Browser" com.brave.Browser 158.1.100.58
+make_app zoom.us us.zoom.xos "7.2.5 (90525)"
+make_app Docker com.docker.docker 4.99.0
+make_app "Microsoft Defender" com.microsoft.wdav 101.0
+make_app "Microsoft 365 Copilot Shim" com.microsoft.m365copilot.shim 0.2602.0501
+make_app "Microsoft Outlook" com.microsoft.Outlook 16.115.1
+make_app Steam com.valvesoftware.steam 1.0
+plutil -remove CFBundleShortVersionString "$APPS/Steam.app/Contents/Info.plist"
+plutil -insert CFBundleVersion -string 6.1 "$APPS/Steam.app/Contents/Info.plist"
+make_app Safari com.apple.Safari 26.0
+make_app Sparkly com.microsoft.sparkly 1.0 "" sparkle
+run
+open_block=$(sed -n '/Open to update · /,/Summary/p' <<< "$out")
+check "self: Signal to open" has "$open_block" "Signal 8.35.0 → 8.36.0"
+check "self: MAU app missed by MAU to open" has "$open_block" "Windows App 11.4.4 → 11.4.5"
+check "self: progress" has "$out" "^ Self-updating apps \\.+ 2 to open$"
+check "self: Brave current" lacks "$out" "Brave Browser 158"
+check "self: Zoom current" lacks "$out" "zoom.us 7.2.5"
+check "self: Docker current" lacks "$out" "Docker 4.99.0"
+check "self: Chrome current" no_match "$out" "Google Chrome"
+check "self: current apps not in not-checkable line" no_match "$(grep 'not checkable' <<< "$out")" "Signal|Brave|zoom|Docker|Windows App"
+check "self: no-cask managed app not checkable" has "$out" "not checkable \\(no upstream source\\):.*Microsoft Defender"
+check "self: suite cask deleting many apps not used" has "$out" "not checkable \\(no upstream source\\):.*Microsoft 365 Copilot Shim"
+check "self: suite cask version not shown" lacks "$out" "→ 16.115.26110837"
+check "self: suite cask used for an app of the same major" no_match "$out" "Microsoft Outlook"
+check "self: build version when no short version" no_match "$out" "Steam"
+check "self: Apple apps left out" lacks "$out" "Safari"
+check "self: Sparkle apps left to the Sparkle check" equals "$(grep -c 'Sparkly 1.0' <<< "$out")" 1
+check "self: Word once, from MAU" equals "$(grep -c 'Microsoft Word 16.114.3' <<< "$out")" 1
+check "self: summary counts them as open" has "$out" "^ open to update 3 open the app \\(updates on start\\)$"
+check "self: no install hint for them" no_match "$out" "cask --force (signal|windows-app)"
+check "self: no brew info per app" no_match "$(calls)" '^brew info --cask --json=v2 [^-]'
+MAC_OUTDATED_COLOR=always run
+check "self: outdated row yellow" grep -q $'\033\\[33mSignal' "$WORK/out"
+check "self: not-checkable line dim" grep -q $'\033\\[2mnot checkable (no upstream source)' "$WORK/out"
+# the cask list is read again after brew update
+cask_cache "$(jq '.casks.signal.version = "8.35.0" | .casks["windows-app"].version = "11.4.4"' <<< "$SELF_CASKS")"
+cp "$FIX/brew-cache/api/internal/packages.arm64_test.jws.json" "$FIX/stale.json"
+jq -c '{payload: tojson, signatures: []}' <<< "$SELF_CASKS" > "$FIX/brew-update-cache.json"
+run
+check "self: cask list read after brew update" has "$(sed -n '/Open to update · /,/Summary/p' <<< "$out")" "Signal 8.35.0 → 8.36.0"
+rm -f "$FIX/brew-update-cache.json"
+cp "$FIX/stale.json" "$FIX/brew-cache/api/internal/packages.arm64_test.jws.json"
+run
+check "self: stale cask list, nothing to open" has "$out" "^ Self-updating apps \\.+ [0-9]+ checked, all current$"
+# no API cache: brew info per app, like the other cask checks
+rm -rf "$FIX/brew-cache"
+cask_like signal Signal 8.36.0
+run
+check "self, no cache: brew info by app name" has "$(sed -n '/Open to update · /,/Summary/p' <<< "$out")" "Signal 8.35.0 → 8.36.0"
 
 # ── xxh remote binaries: VERSIONS of each store vs GitHub's latest release ──
 fixtures_outdated

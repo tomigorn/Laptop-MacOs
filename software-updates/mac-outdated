@@ -47,19 +47,20 @@ STEP_STATUS=""  # set by an install step instead of its exit code: missing, upto
 MACOS_FAILED=""
 MACOS_STAGED=""  # macOS labels still offered after install because they wait for a restart
 
-SOURCES=(brew taps vulns scripts msupdate adobe mas macos pipx uv vscode xxh sparkle unmanaged)
+SOURCES=(brew taps vulns scripts msupdate adobe mas macos pipx uv vscode xxh sparkle unmanaged self)
 INSTALL_ORDER=(adobe mas brew msupdate pipx uv vscode macos)
 declare -A LABELS=(
   [brew]="brew" [taps]="brew taps" [vulns]="brew vulnerabilities" [scripts]="Install scripts" [msupdate]="Microsoft AutoUpdate" [adobe]="Adobe" [mas]="App Store" [macos]="macOS"
-  [pipx]="pipx" [uv]="uv tools" [vscode]="VS Code extensions" [xxh]="xxh remote binaries" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater"
+  [pipx]="pipx" [uv]="uv tools" [vscode]="VS Code extensions" [xxh]="xxh remote binaries" [sparkle]="Sparkle apps" [unmanaged]="Apps without an updater" [self]="Self-updating apps"
 )
-MANUAL_SOURCES=" xxh sparkle unmanaged "
+MANUAL_SOURCES=" xxh sparkle unmanaged self "
 REVIEW_DAYS=14
 SELF_UPDATING=("Google Chrome" "Brave Browser" Firefox Discord Signal Obsidian Docker Steam zoom.us Element "Autodesk Fusion" "iStat Menus")
 MANAGED_IDS=('com.apple.*' 'com.microsoft.*' 'com.adobe.*' 'com.jamf*' '*ethz*' 'corp.sap.privileges' 'nl.root3.support')
 BREW_APPS=""
 CASK_TABLE=""  # token, app bundle name, auto_updates separated by \x1f, from brew info --installed
-declare -A CASK_BY_APP=()  # lowercased app bundle name -> token|version|auto_updates, from Homebrew's API cache
+LISTED=""  # items of the sources before self, so self skips apps already listed
+declare -A CASK_BY_APP=()  # lowercased app bundle name -> token|version|auto_updates|suite, "id:<package id>" -> token|version|auto_updates, from Homebrew's API cache
 declare -A HINTS=(
   [brew]="mac-outdated --install" [msupdate]="mac-outdated --install" [adobe]="mac-outdated --install" [mas]="mac-outdated --install"
   [macos]="mac-outdated --install" [pipx]="mac-outdated --install" [uv]="mac-outdated --install" [vscode]="mac-outdated --install"
@@ -136,6 +137,27 @@ app_version() { plist_get "$1/Contents/Info.plist" CFBundleShortVersionString; }
 
 newer() {  # newer <installed> <latest>: latest is strictly newer
   [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$2" ]
+}
+version_parts() {  # version_parts <version>: into PARTS, cut at "," and " (" and at a build stamp (6+ digits), trailing zeros dropped
+  local v=${1%%,*} p
+  v=${v%% (*}
+  PARTS=()
+  IFS=. read -ra p <<< "$v"
+  for v in "${p[@]}"; do
+    [[ $v =~ ^[0-9]{6,}$ ]] && break
+    PARTS+=("$v")
+  done
+  while [ "${#PARTS[@]}" -gt 1 ] && [[ ${PARTS[-1]} =~ ^0+$ ]]; do unset 'PARTS[-1]'; done
+}
+loosely_newer() {  # loosely_newer <installed> <latest>: latest is newer on the parts both have; a Chromium major (>= 100) in front of the app's version is skipped
+  local PARTS a l n
+  version_parts "$1"; a=("${PARTS[@]}")
+  version_parts "$2"; l=("${PARTS[@]}")
+  [ "${#a[@]}" -gt 0 ] && [ "${#l[@]}" -gt 0 ] || return 1
+  if [ "${#a[@]}" -eq $((${#l[@]} + 1)) ] && [[ ${a[0]} =~ ^[0-9]+$ ]] && [ "${a[0]}" -ge 100 ] && [[ ${l[0]} =~ ^[0-9]+$ ]] && [ "${l[0]}" -lt "${a[0]}" ]; then a=("${a[@]:1}"); fi
+  n=${#a[@]}
+  [ "${#l[@]}" -ge "$n" ] || n=${#l[@]}
+  newer "$(IFS=.; echo "${a[*]:0:n}")" "$(IFS=.; echo "${l[*]:0:n}")"
 }
 
 all_apps() {
@@ -673,20 +695,25 @@ CASK_MAP_JQ='
       .casks | (if type == "object" then to_entries | map(.key as $k | .value | .token = $k) else . end) | .[]
       | {token, version, auto: (.auto_updates == true), off: (.disable_args != null),
          apps: [.raw_artifacts[]? | select(.[0] == ":app") | .[1][]? | strings],
-         dels: [.raw_artifacts[]? | select(.[0] == ":uninstall") | .[1] | list | objects | .[":delete"]? // empty | list | strings]}
+         dels: [.raw_artifacts[]? | select(.[0] == ":uninstall") | .[1] | list | objects | .[":delete"]? // empty | list | strings],
+         pkgs: [.raw_artifacts[]? | select(.[0] == ":uninstall") | .[1] | list | objects | .[":pkgutil"]? // empty | list | strings]}
     else
       .[] | {token, version, auto: (.auto_updates == true), off: (.disabled == true),
          apps: [.artifacts[]? | objects | .app? // empty | .[] | strings],
-         dels: [.artifacts[]? | objects | .uninstall? // empty | list | objects | .delete? // empty | list | strings]}
+         dels: [.artifacts[]? | objects | .uninstall? // empty | list | objects | .delete? // empty | list | strings],
+         pkgs: [.artifacts[]? | objects | .uninstall? // empty | list | objects | .pkgutil? // empty | list | strings]}
     end
   | select(.off | not) | . as $c
-  | ([.apps[] | {app: ., rank: 0}] + [.dels[] | select(test("^/Applications/[^/]+\\.app$")) | {app: sub("^/Applications/"; ""), rank: 10}])[]
-  | .rank += (if $c.token == (.app | norm) then 0 elif ($c.token | contains("@")) then 2 else 1 end)
-  | {key: (.app | ascii_downcase), rank, v: "\($c.token)|\($c.version)|\($c.auto)"}
+  | [.dels[] | select(test("^/Applications/[^/]+\\.app$")) | sub("^/Applications/"; "")] as $dels
+  | (([.apps[] | {app: ., rank: 0, suite: false}] + [$dels[] | {app: ., rank: 10, suite: (($dels | length) > 1)}])[]
+     | .rank += (if $c.token == (.app | norm) then 0 elif ($c.token | contains("@")) then 2 else 1 end)
+     | {key: (.app | ascii_downcase), rank, v: "\($c.token)|\($c.version)|\($c.auto)|\(.suite)"}),
+    (if ($c.pkgs | length) == 1 then {key: "id:\($c.pkgs[0])", rank: 0, v: "\($c.token)|\($c.version)|\($c.auto)"} else empty end)
 '
 load_cask_map() {  # fills CASK_BY_APP from the newest API cache file; stays empty without one
   command -v brew >/dev/null || return 0
   local cache f="" p key v
+  CASK_BY_APP=()
   cache=$(brew --cache 2>/dev/null) || return 0
   for p in "$cache"/api/internal/packages.*.jws.json; do
     [ -f "$p" ] && { [ -z "$f" ] || [ "$p" -nt "$f" ]; } && f=$p
@@ -697,10 +724,12 @@ load_cask_map() {  # fills CASK_BY_APP from the newest API cache file; stays emp
     [ -n "$key" ] && CASK_BY_APP[$key]=$v
   done < <(jq -r "[$CASK_MAP_JQ] | group_by(.key) | .[] | min_by(.rank) | [.key, .v] | @tsv" "$f" 2>/dev/null)
 }
-cask_for_app() {  # cask_for_app <app name>: prints "token|version|auto_updates" of the cask installing <app name>.app
+cask_for_app() {  # cask_for_app <app name> [bundle id]: prints "token|version|auto_updates[|suite]" of the cask installing <app name>.app, or of the one cask whose only package has that id
   local name=$1 token json
   if [ "${#CASK_BY_APP[@]}" -gt 0 ]; then
-    [ -n "${CASK_BY_APP[${name,,}.app]:-}" ] && printf '%s\n' "${CASK_BY_APP[${name,,}.app]}"
+    if [ -n "${CASK_BY_APP[${name,,}.app]:-}" ]; then printf '%s\n' "${CASK_BY_APP[${name,,}.app]}"
+    elif [ -n "${2:-}" ] && [ -n "${CASK_BY_APP[id:$2]:-}" ]; then printf '%s\n' "${CASK_BY_APP[id:$2]}"
+    fi
     return
   fi
   token=$(cask_token "$name")
@@ -710,7 +739,7 @@ cask_for_app() {  # cask_for_app <app name>: prints "token|version|auto_updates"
 }
 cask_item() {  # cask_item <src> <app name> <installed>: an item when the app's cask is newer; auto-updating casks open to update
   local token version auto latest
-  IFS='|' read -r token version auto < <(cask_for_app "$2")
+  IFS='|' read -r token version auto _ < <(cask_for_app "$2")
   latest=${version%%,*}
   [ -n "${token:-}" ] && [ -n "$latest" ] && [ "$latest" != latest ] || return 0
   newer "$3" "$latest" || return 0
@@ -735,6 +764,38 @@ check_unmanaged() {
   done < <(all_apps)
 }
 
+check_self() {  # self-updating and managed apps no other source covers: installed version vs the cask
+  command -v brew >/dev/null || { check_failed self "brew not installed, no cask to compare with"; return; }
+  local app name id inst token version auto suite checked=0 open=0 none=()
+  while IFS= read -r app; do
+    name=$(basename "$app" .app)
+    [ -d "$app/Contents/Frameworks/Sparkle.framework" ] && continue
+    [ -d "$app/Contents/_MASReceipt" ] && continue
+    is_brew_app "$name" && continue
+    id=$(plist_get "$app/Contents/Info.plist" CFBundleIdentifier)
+    [[ $id == com.apple.* ]] && continue
+    is_self_updating "$name" || is_managed_id "$id" || continue
+    listed_elsewhere "$name" && continue
+    inst=$(app_version "$app")
+    [ -n "$inst" ] || inst=$(plist_get "$app/Contents/Info.plist" CFBundleVersion)
+    token="" version=""
+    IFS='|' read -r token version auto suite < <(cask_for_app "$name" "$id")
+    [ "${suite:-}" != true ] || [ "${inst%%.*}" = "${version%%.*}" ] || token=""
+    if [ -z "$token" ] || [ -z "$inst" ] || [ -z "${version%%,*}" ] || [ "$version" = latest ]; then none+=("$name"); continue; fi
+    checked=$((checked + 1))
+    loosely_newer "$inst" "$version" && { item self "$name" "$inst" "${version%%,*}" open; open=$((open + 1)); }
+  done < <(all_apps)
+  [ "$checked" -eq 0 ] || [ "$open" -gt 0 ] || note self "$checked checked, all current" "$checked checked, all current" =
+  [ "${#none[@]}" -eq 0 ] || note self "not checkable (no upstream source): $(IFS=,; printf '%s' "${none[*]}" | sed 's/,/, /g')" "" i
+}
+listed_elsewhere() {  # listed_elsewhere <app name>: an earlier source already lists it as outdated (LISTED, set by check_mode)
+  local s name inst latest
+  while IFS='|' read -r s name inst latest _; do
+    [ -n "$latest" ] && [ "$name" = "$1" ] && return 0
+  done <<< "$LISTED"
+  return 1
+}
+
 mark_self_updating() {  # mark_self_updating <lines>: items of SELF_UPDATING apps become open-to-update items
   local line s name inst latest
   while IFS= read -r line; do
@@ -744,11 +805,8 @@ mark_self_updating() {  # mark_self_updating <lines>: items of SELF_UPDATING app
     fi
   done <<< "$1"
 }
-open_to_update() {  # open_to_update <open items> <info notes without a section>: outdated self-updating apps, then the other self-updating apps
-  local items=$1 s found=() name inst latest extra hint nw=24 vw=1 n
-  for s in "${SELF_UPDATING[@]}"; do
-    find_app "$s" >/dev/null && ! is_brew_app "$s" && ! grep -qF "|$s|" <<< "$items" && found+=("$s")
-  done
+open_to_update() {  # open_to_update <open items> <info notes without a section>: outdated self-updating apps, then the info lines
+  local items=$1 s name inst latest extra hint nw=24 vw=1 n
   if [ -n "$items" ]; then
     n=$(grep -c . <<< "$items")
     section "Open to update" "$n"
@@ -758,10 +816,9 @@ open_to_update() {  # open_to_update <open items> <info notes without a section>
       [ "${#inst}" -le "$vw" ] || vw=${#inst}
     done <<< "$items"
     while IFS='|' read -r s name inst latest extra hint; do row "$name" "$inst" "$latest" "$nw" "$vw"; done <<< "$items"
-  elif [ "${#found[@]}" -gt 0 ] || [ -n "$2" ]; then
+  elif [ -n "$2" ]; then
     printf '\n'
   fi
-  [ "${#found[@]}" -eq 0 ] || printf '  %s\n' "$(c 2 "also update themselves on start: $(IFS=,; sed 's/,/, /g' <<< "${found[*]}")")"
   while IFS='|' read -r s name inst latest extra hint; do
     [ -n "$s" ] && printf '  %s\n' "$(c 2 "$extra")"
   done <<< "$2"
@@ -865,7 +922,9 @@ check_mode() {
   declare -A LINES
   for src in "${SOURCES[@]}"; do
     progress_start "${LABELS[$src]}"
+    [ "$src" != self ] || LISTED=$(printf '%s\n' "${LINES[@]}")
     block=$(mark_self_updating "$("check_$src")")
+    [ "$src" != brew ] || load_cask_map
     LINES[$src]=$block
     analyze "$src" "$block"
     printf '%s\n' "$(result_text "$src")"
