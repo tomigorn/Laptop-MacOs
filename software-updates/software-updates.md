@@ -102,6 +102,8 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
   | skipped (admin expired) | `App Store: skipped, admin expired: click Privileges, then mac-outdated --install` |
   | skipped (admin nearly out) | `App Store: skipped, admin expires in 1 min: click Privileges, then mac-outdated --install` |
   | mas not from Homebrew | `App Store: skipped, mas is not from Homebrew (<path>): brew install mas` |
+  | ETH offers an update | `Xcode: ETH Self Service offers 27.3, open ETH Self Service` |
+  | brew blocked by macOS | `utm: macOS blocked replacing /Applications/UTM.app (owned by root): allow ghostty in System Settings › Privacy & Security › App Management, then mac-outdated --install` |
   | pipx link conflict | `pipx example-tool: ~/.local/bin/example-tool links elsewhere: rm it, then pipx reinstall example-tool` |
   | held third-party formulae | `yabai: third-party tap, held for review (mac-outdated lists it)` |
 
@@ -111,7 +113,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | Source | Signal |
 |---|---|
 | Adobe | `No new applicable Updates` |
-| App Store | `mas outdated` lists nothing (then no `mas upgrade`, no admin check); `mas outdated` failing -> `failed`, no `mas upgrade` |
+| App Store | `mas outdated` lists nothing, or only ETH-licensed apps (then no `mas upgrade`, no admin check); `mas outdated` failing -> `failed`, no `mas upgrade` |
 | brew | `brew outdated` lists no formula and no cask to upgrade (third-party held, self-updating and stale casks don't count); `brew update` failing -> `failed` (still upgrades); no `jq` -> `failed`, `jq not found: brew install jq`, no upgrade |
 | pipx | `No packages upgraded` |
 | uv tools | `Nothing to upgrade` |
@@ -148,7 +150,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | Install scripts | `*.sh` and `install*` files of this repo (found from the script's real path; `.git`, `tests`, `fixtures` skipped) naming `brew install <owner>/<tap>/<name>` or `brew tap <owner>/<tap>` for a tap that is not tapped (comments and `homebrew/*` skipped) | none: fix the script |
 | Microsoft AutoUpdate | `msupdate --list`, lines `<app ID>  <title> Update <version> (<build>)`: app ID -> app (`MSWD2019` Word, `XCEL2019` Excel, `PPT32019` PowerPoint, `OPIM2019` Outlook, `ONMC2019` OneNote, `ONDR18` OneDrive, `MSau04` AutoUpdate, Teams, Defender, Edge, …; unknown ID: the title), installed = the app's `CFBundleShortVersionString`, latest = the title's version (the build only without one) | `msupdate --list` first: no updates -> `up to date`; else `msupdate --install --wait 600` (without a wait it can hang until the MAU window is clicked) |
 | Adobe | `RemoteUpdateManager --action=list` (needs admin, else a note) | `sudo RemoteUpdateManager --action=install` |
-| App Store | `/opt/homebrew/bin/mas outdated --json` (note if it is missing) | `mas outdated` first: nothing -> `up to date`; mas not resolving into `/opt/homebrew/Cellar/mas/` -> `skipped (mas not from Homebrew)`, no sudo; else `sudo mas upgrade` (mas needs root to update apps) |
+| App Store | `/opt/homebrew/bin/mas outdated --json` (note if it is missing); ETH-licensed apps: see below | `mas outdated` first: none of your own -> `up to date`; mas not resolving into `/opt/homebrew/Cellar/mas/` -> `skipped (mas not from Homebrew)`, no sudo; else `sudo mas upgrade <ids>`, only apps of your own Apple account (mas needs root to update apps) |
 | macOS | `softwareupdate --list` (labels in `macos-staged`: by hand, `<title>: installed, restart the Mac to finish`) | `softwareupdate --list` first; then `sudo softwareupdate --install --all` through `script -q` (never restarts), `--list` again: results below |
 | pipx | `pipx list --json` + `pip index versions` (packages installed from a local path are skipped; non-zero exit with valid JSON -> note `pipx reports a broken package: run pipx reinstall-all`) | `pipx upgrade-all` |
 | uv tools | `uv tool list --outdated` (`none installed` without tools; skipped when uv is missing) | `uv tool upgrade --all` |
@@ -187,10 +189,18 @@ Run it as your own user, never with sudo: `--install` asks for the password itse
 
 | brew error | Cause | Fix |
 |---|---|---|
-| `chown: /Applications/X.app/…: Operation not permitted`, `Permission denied @ apply2files` | the app updated itself and is now owned by root; App Management blocks even `sudo chown` from the terminal | `open -R /Applications/X.app`, ⌘⌫ in Finder, then `brew reinstall --cask <token>` |
-| `It seems there is already an App at '…/Caskroom/<token>/<old>/X.app'` | a leftover backup from an earlier failed upgrade | `rm -rf /opt/homebrew/Caskroom/<token>/<old>/X.app`, then `brew upgrade --cask <token>` |
+| `chown: /Applications/X.app/…: Operation not permitted`, `Permission denied @ apply2files` | the app updated itself and is now owned by root; App Management blocks even `sudo chown` from the terminal | allow the terminal under System Settings › Privacy & Security › App Management, then `mac-outdated --install` (it already removed brew's leftover backup and lists this under By hand); without that permission: `open -R /Applications/X.app`, ⌘⌫ in Finder, then `brew reinstall --cask <token>` |
+| `It seems there is already an App at '…/Caskroom/<token>/<old>/X.app'` | a leftover backup from an earlier failed upgrade | `mac-outdated --install` removes it and upgrades that cask once more, when `X.app` is still in `/Applications`; otherwise By hand: move it back to `/Applications`. By hand without `mac-outdated`: `rm -rf /opt/homebrew/Caskroom/<token>/<old>/X.app`, then `brew upgrade --cask <token>` |
 
 Check owners: `stat -f '%Su %N' /Applications/*.app`. Update such apps through `mac-outdated`, not their own "Check for Updates".
+
+ETH-licensed App Store apps (installed from ETH Self Service, receipt `ProductionVPP`, e.g. Bitwarden, Xcode): `mas` can't update them ("Redownload Unavailable with This Apple Account"), so they never go to `mas upgrade`. The version ETH offers comes from Self Service's cache (`~/Library/Application Support/com.jamfsoftware.selfservice.mac/CocoaAppCD.storedata`, refreshed when Self Service opens):
+
+| ETH offers | check | `--install` |
+|---|---|---|
+| newer than installed | outdated, `open ETH Self Service` | By hand: open ETH Self Service |
+| not yet | note `App Store has <v>, ETH Self Service not yet`, not counted | left alone |
+| cache unreadable | note `ETH-licensed, App Store has <v>: Jamf / ETH Self Service updates it`, not counted | left alone |
 
 ## Admin rules
 
