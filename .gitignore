@@ -22,7 +22,7 @@ Icon?
 .claude/settings.local.json
 CLAUDE.local.md
 AGENTS.md
-docs/superpowers/
+docs/working/
 
 # ── Secrets & credentials — never commit real ones ───────────────────────────
 # NOTE: the placeholder keys under multiple-git-accounts/.ssh/ are intentional
