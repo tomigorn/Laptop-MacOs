@@ -257,5 +257,13 @@ zones < /dev/null
 IOREG_ADDS="monitor $DELL  mon-BBBBBBBB  unknown" "$SNAP" connected >/dev/null 2>&1
 check "19 one line per screen" [ "$(monitor_lines "$DELL")" = 1 ]
 
+# 20. a screen yabai reports without a real uuid, or only a few points wide, is never registered
+TINY=CCCCCCCC-1111-2222-3333-444444444444
+setup "$(disp 2 '<unknown>' 1470 1.0000 1.0000 false)" "$(disp 3 "$TINY" 1471 50.0000 50.0000 false)"
+zones < /dev/null
+run connected
+check "20 <unknown> uuid not registered" [ "$(grep -c '<unknown>' "$YABAI_ZONES_FILE")" = 0 ]
+check "20 screen under 100pt not registered" [ "$(monitor_lines "$TINY")" = 0 ]
+
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

@@ -144,6 +144,8 @@ register_displays() {
   local uuid w h model new="" tmp
   while read -r uuid w h; do
     [ -n "$uuid" ] || continue
+    # yabai briefly reports a placeholder screen (uuid "<unknown>", 1pt) while displays wake
+    [[ "$uuid" =~ ^[0-9A-Fa-f-]+$ && "$w" -ge 100 ]] || continue
     grep -q "$uuid" "$ZONES_FILE" 2>/dev/null && continue
     load_models
     model="$(model_for_display "$w" "$h")"

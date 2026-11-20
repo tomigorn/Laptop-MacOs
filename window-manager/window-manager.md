@@ -107,7 +107,7 @@ Edit the numbers, save — **no restart needed** (the script re-reads the file o
 
 Monitors are recognised by UUID and **registered automatically**:
 
-1. Plug in the monitor(s). Any run of `yabai-snap.sh` (the plug-in signal, a shortcut) adds each new screen after the last `monitor` line, as `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`. Screens covered by a `model` rule are left out.
+1. Plug in the monitor(s). Any run of `yabai-snap.sh` (the plug-in signal, a shortcut) adds each new screen after the last `monitor` line, as `monitor <uuid> mon-XXXXXXXX unknown # <width>pt, first seen <date>`. Screens covered by a `model` rule are left out, and so is the placeholder screen yabai reports while displays wake (uuid `<unknown>`, under 100pt wide).
 2. Open `zones.conf`, rename them (e.g. `Dell27 office-a`, `Dell24 office-a`) and add a `layout <name> …` line for each (or let them ride on `default`).
 
 ## Shared desks (open office)
