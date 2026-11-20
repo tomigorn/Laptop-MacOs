@@ -97,6 +97,17 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 
 - brew can't replace an app ("Operation not permitted"): give the terminal App Management permission (System Settings > Privacy & Security > App Management), or let the app update itself.
 - `--install` prints a `── <source>` block per step with the tool output indented as it arrives (macOS runs through `script(1)` straight on the terminal, not indented: both password prompts stay hidden; stdin not a terminal: plain `sudo softwareupdate`; Ctrl-C there, also at the sudo prompt -> `interrupted`), a result line (`installed` / `up to date` / `failed (exit N)` / `skipped (<tool> not installed)` / `skipped (admin expired: …)` / `skipped (admin expires in N min: …)`) and a summary. After the `total` row: `✓ nothing failed` (yellow `✓ nothing failed (N skipped: see By hand)` when admin ran out for N steps; still exit 1), or `✗ failed: <step> (<why>), …` with the log path and `rerun: mac-outdated --install`; then a `By hand` block.
+- Inside a block, mac-outdated's own lines are coloured (green done, yellow you act, dim info, red error), tool output stays plain. The brew block ends with one line per formula and cask it upgraded: a second `brew outdated` still lists it -> red `✗`, else green `✓` (held, self-updating and stale casks get none; that `brew outdated` failing -> red `brew outdated failed, results unknown`). Example:
+
+  ```
+  ── brew
+      ==> Upgrading 2 outdated packages
+      …
+      discord: updates itself on start, open the app
+      gpgme 2.2.0  →  2.3.1 ✓
+      utm   5.0.9  →  5.0.9-2 ✗
+    brew ......................... installed
+  ```
 
   | By hand lists | Example |
   |---|---|
@@ -138,10 +149,10 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 
 | Colour | Means |
 |---|---|
-| green | `up to date`, `installed`, `none installed` (uv tools) |
-| yellow | outdated: count, name, new version, `(older version …)`, by-hand hints, `skipped (…)`, `some updates failed (…)`, summary counts |
-| red | `check failed`, `failed (exit N)`, `interrupted`, `not run`, `!` rows |
-| dim | installed version, notes, informational lines |
+| green | `up to date`, `installed`, `none installed` (uv tools); `--install`: leftover backup removed, brew result `✓` |
+| yellow | outdated: count, name, new version, `(older version …)`, by-hand hints, `skipped (…)`, `some updates failed (…)`, summary counts; `--install`: held formula, self-updating cask, ETH Self Service offers |
+| red | `check failed`, `failed (exit N)`, `interrupted`, `not run`, `!` rows; `--install`: tool errors (`brew update failed`, `jq not found`, `sudo failed`, …), brew result `✗` |
+| dim | installed version, notes, informational lines; `--install`: stale cask record, ETH-licensed app left to Jamf |
 
 ## Sources
 
