@@ -27,6 +27,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
   VS Code extensions ........... 3 extensions, updated during --install
   xxh remote binaries .......... 1 outdated
   Sparkle apps ................. 1 to open
+  Self-updating apps ........... 1 to open
 
 ══════════════════════════════════════════════════════════
  brew · 33 outdated
@@ -51,12 +52,13 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
   bump the pin in terminal/remote-binaries.conf, then terminal/install.sh --refresh-remote
 
 ══════════════════════════════════════════════════════════
- Open to update · 2
+ Open to update · 3
 ══════════════════════════════════════════════════════════
   These apps update themselves on start: open them by hand.
     Discord                  0.0.420  →  0.0.421
     Fork                     2.70.2   →  2.71.0
-  also update themselves on start: Google Chrome, Brave Browser, Firefox, …
+    Signal                   8.35.0   →  8.36.0
+  not checkable (no upstream source): ETH Self Service, Microsoft Defender, …
 
 ══════════════════════════════════════════════════════════
  Summary
@@ -64,9 +66,9 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
   brew                          33   mac-outdated --install
   brew taps by hand              1   brew untap arthurk/virt-manager
   xxh remote binaries            1   terminal/install.sh --refresh-remote
-  open to update                 2   open the app (updates on start)
+  open to update                 3   open the app (updates on start)
   ────────────────────────────────
-  total                         37   33 via --install · 4 by hand
+  total                         38   33 via --install · 5 by hand
 
   next: mac-outdated --install
 ```
@@ -83,7 +85,8 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
   - outdated Sparkle apps (progress line `N to open`)
   - outdated casks with `auto_updates` (not counted on the brew line)
   - outdated apps from the self-updating list, from any source
-- "also update themselves on start" lists the other installed self-updating apps, minus those managed by a brew cask; shown also when nothing is outdated (then without the "Open to update" header).
+  - outdated self-updating and managed apps found by the `Self-updating apps` check (see below)
+- `not checkable (no upstream source): …` (dim) names the self-updating and managed apps without a cask; current ones are not named; shown also when nothing is outdated (then without the "Open to update" header).
 - Outdated casks are checked against the real app (`CFBundleShortVersionString` in `/Applications` or `~/Applications`):
 
 | Real app | Shown | Counts |
@@ -158,7 +161,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | xxh remote binaries | `~/.xxh/arch/<arch>/VERSIONS` (`tool version` per line, written by `terminal/install.sh`) vs GitHub's latest release (API, then the `releases/latest` page redirect when the API is rate limited); one row per tool, `tool (<arch>)` when the stores differ; no `VERSIONS` -> by hand `run terminal/install.sh --refresh-remote`; no store -> `none stored` | none: bump the pin in `terminal/remote-binaries.conf`, then `terminal/install.sh --refresh-remote` |
 | Sparkle apps | appcast from `SUFeedURL`, only `http(s)` (beta channel skipped; other schemes: a note, not fetched); no `SUFeedURL` (VLC, TeamViewer): the cask that installs the app, as for apps without an updater | none: "Open to update"; no feed and cask without `auto_updates`: `brew install --cask --force <token>` |
 | Apps without an updater | cask that installs the app (see below) | none: `brew install --cask --force <token>` (replaces the older app, settings stay; `--adopt` only takes an identical version); `auto_updates` cask -> "Open to update" |
-| Self-updating (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion, iStat Menus) | listed once | none: update on start |
+| Self-updating apps | apps not from brew, without Sparkle or App Store receipt, on the self-updating list (Chrome, Brave, Firefox, Discord, Signal, Obsidian, Docker, Steam, Zoom, Element, Autodesk Fusion, iStat Menus) or with a managed ID (`com.microsoft.*`, Jamf, ETH, …; not `com.apple.*`); skipped when another source already lists the app. Installed `CFBundleShortVersionString` (else `CFBundleVersion`) vs the cask: by app name, else by a cask whose only package ID is the app's bundle ID (Windows App); a suite cask deleting several apps (Office) only for apps of the same major version. Compared loosely: cut at `,` and ` (`, build stamps (6+ digits) and trailing `.0` dropped, a Chromium major (≥ 100) in front skipped, then only the parts both have. Progress: `N checked, all current` (green), `N to open`, or `check failed` without brew | none: "Open to update", open the app |
 
 macOS results (`--install`):
 
