@@ -43,7 +43,8 @@ case "$1" in
   tap) [ -f "$FIX/fail-brew-tap" ] && exit 1; cat "$FIX/brew-tap.txt" 2>/dev/null; exit 0 ;;
   update) [ -f "$FIX/brew-update-stderr.txt" ] && cat "$FIX/brew-update-stderr.txt" >&2; [ -f "$FIX/fail-brew-update" ] && exit 1
     [ -f "$FIX/brew-update-cache.json" ] && cp "$FIX/brew-update-cache.json" "$FIX/brew-cache/api/internal/packages.arm64_test.jws.json"; exit 0 ;;
-  outdated) [ -f "$FIX/brew-outdated-stderr.txt" ] && cat "$FIX/brew-outdated-stderr.txt" >&2; [ -f "$FIX/fail-brew-outdated" ] && { echo "Error: brew outdated failed" >&2; exit 1; }; cat "$FIX/brew-outdated.json" ;;
+  outdated) [ -f "$FIX/brew-outdated-stderr.txt" ] && cat "$FIX/brew-outdated-stderr.txt" >&2; [ -f "$FIX/fail-brew-outdated" ] && { echo "Error: brew outdated failed" >&2; exit 1; }
+    if [ "$2" = --json=v2 ]; then [ -f "$FIX/fail-brew-outdated-after" ] && exit 1; cat "$FIX/brew-outdated-after.json" 2>/dev/null || cat "$FIX/brew-outdated-none.json"; else cat "$FIX/brew-outdated.json"; fi ;;
   list) cat "$FIX/brew-list-full.txt" 2>/dev/null ;;
   vulns)
     [ -f "$FIX/fail-brew-vulns" ] && { echo "Error: Unknown command: vulns" >&2; exit 1; }
@@ -142,7 +143,7 @@ case "$url" in
 esac'
 cat > "$BIN/sudo" <<'EOF'
 #!/bin/sh
-if [ "$1" = -v ]; then echo "sudo -v" | tee -a "$CALLS" >> "$ALLCALLS"; exit 0; fi
+if [ "$1" = -v ]; then echo "sudo -v" | tee -a "$CALLS" >> "$ALLCALLS"; [ -f "$FIX/fail-sudo-v" ] && exit 1; exit 0; fi
 n=$(basename "$1"); shift
 echo "sudo $n $*" | tee -a "$CALLS" >> "$ALLCALLS"
 exec "$(dirname "$0")/$n" "$@"
@@ -1900,6 +1901,104 @@ run --install
 check "restart only in typed text: not staged" has "$out" "macOS \\.+ failed \\(still offered after install: macOS Golden Gate 27.2.1-27C123; owner password empty or wrong\\?\\)$"
 check "restart only in typed text: nothing remembered" test ! -e "$STAGED"
 rm -f "$STAGED"
+
+# ── install: own lines coloured, tool output plain, brew result per package ─
+colored() { grep -qF "$(printf '\033[%sm%s\033[0m' "$1" "$2")" "$WORK/out"; }  # colored <sgr code> <text>
+fixtures_outdated; admin_setup admin 20
+jq -n '{formulae: [{name: "aom", installed_versions: ["3.15.2"], current_version: "3.15.3", pinned: false}], casks: []}' > "$FIX/brew-outdated-after.json"
+MAC_OUTDATED_COLOR=always run --install
+check "results: upgraded formula green" colored 32 "bash    5.3.15  →  5.3.20 ✓"
+check "results: second upgraded formula green" colored 32 "btop    1.4.7   →  1.4.8 ✓"
+check "results: upgraded cask green" colored 32 "ghostty 1.3.1   →  1.4.0 ✓"
+check "results: still outdated red" colored 31 "aom     3.15.2  →  3.15.3 ✗"
+check "results: pinned formula has no line" lacks "$(cat "$WORK/out")" "node@20"
+check "results: formulae first, then casks" equals "$(grep -oE '(aom|bash|btop|ghostty) +[0-9.]+ +→' "$WORK/out" | cut -d' ' -f1 | tr '\n' ' ')" "aom bash btop ghostty "
+brew_end=$(grep -n 'brew \.\.' "$WORK/out" | head -n 1 | cut -d: -f1)
+check "results: at the end of the brew block" test "$(grep -n 'ghostty .*1\.4\.0 ✓' "$WORK/out" | cut -d: -f1)" -eq $((brew_end - 1))
+check "tool output: brew plain" grep -q '^    ==> Upgrading 1 outdated package' "$WORK/out"
+check "tool output: Adobe plain" grep -q '^    Successfully installed (AdobeAcrobatDC)' "$WORK/out"
+log=$(logpath)
+check "results: log without colour codes" no_match "$(cat "$log" 2>/dev/null)" $'\033'
+check "results: log keeps the result line" contains "$(cat "$log" 2>/dev/null)" "aom     3.15.2  →  3.15.3 ✗"
+run --install
+check "results: aligned like the check rows" grep -q '^    aom     3\.15\.2  →  3\.15\.3 ✗$' "$WORK/out"
+check "results: still outdated, step result unchanged" has "$out" "^ brew \\.+ installed$"
+NO_COLOR=1 run --install
+check "install: NO_COLOR no escape codes" no_match "$(cat "$WORK/out")" $'\033'
+touch "$FIX/fail-brew-outdated-after"
+MAC_OUTDATED_COLOR=always run --install
+rm -f "$FIX/fail-brew-outdated-after"
+check "results unknown: red" colored 31 "brew outdated failed, results unknown"
+check "results unknown: no result lines" no_match "$(cat "$WORK/out")" '(✓|✗)'$'\033'
+check "results unknown: step result unchanged" has "$out" "^ brew \\.+ "$'\033'"\\[32minstalled"
+
+fixtures_current; admin_setup admin 20
+run --install
+check "nothing tried: no result lines" no_match "$(sed -n '/── brew/,/^  brew \./p' "$WORK/out")" '✓|✗'
+
+fixtures_outdated; admin_setup admin 20
+jq '.casks += [
+  {name: "utm", installed_versions: ["4.7.5"], current_version: "5.0.8", pinned: false},
+  {name: "discord", installed_versions: ["0.0.389"], current_version: "0.0.421", pinned: false},
+  {name: "betterdisplay", installed_versions: ["4.2.3"], current_version: "5.2.1", pinned: false}]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
+make_app UTM com.utmapp.UTM 5.0.8
+make_app Discord com.hammerandchisel.discord 0.0.420
+make_app BetterDisplay pro.betterdisplay.BetterDisplay 4.2.3
+MAC_OUTDATED_COLOR=always run --install
+check "stale cask install line: dim" colored 2 "utm: app already current, brew's record is stale"
+check "self-updating cask install line: yellow" colored 33 "discord: updates itself on start, open the app"
+check "results: tried cask listed" grep -qE 'betterdisplay +4\.2\.3 +→  5\.2\.1 ✓' "$WORK/out"
+check "results: stale cask has no line" no_match "$(cat "$WORK/out")" 'utm +4\.7\.5'
+check "results: self-updating cask has no line" no_match "$(cat "$WORK/out")" 'discord +0\.0\.389'
+
+held_setup; admin_setup admin 20
+MAC_OUTDATED_COLOR=always run --install
+check "held install line: yellow" colored 33 "yabai: third-party tap, held for review (see mac-outdated)"
+check "results: only the upgraded formula" colored 32 "aom 3.15.2  →  3.15.3 ✓"
+check "results: held formula has no line" no_match "$(cat "$WORK/out")" 'yabai +7\.1\.25'
+
+fixtures_outdated; admin_setup admin 20
+cp "$FIX/mas-outdated-eth.json" "$FIX/mas-outdated.json"
+MAC_OUTDATED_COLOR=always run --install
+check "eth offered install line: yellow" colored 33 "Xcode: ETH-licensed, ETH Self Service offers 27.3"
+check "eth not yet install line: dim" colored 2 "Bitwarden: ETH-licensed, App Store has 2026.11.0, left to Jamf / ETH Self Service"
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/leftover-brew"
+mkdir -p "$FIX/caskroom/utm/5.0.9/UTM.app/Contents" "$APPS/UTM.app/Contents"
+MAC_OUTDATED_COLOR=always run --install
+check "leftover removed, retry: green" colored 32 "utm: removed brew's leftover backup $FIX/caskroom/utm/5.0.9/UTM.app, upgrading again"
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/rootowned-brew"
+mkdir -p "$FIX/caskroom/utm/5.0.9/UTM.app/Contents" "$APPS/UTM.app/Contents"
+MAC_OUTDATED_COLOR=always run --install
+check "leftover removed, blocked: green" colored 32 "utm: removed brew's leftover backup $FIX/caskroom/utm/5.0.9/UTM.app"
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/fail-brew-update"
+MAC_OUTDATED_COLOR=always run --install
+check "brew update failed: red" colored 31 "brew update failed, upgrading anyway"
+rm -f "$FIX/fail-brew-update"
+touch "$FIX/fail-brew-outdated"
+MAC_OUTDATED_COLOR=always run --install
+check "brew outdated failed: red" colored 31 "brew outdated failed, no formula upgraded"
+check "brew outdated --cask failed: red" colored 31 "brew outdated --cask failed"
+rm -f "$FIX/fail-brew-outdated"
+touch "$FIX/fail-mas-outdated"
+MAC_OUTDATED_COLOR=always run --install
+check "mas outdated failed: red" colored 31 "mas outdated failed, nothing upgraded"
+rm -f "$FIX/fail-mas-outdated"
+mkdir -p "$WORK/nojq"
+for f in /bin/* /usr/bin/* "$BIN"/*; do [ "$(basename "$f")" = jq ] || ln -sf "$f" "$WORK/nojq/"; done
+PATH="$WORK/nojq" MAC_OUTDATED_COLOR=always run --install
+check "jq missing: red" colored 31 "jq not found: brew install jq"
+rm -rf "$WORK/nojq"
+touch "$FIX/fail-sudo-v"
+MAC_OUTDATED_COLOR=always run --install
+rm -f "$FIX/fail-sudo-v"
+check "sudo -v failing: exit 2" equals "$rc" 2
+check "sudo -v failing: red" colored 31 "sudo failed"
 
 # ── safety, over every run above ─────────────────────────────────────────────
 all="$(cat "$ALLCALLS")"

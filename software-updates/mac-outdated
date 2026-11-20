@@ -1090,35 +1090,37 @@ install_adobe() {
 }
 install_brew() {
   command -v brew >/dev/null || { STEP_STATUS=missing; return 0; }
-  command -v jq >/dev/null || { echo "jq not found: brew install jq"; return 1; }
-  local json casks=() token latest state rc=0 r third name upgrades=() selfs=() held=() did=0 out others r2
-  brew update || { echo "brew update failed, upgrading anyway"; rc=1; }
+  command -v jq >/dev/null || { c 31 "jq not found: brew install jq"; echo; return 1; }
+  local json casks=() token inst latest state rc=0 r third name upgrades=() selfs=() held=() did=0 out others r2
+  TRIED=()
+  brew update || { c 31 "brew update failed, upgrading anyway"; echo; rc=1; }
   third=$(third_party_formulae)
   if json=$(brew outdated --formula --json=v2 2>/dev/null); then
-    while IFS= read -r name; do
+    while IFS=$'\t' read -r name inst latest; do
       [ -n "$name" ] || continue
-      if is_listed "$third" "${name##*/}"; then echo "${name##*/}: third-party tap, held for review (see mac-outdated)"; held+=("${name##*/}"); else upgrades+=("$name"); fi
-    done < <(jq -r '.formulae[] | select(.pinned | not) | .name' <<< "$json")
+      if is_listed "$third" "${name##*/}"; then c 33 "${name##*/}: third-party tap, held for review (see mac-outdated)"; echo; held+=("${name##*/}")
+      else upgrades+=("$name"); TRIED+=("$name"$'\t'"$inst"$'\t'"$latest"); fi
+    done < <(jq -r "$BREW_ROWS_JQ" <<< "$json")
     if [ "${#upgrades[@]}" -gt 0 ]; then
       did=1
       brew upgrade --formula "${upgrades[@]}" || rc=$?
     fi
   else
-    echo "brew outdated failed, no formula upgraded"
+    c 31 "brew outdated failed, no formula upgraded"; echo
     rc=1
   fi
   load_brew_apps
   for name in "${held[@]}"; do hand "$name: third-party tap, held for review (mac-outdated lists it)"; done
-  json=$(brew outdated --cask --json=v2 2>/dev/null) || { echo "brew outdated --cask failed"; return 1; }
-  while IFS=$'\t' read -r token latest; do
+  json=$(brew outdated --cask --json=v2 2>/dev/null) || { c 31 "brew outdated --cask failed"; echo; brew_results; return 1; }
+  while IFS=$'\t' read -r token inst latest; do
     [ -n "$token" ] || continue
     IFS='|' read -r state _ < <(cask_state "$token" "$latest")
     case $state in
-      install) casks+=("$token") ;;
-      stale) echo "$token: app already current, brew's record is stale" ;;
-      self) echo "$token: updates itself on start, open the app"; selfs+=("$token") ;;
+      install) casks+=("$token"); TRIED+=("$token"$'\t'"$inst"$'\t'"$latest") ;;
+      stale) c 2 "$token: app already current, brew's record is stale"; echo ;;
+      self) c 33 "$token: updates itself on start, open the app"; echo; selfs+=("$token") ;;
     esac
-  done < <(jq -r '.casks[] | select(.pinned | not) | [.name, .current_version] | @tsv' <<< "$json")
+  done < <(jq -r "${BREW_ROWS_JQ/formulae/casks}" <<< "$json")
   [ "$INTERRUPTED" -eq 0 ] || return 130
   if [ "${#casks[@]}" -gt 0 ]; then
     did=1
@@ -1141,8 +1143,28 @@ install_brew() {
     r=$(printf ', %s' "${selfs[@]}")
     hand "${r:2}: open the app, it updates itself"
   fi
+  brew_results
   [ "$did" -eq 1 ] || [ "$rc" -ne 0 ] || STEP_STATUS=uptodate
   return "$rc"
+}
+BREW_ROWS_JQ='.formulae[] | select(.pinned | not) | [.name, (.installed_versions[-1] // ""), .current_version] | @tsv'
+TRIED=()  # "<name>\t<installed>\t<latest>" per formula and cask install_brew upgraded
+brew_results() {  # one line per upgraded package: green when a second brew outdated no longer lists it, else red
+  [ "${#TRIED[@]}" -gt 0 ] && [ "$INTERRUPTED" -eq 0 ] || return 0
+  local after still t name inst latest nw=0 vw=0 line
+  after=$(brew outdated --json=v2 2>/dev/null) && still=$(jq -r '(.formulae[], .casks[]) | .name' <<< "$after") \
+    || { c 31 "brew outdated failed, results unknown"; echo; return 0; }
+  for t in "${TRIED[@]}"; do
+    IFS=$'\t' read -r name inst _ <<< "$t"
+    [ "${#name}" -le "$nw" ] || nw=${#name}
+    [ "${#inst}" -le "$vw" ] || vw=${#inst}
+  done
+  for t in "${TRIED[@]}"; do
+    IFS=$'\t' read -r name inst latest <<< "$t"
+    line=$(printf '%-*s %-*s  →  %s' "$nw" "$name" "$vw" "$inst" "$latest")
+    if is_listed "$still" "$name"; then c 31 "$line ✗"; else c 32 "$line ✓"; fi
+    echo
+  done
 }
 blocked_casks() {  # blocked_casks <brew upgrade output>: per cask macOS refused to replace, remove brew's leftover backup and add a by-hand line
   local caskroom term=${TERM_PROGRAM:-} token app backup
@@ -1151,7 +1173,7 @@ blocked_casks() {  # blocked_casks <brew upgrade output>: per cask macOS refused
   while IFS=$'\t' read -r token app backup; do
     [ -n "$token" ] || continue
     if [ -n "$backup" ] && [ -n "$caskroom" ] && [ -d "$app" ] && [[ $backup == "$caskroom/$token/"*.app ]] && [[ $backup != *..* ]] && [ -d "$backup" ]; then
-      rm -rf "$backup" && echo "$token: removed brew's leftover backup $backup"
+      rm -rf "$backup" && { c 32 "$token: removed brew's leftover backup $backup"; echo; }
     fi
     hand "$token: macOS blocked replacing ${app:-its app} (owned by root): allow $term in System Settings › Privacy & Security › App Management, then mac-outdated --install"
   done < <(perl -ne '
@@ -1174,7 +1196,7 @@ leftover_backups() {  # leftover_backups <brew upgrade output>: removes brew's l
     elif ! find_app "$name" >/dev/null; then
       hand "$token: brew's leftover backup $backup blocks the upgrade and $name.app is not in the app folders: move it back to /Applications, then mac-outdated --install"
     elif rm -rf "$backup"; then
-      echo "$token: removed brew's leftover backup $backup, upgrading again"
+      c 32 "$token: removed brew's leftover backup $backup, upgrading again"; echo
       RETRY+=("$token")
     fi
   done < <(perl -ne 'print "$1\t$2\n" if /^Error: (\S+?): It seems there is already an App at \x27(.*)\x27\.?$/' "$1")
@@ -1192,7 +1214,7 @@ install_mas() {
   mas=$(readlink -f "$MAS") || { STEP_STATUS=missing; return 0; }
   [[ $mas == "$MAS_CELLAR"* ]] || { STEP_STATUS=foreign; hand "App Store: skipped, mas is not from Homebrew ($mas): brew install mas"; return 0; }
   err=$(tmpfile) || return 1
-  list=$("$mas" outdated --json 2>"$err") || { rc=$?; cat "$err"; rm -f "$err"; echo "mas outdated failed, nothing upgraded"; return "$rc"; }
+  list=$("$mas" outdated --json 2>"$err") || { rc=$?; cat "$err"; rm -f "$err"; c 31 "mas outdated failed, nothing upgraded"; echo; return "$rc"; }
   rm -f "$err"
   offers=$(eth_offers) || offers=-
   while IFS=$'\t' read -r id name bid inst new type; do
@@ -1200,8 +1222,8 @@ install_mas() {
     if [ "$type" != ProductionVPP ]; then ids+=("$id"); continue; fi
     state=$(eth_state "$offers" "$bid" "$inst")
     case $state in
-      offered*) echo "$name: ETH-licensed, ETH Self Service offers ${state#offered }"; hand "$name: ETH Self Service offers ${state#offered }, open ETH Self Service" ;;
-      *) echo "$name: ETH-licensed, App Store has $new, left to Jamf / ETH Self Service" ;;
+      offered*) c 33 "$name: ETH-licensed, ETH Self Service offers ${state#offered }"; echo; hand "$name: ETH Self Service offers ${state#offered }, open ETH Self Service" ;;
+      *) c 2 "$name: ETH-licensed, App Store has $new, left to Jamf / ETH Self Service"; echo ;;
     esac
   done < <(jq -rR "$MAS_ROWS_JQ" <<< "$list")
   [ "${#ids[@]}" -gt 0 ] || { STEP_STATUS=uptodate; return 0; }
@@ -1377,7 +1399,7 @@ install_mode() {
   header "mac-outdated v$VERSION --install"
   require_admin || exit 2
   echo "  sudo asks again before a step when the last sudo was over a minute ago; the macOS step asks for your sudo password and then the owner password (both your login password)"
-  "$SUDO" -v || { echo "sudo failed"; exit 2; }
+  "$SUDO" -v || { c 31 "sudo failed"; echo; exit 2; }
   trap 'INTERRUPTED=1' INT  # the step ends first, then the loop stops from the main shell's own stdout
   local src rc label word t0 ifd ipid
   for src in "${INSTALL_ORDER[@]}"; do
