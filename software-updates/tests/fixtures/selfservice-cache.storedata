@@ -1,0 +1,27 @@
+<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE database SYSTEM "file:///System/Library/DTDs/CoreData.dtd">
+
+<database>
+    <object type="SSVPPMACAPP" id="z161">
+        <attribute name="version" type="string">26.45.75</attribute>
+        <attribute name="bundleid" type="string">net.whatsapp.WhatsApp</attribute>
+        <attribute name="name" type="string">WhatsApp Messenger</attribute>
+    </object>
+    <object type="SSVPPMACAPP" id="z162">
+        <attribute name="version" type="string">2026.10.4</attribute>
+        <attribute name="bundleid" type="string">com.bitwarden.desktop</attribute>
+        <attribute name="serverdescription" type="string">Line one
+&lt;attribute name="version" type="string"&gt;9999.0&lt;/attribute&gt; is text, not an attribute
+Line three</attribute>
+        <attribute name="name" type="string">Bitwarden</attribute>
+    </object>
+    <object type="SSPOLICY" id="z170">
+        <attribute name="version" type="string">99.0</attribute>
+        <attribute name="bundleid" type="string">com.apple.dt.Xcode</attribute>
+    </object>
+    <object type="SSVPPMACAPP" id="z166">
+        <attribute name="bundleid" type="string">com.apple.dt.Xcode</attribute>
+        <attribute name="version" type="string">27.3</attribute>
+        <attribute name="name" type="string">Xcode</attribute>
+    </object>
+</database>

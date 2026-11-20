@@ -11,6 +11,7 @@ SUDO=/usr/bin/sudo
 SOFTWAREUPDATE=/usr/sbin/softwareupdate
 MAS=/opt/homebrew/bin/mas
 MAS_CELLAR=/opt/homebrew/Cellar/mas/
+SELFSERVICE_CACHE="$HOME/Library/Application Support/com.jamfsoftware.selfservice.mac/CocoaAppCD.storedata"
 STDIN_TTY=""
 BOOTTIME=""
 APP_DIRS=/Applications:$HOME/Applications
@@ -31,6 +32,7 @@ if [ "${MAC_OUTDATED_TEST:-}" = 1 ]; then  # the tests point these at stubs; nev
   STDIN_TTY=${MAC_OUTDATED_STDIN_TTY:-}
   BOOTTIME=${MAC_OUTDATED_BOOTTIME:-}
   APP_DIRS=${MAC_OUTDATED_APP_DIRS:-$APP_DIRS}
+  SELFSERVICE_CACHE=${MAC_OUTDATED_SELFSERVICE_CACHE:-$SELFSERVICE_CACHE}
   REPO_ROOT=${MAC_OUTDATED_REPO:-$REPO_ROOT}
 fi
 STAMP="$HOME/.local/state/mac-outdated/last-check"
@@ -460,13 +462,34 @@ check_adobe() {
   [ "$rc" -eq 0 ] || grep -q "Following" <<< "$out" || check_failed adobe "RemoteUpdateManager --action=list failed (exit $rc)"
 }
 
+MAS_ROWS_JQ='fromjson? | select(type == "object" and .newVersion != null and (.name // "") != "")
+  | [.adamID, .name, .bundleID // "", .version // "?", .newVersion, .receiptType // ""] | map(tostring) | @tsv'
+eth_offers() {  # eth_offers: "<bundle id>\t<version>" per App Store app in the ETH Self Service cache; fails when the cache is unreadable
+  [ -r "$SELFSERVICE_CACHE" ] || return 1
+  perl -0777 -ne 'while (/<object type="SSVPPMACAPP"[^>]*>(.*?)<\/object>/sg) { my $o = $1; my ($b) = $o =~ /<attribute name="bundleid" type="string">([^<]*)</; my ($v) = $o =~ /<attribute name="version" type="string">([^<]*)</; print "$b\t$v\n" if defined $b && defined $v }' "$SELFSERVICE_CACHE"
+}
+eth_state() {  # eth_state <offers> <bundle id> <installed>: "offered <version>", "notyet" or "unknown" (no cache)
+  local v
+  [ "$1" != "-" ] || { echo unknown; return; }
+  v=$(awk -F'\t' -v b="$2" '$1 == b { print $2; exit }' <<< "$1")
+  if [ -n "$v" ] && newer "$3" "$v"; then echo "offered $v"; else echo notyet; fi
+}
 check_mas() {
   [ -x "$MAS" ] || { note mas "mas not installed: brew install mas" "skipped (mas not installed)" – "brew install mas"; return; }
-  local json
+  local json rows offers id name bid inst new type state
   json=$("$MAS" outdated --json 2>/dev/null) || { check_failed mas "mas outdated failed"; return; }
-  jq -r 'select(type == "object" and .newVersion != null and (.name // "") != "")
-    | "mas|\(.name)|\(.version // "?")|\(.newVersion)|"' <<< "$json" \
-    || check_failed mas "could not read mas outdated output"
+  rows=$(jq -rR "$MAS_ROWS_JQ" <<< "$json") || { check_failed mas "could not read mas outdated output"; return; }
+  offers=$(eth_offers) || offers=-
+  while IFS=$'\t' read -r id name bid inst new type; do
+    [ -n "$name" ] || continue
+    if [ "$type" != ProductionVPP ]; then item mas "$name" "$inst" "$new"; continue; fi
+    state=$(eth_state "$offers" "$bid" "$inst")
+    case $state in
+      offered*) item mas "$name" "$inst" "${state#offered }" "open ETH Self Service" ;;
+      notyet) note mas "$name: App Store has $new, ETH Self Service not yet" "" i ;;
+      *) note mas "$name: ETH-licensed, App Store has $new: Jamf / ETH Self Service updates it" "" i ;;
+    esac
+  done <<< "$rows"
 }
 
 check_macos() {
@@ -813,7 +836,7 @@ detail_section() {  # detail_section <src> <lines>
         macos) [ -z "$extra" ] || tag="($extra)" ;;
       esac
       row "$name" "$inst" "$latest" "$nw" "$vw" "$tag"
-      case $src in sparkle|unmanaged) [ -z "$extra" ] || printf '      %s\n' "$(c 33 "$extra")" ;; esac
+      case $src in sparkle|unmanaged|mas) [ -z "$extra" ] || printf '      %s\n' "$(c 33 "$extra")" ;; esac
     done <<< "$block"
   done
   [ "$src" != xxh ] || [ "${N_ITEMS[$src]}" -eq 0 ] || printf '  %s\n' "$(c 33 "$XXH_HINT")"
@@ -1009,7 +1032,7 @@ install_adobe() {
 install_brew() {
   command -v brew >/dev/null || { STEP_STATUS=missing; return 0; }
   command -v jq >/dev/null || { echo "jq not found: brew install jq"; return 1; }
-  local json casks=() token latest state rc=0 r third name upgrades=() selfs=() held=() did=0
+  local json casks=() token latest state rc=0 r third name upgrades=() selfs=() held=() did=0 out others r2
   brew update || { echo "brew update failed, upgrading anyway"; rc=1; }
   third=$(third_party_formulae)
   if json=$(brew outdated --formula --json=v2 2>/dev/null); then
@@ -1040,7 +1063,19 @@ install_brew() {
   [ "$INTERRUPTED" -eq 0 ] || return 130
   if [ "${#casks[@]}" -gt 0 ]; then
     did=1
-    brew upgrade --cask "${casks[@]}"; r=$?
+    out=$(tmpfile) || return 1
+    brew upgrade --cask "${casks[@]}" 2>&1 | tee -i "$out"; r=${PIPESTATUS[0]}
+    if [ "$r" -ne 0 ]; then
+      blocked_casks "$out"
+      leftover_backups "$out"
+      if [ "${#RETRY[@]}" -gt 0 ]; then
+        others=$(perl -ne 'print "$1\n" if /^Error: (\S+?):/' "$out" | sort -u | grep -vxF -f <(printf '%s\n' "${RETRY[@]}"))
+        brew upgrade --cask "${RETRY[@]}" 2>&1 | tee -i "$out"; r2=${PIPESTATUS[0]}
+        [ "$r2" -eq 0 ] || blocked_casks "$out"
+        [ -n "$others" ] || r=$r2
+      fi
+    fi
+    rm -f "$out"
     [ "$rc" -ne 0 ] || rc=$r
   fi
   if [ "${#selfs[@]}" -gt 0 ]; then
@@ -1050,6 +1085,41 @@ install_brew() {
   [ "$did" -eq 1 ] || [ "$rc" -ne 0 ] || STEP_STATUS=uptodate
   return "$rc"
 }
+blocked_casks() {  # blocked_casks <brew upgrade output>: per cask macOS refused to replace, remove brew's leftover backup and add a by-hand line
+  local caskroom term=${TERM_PROGRAM:-} token app backup
+  caskroom=$(brew --caskroom 2>/dev/null) || caskroom=""
+  [ -n "$term" ] || term="your terminal"
+  while IFS=$'\t' read -r token app backup; do
+    [ -n "$token" ] || continue
+    if [ -n "$backup" ] && [ -n "$caskroom" ] && [ -d "$app" ] && [[ $backup == "$caskroom/$token/"*.app ]] && [[ $backup != *..* ]] && [ -d "$backup" ]; then
+      rm -rf "$backup" && echo "$token: removed brew's leftover backup $backup"
+    fi
+    hand "$token: macOS blocked replacing ${app:-its app} (owned by root): allow $term in System Settings › Privacy & Security › App Management, then mac-outdated --install"
+  done < <(perl -ne '
+    if (/^==> Upgrading (\S+)$/) { $t = $1 }
+    elsif (/^==> Backing up App .* to \x27(.*)\x27$/) { $b{$t} = $1 }
+    elsif (/^==> Removing App \x27(.*)\x27$/) { $a{$t} //= $1 }
+    elsif (/^Error: (\S+): (Permission denied \@ apply2files|.*Operation not permitted)/ && !$seen{$1}++) { push @e, $1 }
+    END { print "$_\t$a{$_}\t$b{$_}\n" for @e }' "$1")
+}
+RETRY=()
+leftover_backups() {  # leftover_backups <brew upgrade output>: removes brew's leftover backups from an earlier failed upgrade; the casks to retry go into RETRY
+  local caskroom token backup name
+  RETRY=()
+  caskroom=$(brew --caskroom 2>/dev/null) || caskroom=""
+  while IFS=$'\t' read -r token backup; do
+    [ -n "$token" ] || continue
+    name=$(basename "$backup" .app)
+    if [ -z "$caskroom" ] || [[ $backup != "$caskroom/$token/"*.app ]] || [[ $backup == *..* ]] || [ ! -d "$backup" ]; then
+      hand "$token: brew reports an App at $backup: check it, then mac-outdated --install"
+    elif ! find_app "$name" >/dev/null; then
+      hand "$token: brew's leftover backup $backup blocks the upgrade and $name.app is not in the app folders: move it back to /Applications, then mac-outdated --install"
+    elif rm -rf "$backup"; then
+      echo "$token: removed brew's leftover backup $backup, upgrading again"
+      RETRY+=("$token")
+    fi
+  done < <(perl -ne 'print "$1\t$2\n" if /^Error: (\S+?): It seems there is already an App at \x27(.*)\x27\.?$/' "$1")
+}
 install_msupdate() {
   [ -x "$MSUPDATE" ] || { STEP_STATUS=missing; return 0; }
   local list rc
@@ -1058,14 +1128,26 @@ install_msupdate() {
   "$MSUPDATE" --install --wait 600
 }
 install_mas() {
-  local mas list rc
+  local mas list rc err offers id name bid inst new type state ids=()
   [ -x "$MAS" ] || { STEP_STATUS=missing; return 0; }
   mas=$(readlink -f "$MAS") || { STEP_STATUS=missing; return 0; }
   [[ $mas == "$MAS_CELLAR"* ]] || { STEP_STATUS=foreign; hand "App Store: skipped, mas is not from Homebrew ($mas): brew install mas"; return 0; }
-  list=$("$mas" outdated --json 2>&1) || { rc=$?; printf '%s\n' "$list"; echo "mas outdated failed, nothing upgraded"; return "$rc"; }
-  grep -q newVersion <<< "$list" || { STEP_STATUS=uptodate; return 0; }
+  err=$(tmpfile) || return 1
+  list=$("$mas" outdated --json 2>"$err") || { rc=$?; cat "$err"; rm -f "$err"; echo "mas outdated failed, nothing upgraded"; return "$rc"; }
+  rm -f "$err"
+  offers=$(eth_offers) || offers=-
+  while IFS=$'\t' read -r id name bid inst new type; do
+    [ -n "$id" ] || continue
+    if [ "$type" != ProductionVPP ]; then ids+=("$id"); continue; fi
+    state=$(eth_state "$offers" "$bid" "$inst")
+    case $state in
+      offered*) echo "$name: ETH-licensed, ETH Self Service offers ${state#offered }"; hand "$name: ETH Self Service offers ${state#offered }, open ETH Self Service" ;;
+      *) echo "$name: ETH-licensed, App Store has $new, left to Jamf / ETH Self Service" ;;
+    esac
+  done < <(jq -rR "$MAS_ROWS_JQ" <<< "$list")
+  [ "${#ids[@]}" -gt 0 ] || { STEP_STATUS=uptodate; return 0; }
   still_admin || return 0
-  "$SUDO" "$mas" upgrade
+  "$SUDO" "$mas" upgrade "${ids[@]}"
 }
 install_pipx() {
   command -v pipx >/dev/null || { STEP_STATUS=missing; return 0; }

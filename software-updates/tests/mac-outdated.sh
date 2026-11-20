@@ -16,7 +16,8 @@ touch "$ALLCALLS"
 
 export HOME="$WORK/home"
 export PATH="$BIN:/usr/bin:/bin"
-export FIX CALLS ALLCALLS
+export FIX CALLS ALLCALLS APPS
+export MAC_OUTDATED_SELFSERVICE_CACHE="$FIX/selfservice-cache.storedata"
 export MAC_OUTDATED_TEST=1
 export MAC_OUTDATED_PRIVILEGESCLI="$BIN/PrivilegesCLI"
 export MAC_OUTDATED_MSUPDATE="$BIN/msupdate"
@@ -37,6 +38,7 @@ stub() {
 stub brew '
 case "$1" in
   --cache) echo "$FIX/brew-cache" ;;
+  --caskroom) echo "$FIX/caskroom" ;;
   --repo) echo "$FIX/taps/$2" ;;
   tap) [ -f "$FIX/fail-brew-tap" ] && exit 1; cat "$FIX/brew-tap.txt" 2>/dev/null; exit 0 ;;
   update) [ -f "$FIX/brew-update-stderr.txt" ] && cat "$FIX/brew-update-stderr.txt" >&2; [ -f "$FIX/fail-brew-update" ] && exit 1; exit 0 ;;
@@ -56,6 +58,8 @@ case "$1" in
       printf "Proceed? "; i=0
       while [ ! -f "$FIX/go" ] && [ "$i" -lt 60 ]; do sleep 0.1; i=$((i + 1)); done; echo
     fi
+    [ -f "$FIX/leftover-brew" ] && [ "$2" = --cask ] && [ -d "$FIX/caskroom/utm/5.0.9/UTM.app" ] && { echo "==> Upgrading utm"; echo "Error: utm: It seems there is already an App at '\''$FIX/caskroom/utm/5.0.9/UTM.app'\''."; exit 1; }
+    [ -f "$FIX/rootowned-brew" ] && [ "$2" = --cask ] && { sed "s#CASKROOM#$FIX/caskroom#; s#APPS#$APPS#g" "$FIX/brew-upgrade-rootowned.txt"; exit 1; }
     [ -f "$FIX/chown-brew" ] && for i in $(seq 300); do echo "chown: /Applications/Example.app/Contents/f$i: Operation not permitted"; done
     [ -f "$FIX/five-brew" ] && for i in 1 2 3 4 5; do echo "Warning: cask c$i: not upgraded"; done
     printf "==> Upgrading 1 outdated package\n50%%\r100%%\n"
@@ -253,7 +257,7 @@ tmp_left() { find "$WORK/tmp" -name 'mac-outdated.*' | grep -q .; }
 no_tmp_left() { ! tmp_left; }
 only_allowed_sudo() {
   local bad
-  bad=$(grep '^sudo ' <<< "$1" | grep -vE '^sudo (-v|softwareupdate --install --all|RemoteUpdateManager --action=install|mas upgrade)$')
+  bad=$(grep '^sudo ' <<< "$1" | grep -vE '^sudo (-v|softwareupdate --install --all|RemoteUpdateManager --action=install|mas upgrade( [0-9]+)*)$')
   [ -z "$bad" ]
 }
 
@@ -1059,8 +1063,8 @@ run --install
 expected="sudo -v
 sudo RemoteUpdateManager --action=install
 RemoteUpdateManager --action=install
-sudo mas upgrade
-mas upgrade
+sudo mas upgrade 497799835 1747648890
+mas upgrade 497799835 1747648890
 brew update
 brew upgrade --formula aom bash btop
 brew upgrade --cask ghostty
@@ -1661,6 +1665,85 @@ MAC_OUTDATED_MAS="$WORK/fakecellar/mas/1.0/bin/mas" run --install
 check "mas linking out of the Cellar: skipped" has "$out" "App Store \\.+ skipped \\(mas not from Homebrew\\)$"
 check "mas linking out of the Cellar: no sudo" no_match "$(calls)" "^sudo mas"
 rm -rf "$WORK/fakecellar"
+
+# ── mas: ETH-licensed apps (receipt ProductionVPP) ──────────────────────────
+fixtures_outdated
+cp "$FIX/mas-outdated-eth.json" "$FIX/mas-outdated.json"
+run
+check "eth: offered by Self Service -> outdated" contains "$out" "Xcode 27.2 → 27.3"
+check "eth: offered -> open Self Service" contains "$out" "open ETH Self Service"
+check "eth: not yet offered -> note" contains "$out" "Bitwarden: App Store has 2026.11.0, ETH Self Service not yet"
+check "eth: not yet offered -> not listed as outdated" lacks "$out" "Bitwarden 2026.10.4 → 2026.11.0"
+check "eth: description text not read as version" lacks "$out" "9999.0"
+check "eth: own app still outdated" contains "$out" "Telegram 13.1.0 → 13.2.0"
+check "eth: count without the not-yet app" has "$out" "App Store \.+ 2 outdated"
+check "eth: no check failure" lacks "$out" "check failed"
+MAC_OUTDATED_SELFSERVICE_CACHE="$WORK/none/cache" run
+check "eth, no cache: note" contains "$out" "Bitwarden: ETH-licensed, App Store has 2026.11.0: Jamf / ETH Self Service updates it"
+check "eth, no cache: Xcode note" contains "$out" "Xcode: ETH-licensed, App Store has 27.3: Jamf / ETH Self Service updates it"
+check "eth, no cache: only own app counted" has "$out" "App Store \.+ 1 outdated"
+check "eth, no cache: no check failure" lacks "$out" "check failed"
+
+fixtures_outdated; admin_setup admin 20
+cp "$FIX/mas-outdated-eth.json" "$FIX/mas-outdated.json"
+run --install
+check "eth install: only own apps upgraded" contains "$(calls)" "sudo mas upgrade 1747648890"
+check "eth install: ETH apps not passed to mas" no_match "$(calls)" "mas upgrade.*(1352778147|497799835)"
+check "eth install: offered -> by hand" contains "$(sed -n '/By hand/,$p' "$WORK/out")" "Xcode: ETH Self Service offers 27.3, open ETH Self Service"
+check "eth install: not yet -> no by hand" lacks "$(sed -n '/By hand/,$p' "$WORK/out")" "Bitwarden"
+check "eth install: App Store not failed" no_match "$out" "App Store \.+ failed"
+
+fixtures_outdated; admin_setup admin 20
+grep -v Telegram "$FIX/mas-outdated-eth.json" > "$FIX/mas-outdated.json"
+run --install
+check "eth only: no mas upgrade" lacks "$(calls)" "mas upgrade"
+check "eth only: App Store up to date" has "$out" "App Store \.+ up to date"
+check "eth only: by hand line" contains "$(sed -n '/By hand/,$p' "$WORK/out")" "Xcode: ETH Self Service offers 27.3, open ETH Self Service"
+
+# ── brew: root-owned app blocks a cask upgrade ──────────────────────────────
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/rootowned-brew"
+mkdir -p "$FIX/caskroom/utm/5.0.9/UTM.app/Contents" "$APPS/UTM.app/Contents"
+TERM_PROGRAM=ghostty run --install
+hand=$(sed -n '/By hand/,$p' "$WORK/out")
+check "root-owned: brew failed" has "$out" "brew \.+ failed"
+check "root-owned: by hand names app and permission" contains "$hand" "utm: macOS blocked replacing $APPS/UTM.app (owned by root): allow ghostty in System Settings › Privacy & Security › App Management, then mac-outdated --install"
+check "root-owned: leftover backup removed" equals "$(ls "$FIX/caskroom/utm/5.0.9")" ""
+check "root-owned: app kept" equals "$(ls -d "$APPS/UTM.app")" "$APPS/UTM.app"
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/rootowned-brew"
+mkdir -p "$FIX/caskroom/utm/5.0.9/UTM.app/Contents"
+TERM_PROGRAM= run --install
+check "root-owned, app gone: backup kept" equals "$(ls "$FIX/caskroom/utm/5.0.9")" "UTM.app"
+check "root-owned, unknown terminal: generic wording" contains "$(sed -n '/By hand/,$p' "$WORK/out")" "allow your terminal in System Settings"
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/rootowned-brew"
+mkdir -p "$FIX/caskroom/utm/5.0.9/UTM.app/Contents" "$APPS/UTM.app/Contents" "$WORK/outside/UTM.app"
+sed -i '' "s#'CASKROOM/utm/5.0.9/UTM.app'#'$WORK/outside/UTM.app'#" "$FIX/brew-upgrade-rootowned.txt"
+run --install
+check "root-owned, backup outside Caskroom: not removed" equals "$(ls -d "$WORK/outside/UTM.app")" "$WORK/outside/UTM.app"
+rm -rf "$WORK/outside"
+
+# ── brew: leftover backup from an earlier failed upgrade ────────────────────
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/leftover-brew"
+mkdir -p "$FIX/caskroom/utm/5.0.9/UTM.app/Contents" "$APPS/UTM.app/Contents"
+run --install
+check "leftover: backup removed" equals "$(ls "$FIX/caskroom/utm/5.0.9")" ""
+check "leftover: cask retried once" equals "$(grep -c '^brew upgrade --cask' "$CALLS")" 2
+check "leftover: retry only the blocked cask" contains "$(calls)" "brew upgrade --cask utm"
+check "leftover: brew not failed after retry" no_match "$out" "brew \\.+ failed"
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/leftover-brew"
+mkdir -p "$FIX/caskroom/utm/5.0.9/UTM.app/Contents"
+run --install
+check "leftover, app gone: backup kept" equals "$(ls "$FIX/caskroom/utm/5.0.9")" "UTM.app"
+check "leftover, app gone: no retry" equals "$(grep -c '^brew upgrade --cask' "$CALLS")" 1
+check "leftover, app gone: brew failed" has "$out" "brew \\.+ failed"
+check "leftover, app gone: by hand" contains "$(sed -n '/By hand/,$p' "$WORK/out")" "utm: brew's leftover backup $FIX/caskroom/utm/5.0.9/UTM.app blocks the upgrade and UTM.app is not in the app folders: move it back to /Applications, then mac-outdated --install"
 
 # ── macOS staged: remembered until restart ──────────────────────────────────
 # staged_run: run, but keeps the staged file
