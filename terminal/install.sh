@@ -83,6 +83,8 @@ symlink "$SCRIPT_DIR/.config/fish/config.fish"          ~/.config/fish/config.fi
 symlink "$SCRIPT_DIR/.config/fish/functions/xxhc.fish"          ~/.config/fish/functions/xxhc.fish
 symlink "$SCRIPT_DIR/.config/fish/functions/fish_greeting.fish"  ~/.config/fish/functions/fish_greeting.fish
 symlink "$SCRIPT_DIR/.config/fish/functions/clear-greet.fish"    ~/.config/fish/functions/clear-greet.fish
+symlink "$SCRIPT_DIR/.config/fish/functions/xxhc-bench.fish"     ~/.config/fish/functions/xxhc-bench.fish
+symlink "$SCRIPT_DIR/.config/fish/completions/xxhc-bench.fish"   ~/.config/fish/completions/xxhc-bench.fish
 symlink "$SCRIPT_DIR/.xxh/ssh-wrapper.sh"               ~/.xxh/ssh-wrapper.sh
 chmod +x ~/.xxh/ssh-wrapper.sh
 symlink "$SCRIPT_DIR/.xxh/scp-wrapper.sh"               ~/.xxh/scp-wrapper.sh
