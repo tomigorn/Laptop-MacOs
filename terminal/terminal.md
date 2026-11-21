@@ -158,7 +158,7 @@ running 7 minutes fast reported `Connected in 422.3s` for a two-second connect).
 
 ### Tests
 
-Offline (greeting, xxhc, wrappers, starship, remote-binaries, install): `tests/test-all.sh`. Live:
+Offline (greeting, xxhc, xxhc-bench, wrappers, starship, remote-binaries, install): `tests/test-all.sh`. Live:
 
 `terminal/tests/concurrent-sessions.fish <host>` is a live integration test — it
 needs a reachable host and takes about 90 seconds. It runs two overlapping
@@ -274,6 +274,9 @@ terminal/
         fish_greeting.fish                fastfetch greeting
         xxhc.fish                         xxh connect wrapper + history sync
         clear-greet.fish                  clear the screen, then greet
+        xxhc-bench.fish                   connect-time benchmark
+      completions/
+        xxhc-bench.fish                   tab completion for xxhc-bench
 
   .xxh/
     ssh-wrapper.sh                        forces ControlMaster=no + Compression=yes for the (dormant) rsync path
@@ -281,6 +284,7 @@ terminal/
     xxh-config.fish                       fish session init on the remote
 
   SETUP_VERSION                           terminal setup version (shown in the greeting)
+  benchmarks.md                           xxhc-bench results, one row per host and run
   tests/                                  greeting, xxhc, wrapper, remote-binaries, install tests; concurrent-sessions.fish is live
   ghostty.icns                            Ghostty custom icon (referenced from ~/.config/ghostty/config)
 ```
@@ -296,6 +300,8 @@ Set up once by `install.sh` (or manually), then completely transparent:
 ~/.config/fish/functions/fish_greeting.fish             → terminal/.config/fish/functions/fish_greeting.fish
 ~/.config/fish/functions/xxhc.fish                      → terminal/.config/fish/functions/xxhc.fish
 ~/.config/fish/functions/clear-greet.fish               → terminal/.config/fish/functions/clear-greet.fish
+~/.config/fish/functions/xxhc-bench.fish                → terminal/.config/fish/functions/xxhc-bench.fish
+~/.config/fish/completions/xxhc-bench.fish              → terminal/.config/fish/completions/xxhc-bench.fish
 ~/.xxh/ssh-wrapper.sh                                   → terminal/.xxh/ssh-wrapper.sh
 ~/.xxh/scp-wrapper.sh                                   → terminal/.xxh/scp-wrapper.sh
 ~/.xxh/.xxh/shells/xxh-shell-fish/build/xxh-config.fish → terminal/.xxh/xxh-config.fish
@@ -413,11 +419,32 @@ search_mode = "fuzzy"
 
 ## Performance
 
-A cold connect is dominated by the upload. Measured on root6 over office ethernet (~17 MB/s link), full `xxhc` connect with the ControlMaster socket removed beforehand so tunnel setup is included: **~6.7 s with plain scp, ~2.8 s through the wrapper**. For historical reference, before any of this work the same payload took ~6 s on a fast campus link and ~15 s on slower ones.
+A cold connect is dominated by the upload. One-off measurement on root6 over office ethernet (~17 MB/s link), ControlMaster socket removed beforehand: **~6.7 s with plain scp, ~2.8 s through the wrapper**. Current, comparable numbers: [benchmarks.md](benchmarks.md) (see "Benchmark"). For historical reference, before any of this work the same payload took ~6 s on a fast campus link and ~15 s on slower ones.
 
 Breakdown (x86_64): fish 14.7 + atuin 35.1 + starship 11.9 + fastfetch 3.2 + bat 6.6 = ~71.5 MB on disk, going over the wire as ~26 MB via the wrapper, on every connect. The aarch64 store is smaller — ~62 MB on disk, ~24 MB on the wire. The session itself starts in under a second once files are in place. Every connect is a cold upload (the remote is wiped on disconnect).
 
 **Why fish 4.x sped this up beyond the size drop:** the old `xxh/fish-portable` was a *directory tree of hundreds of small files* (`share/fish/completions/*`, `functions/*`, …). SCP transfers those one at a time, and the per-file round-trips dominated the upload. The official fish 4.x build is a **single self-contained binary**, so fish now uploads as one ~15 MB transfer instead of hundreds of tiny ones — fewer bytes *and* far fewer round-trips.
+
+### Benchmark
+
+`xxhc-bench` connects N times per host with `xxhc <host> +hc fish_greeting` (a full real connect without an interactive session) and appends one row per host to [benchmarks.md](benchmarks.md).
+
+```
+xxhc-bench [-n N] [--net LABEL] [host…]
+xxhc-bench --net office                 # 5 runs each to root6 and itet-ifa-comp01
+xxhc-bench -n 3 --net vpn root6
+```
+
+| Column | Meaning |
+|---|---|
+| Version | `SETUP_VERSION` at the time of the run |
+| Route | `jump` (`ssh -G` has a `proxyjump`) or `direct` |
+| Net | `--net` label (default `-`) |
+| Runs | successful / total; a run without a `Connected in` line failed |
+| Connect avg/min/max | the greeting's `Connected in`, successful runs only |
+| Total avg | wall time of the whole `xxhc` call (connect + teardown), successful runs only |
+
+Run it before and after a change that may affect latency, on the same network.
 
 ### Which transfer path a connect used
 
