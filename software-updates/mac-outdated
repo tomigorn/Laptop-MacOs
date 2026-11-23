@@ -1091,7 +1091,7 @@ install_adobe() {
 install_brew() {
   command -v brew >/dev/null || { STEP_STATUS=missing; return 0; }
   command -v jq >/dev/null || { c 31 "jq not found: brew install jq"; echo; return 1; }
-  local json casks=() token inst latest state rc=0 r third name upgrades=() selfs=() held=() did=0 out others r2
+  local json casks=() token inst latest state appver rc=0 r third name upgrades=() selfs=() held=() did=0 out others r2
   TRIED=()
   brew update || { c 31 "brew update failed, upgrading anyway"; echo; rc=1; }
   third=$(third_party_formulae)
@@ -1114,11 +1114,14 @@ install_brew() {
   json=$(brew outdated --cask --json=v2 2>/dev/null) || { c 31 "brew outdated --cask failed"; echo; brew_results; return 1; }
   while IFS=$'\t' read -r token inst latest; do
     [ -n "$token" ] || continue
-    IFS='|' read -r state _ < <(cask_state "$token" "$latest")
+    IFS='|' read -r state _ appver < <(cask_state "$token" "$latest")
     case $state in
       install) casks+=("$token"); TRIED+=("$token"$'\t'"$inst"$'\t'"$latest") ;;
       stale) c 2 "$token: app already current, brew's record is stale"; echo ;;
-      self) c 33 "$token: updates itself on start, open the app"; echo; selfs+=("$token") ;;
+      self)
+        [ "$appver" != "?" ] || appver=$inst
+        selfs+=("$token $appver → ${latest%%,*}")
+        c 33 "${selfs[-1]}: updates itself on start, open the app"; echo ;;
     esac
   done < <(jq -r "${BREW_ROWS_JQ/formulae/casks}" <<< "$json")
   [ "$INTERRUPTED" -eq 0 ] || return 130
@@ -1139,10 +1142,7 @@ install_brew() {
     rm -f "$out"
     [ "$rc" -ne 0 ] || rc=$r
   fi
-  if [ "${#selfs[@]}" -gt 0 ]; then
-    r=$(printf ', %s' "${selfs[@]}")
-    hand "${r:2}: open the app, it updates itself"
-  fi
+  for r in "${selfs[@]}"; do hand "$r: open the app, it updates itself"; done
   brew_results
   [ "$did" -eq 1 ] || [ "$rc" -ne 0 ] || STEP_STATUS=uptodate
   return "$rc"

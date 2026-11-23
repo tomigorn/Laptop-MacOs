@@ -499,7 +499,7 @@ check "cask without app, self-updating: under Open to update" has "$(sed -n '/Op
 check "cask without app, self-updating: not installable" lacks "$(sed -n "/^ casks$/,/Open to update/p" <<< "$out")" "xquartz"
 run --install
 check "cask without app, self-updating: not upgraded" lacks "$(calls)" "brew upgrade --cask"
-check "cask without app, self-updating: by hand" contains "$out" "xquartz: open the app, it updates itself"
+check "cask without app, self-updating: by hand" contains "$out" "xquartz 2.8.5 → 2.8.6: open the app, it updates itself"
 mv "$FIX/brew-info-installed.bak" "$FIX/brew-info-installed.json"
 rm -rf "$APPS/UTM.app" "$APPS/BetterDisplay.app"
 make_app Discord com.hammerandchisel.discord 0.0.389
@@ -1638,7 +1638,7 @@ fixtures_outdated; admin_setup admin 20
 jq '.casks += [{name: "discord", installed_versions: ["0.0.389"], current_version: "0.0.421", pinned: false}]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
 make_app Discord com.hammerandchisel.discord 0.0.420
 run --install
-check "end: self-updating cask by hand" contains "$out" "discord: open the app, it updates itself"
+check "end: self-updating cask by hand, real app version" contains "$out" "discord 0.0.420 → 0.0.421: open the app, it updates itself"
 
 fixtures_outdated; admin_setup admin 20
 touch "$FIX/su-norestart"; run --install; rm -f "$FIX/su-norestart"
@@ -1946,7 +1946,7 @@ make_app Discord com.hammerandchisel.discord 0.0.420
 make_app BetterDisplay pro.betterdisplay.BetterDisplay 4.2.3
 MAC_OUTDATED_COLOR=always run --install
 check "stale cask install line: dim" colored 2 "utm: app already current, brew's record is stale"
-check "self-updating cask install line: yellow" colored 33 "discord: updates itself on start, open the app"
+check "self-updating cask install line: yellow, real app version" colored 33 "discord 0.0.420 → 0.0.421: updates itself on start, open the app"
 check "results: tried cask listed" grep -qE 'betterdisplay +4\.2\.3 +→  5\.2\.1 ✓' "$WORK/out"
 check "results: stale cask has no line" no_match "$(cat "$WORK/out")" 'utm +4\.7\.5'
 check "results: self-updating cask has no line" no_match "$(cat "$WORK/out")" 'discord +0\.0\.389'

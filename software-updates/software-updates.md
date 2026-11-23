@@ -103,7 +103,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
   ── brew
       ==> Upgrading 2 outdated packages
       …
-      discord: updates itself on start, open the app
+      discord 0.0.420 → 0.0.421: updates itself on start, open the app
       gpgme 2.2.0  →  2.3.1 ✓
       utm   5.0.9  →  5.0.9-2 ✗
     brew ......................... installed
@@ -111,7 +111,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 
   | By hand lists | Example |
   |---|---|
-  | self-updating apps | `discord: open the app, it updates itself` |
+  | self-updating apps, one line each (version of the real app, else brew's record) | `discord 0.0.420 → 0.0.421: open the app, it updates itself` |
   | restart required (only labels marked `Action: restart`) | `macOS <label>: restart the Mac when it suits you` |
   | skipped (admin expired) | `App Store: skipped, admin expired: click Privileges, then mac-outdated --install` |
   | skipped (admin nearly out) | `App Store: skipped, admin expires in 1 min: click Privileges, then mac-outdated --install` |
