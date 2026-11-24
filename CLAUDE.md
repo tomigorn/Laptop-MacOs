@@ -25,6 +25,12 @@ Global rules apply (`~/.claude/CLAUDE.md`). Only what is special here:
 - bumps: only changes under `window-manager/`
 - extra steps: none
 
+## Version (backdrop-carousel)
+- file: `backdrop-carousel/VERSION`
+- tag: `backdrop-carousel-X.Y.Z`, annotated (`backdrop carousel X.Y.Z`)
+- bumps: only changes under `backdrop-carousel/`
+- extra steps: `~/bin/backdrop-sync.sh --version` shows it
+
 ## Version (mac-outdated)
 - file: `software-updates/VERSION`
 - tag: `mac-outdated-X.Y.Z`, annotated (`mac-outdated X.Y.Z`)

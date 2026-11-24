@@ -8,6 +8,11 @@ LOCAL_DIR="$HOME/Pictures/BackdropCarousel"
 BRAVE_IMAGES_DIR="$HOME/Library/Application Support/BraveSoftware/Brave-Browser/Default/sanitized_background_images"
 BRAVE_PREFS="$HOME/Library/Application Support/BraveSoftware/Brave-Browser/Default/Preferences"
 
+if [ "${1:-}" = "--version" ]; then
+    echo "backdrop-carousel $(cat "${0:A:h}/VERSION" 2>/dev/null || echo '?')"
+    exit 0
+fi
+
 mkdir -p "$LOCAL_DIR"
 
 fail_fetch() { echo "ERROR: Failed to fetch photo list from server"; exit 1; }

@@ -6,6 +6,7 @@ Syncs a photo set from a server to `~/Pictures/BackdropCarousel` (wallpaper rota
 |---|---|
 | `sync.sh` | zsh: fetches the photo list (`GET /`), downloads missing photos, removes ones no longer listed, updates Brave images and `Preferences` |
 | `install.sh` | symlinks `sync.sh` to `~/bin/backdrop-sync.sh` for the Shortcut |
+| `VERSION` | version, printed by `sync.sh --version` |
 | `tests/sync.sh` | offline test (stubbed `curl` and `pgrep`, temp `HOME`) |
 
 ## Install
@@ -20,6 +21,7 @@ Then point the Shortcut's "Run Shell Script" action (shell `/bin/zsh`) at `~/bin
 
 | Case | Output |
 |---|---|
+| `--version` | `backdrop-carousel 1.0.0`, nothing synced |
 | server unreachable or bad list | `ERROR: Failed to fetch photo list from server`, exit 1 |
 | Brave not installed | `Synced N photos to wallpaper. Brave not installed.` |
 | Brave running | `Synced N photos to wallpaper. Brave skipped (running).` |

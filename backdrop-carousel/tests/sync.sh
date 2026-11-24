@@ -102,5 +102,25 @@ printf '{"brave":{"new_tab_page":{"background":{"selected_value":"b.jpg"}}}}' > 
 /bin/zsh "$SYNC" >/dev/null
 check "Brave: valid selected_value kept" contains "$(cat "$BRAVE/Preferences")" '"selected_value":"b.jpg"'
 
+# 7. --version: prints the VERSION file, no network, nothing synced
+fresh
+out="$(/bin/zsh "$SYNC" --version)"; rc=$?
+check "--version: exit 0" test "$rc" -eq 0
+check "--version: prints the VERSION file" eq "$out" "backdrop-carousel $(cat "$(dirname "$SYNC")/VERSION")"
+check "--version: no network" test ! -s "$CURL_LOG"
+check "--version: nothing synced" test ! -e "$LOCAL"
+
+# 8. --version through a symlink, as the Shortcut runs it from ~/bin
+fresh
+mkdir -p "$HOME/bin"; ln -s "$SYNC" "$HOME/bin/backdrop-sync.sh"
+out="$(/bin/zsh "$HOME/bin/backdrop-sync.sh" --version)"
+check "--version via symlink: reads VERSION next to the real script" eq "$out" "backdrop-carousel $(cat "$(dirname "$SYNC")/VERSION")"
+
+# 9. --version without a VERSION file
+fresh
+mkdir -p "$WORK/nover"; cp "$SYNC" "$WORK/nover/sync.sh"
+out="$(/bin/zsh "$WORK/nover/sync.sh" --version)"
+check "--version without VERSION file: ?" eq "$out" "backdrop-carousel ?"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi
