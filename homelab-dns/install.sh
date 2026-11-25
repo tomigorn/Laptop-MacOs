@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install the homelab-dns auto-switcher. Safe to re-run.
 #
-#   1. Copies homelab-dns.sh + homelab-dns-watch.sh + net-priority.sh + homelab-dns-control.sh to /usr/local/sbin (root)
+#   1. Copies homelab-dns.sh + homelab-dns-watch.sh + net-priority.sh + homelab-dns-control.sh to /usr/local/sbin (root), VERSION to /usr/local/share/homelab-dns
 #   2. Installs the LaunchDaemons (watcher, timer, control) to /Library/LaunchDaemons
 #   3. Creates /usr/local/var/homelab-dns, owned by you: the stop flag lives there
 #   4. (Re)loads the daemons so they take effect immediately
@@ -21,6 +21,8 @@ PRIORITY_DEST="/usr/local/sbin/net-priority.sh"
 CONTROL_LABEL="com.tomigorn.homelab-dns-control"
 CONTROL_DEST="/usr/local/sbin/homelab-dns-control.sh"
 STATE_DIR="/usr/local/var/homelab-dns"
+VERSION_DEST="/usr/local/share/homelab-dns/VERSION"
+LOG="/var/log/homelab-dns.log"
 PLIST_DEST="/Library/LaunchDaemons/${LABEL}.plist"
 TIMER_PLIST_DEST="/Library/LaunchDaemons/${TIMER_LABEL}.plist"
 CONTROL_PLIST_DEST="/Library/LaunchDaemons/${CONTROL_LABEL}.plist"
@@ -42,6 +44,9 @@ install -m 755 -o root -g wheel "${SCRIPT_DIR}/homelab-dns-watch.sh" "${WATCH_DE
 install -m 755 -o root -g wheel "${SCRIPT_DIR}/net-priority.sh"      "${PRIORITY_DEST}"
 install -m 755 -o root -g wheel "${SCRIPT_DIR}/homelab-dns-control.sh" "${CONTROL_DEST}"
 ok "installed actor + watcher + network priority + control"
+install -d -m 755 "$(dirname "${VERSION_DEST}")"
+install -m 644 -o root -g wheel "${SCRIPT_DIR}/VERSION" "${VERSION_DEST}"
+ok "version $(cat "${VERSION_DEST}") -> ${VERSION_DEST}"
 
 # ── 2. LaunchDaemons ─────────────────────────────────────────────────────────
 step "LaunchDaemons -> /Library/LaunchDaemons"
@@ -71,7 +76,10 @@ launchctl bootstrap system "${CONTROL_PLIST_DEST}"
 launchctl enable "system/${CONTROL_LABEL}"
 ok "control loaded — Network Stop and Network Start take effect at once"
 
+printf '%s  installed %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$(cat "${VERSION_DEST}")" >> "${LOG}"
+
 step "Done"
-info "Live log:   tail -f /var/log/homelab-dns.log"
+info "Version:    $(/usr/local/sbin/homelab-dns.sh --version)"
+info "Live log:   tail -f ${LOG}"
 info "Current DNS: networksetup -getdnsservers Wi-Fi"
 info "Kick it now: sudo launchctl kickstart -k system/${LABEL}"

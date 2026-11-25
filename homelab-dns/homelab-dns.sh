@@ -14,8 +14,20 @@
 # ONLY the homelab DNS knows. A real answer means we're home or on the VPN.
 set -u
 
-REASON="${1:-manual}"         # why we ran: boot | change | timer | control | manual
+REASON="${1:-manual}"         # why we ran: boot | change | timer | control | manual, or --version
 STOP_FLAG="/usr/local/var/homelab-dns/stopped"
+INSTALLED_VERSION="/usr/local/share/homelab-dns/VERSION"
+
+if [ "${REASON}" = "--version" ]; then
+    installed=$(cat "${INSTALLED_VERSION}" 2>/dev/null || echo "?")
+    repo=$(cat "$(dirname "$0")/VERSION" 2>/dev/null || true)
+    if [ -n "${repo}" ] && [ "${repo}" != "${installed}" ]; then
+        echo "homelab-dns ${installed} (repo ${repo})"
+    else
+        echo "homelab-dns ${installed}"
+    fi
+    exit 0
+fi
 DNS_SERVER="192.168.1.2"      # homelab DNS server
 PROBE_NAME="probe.homelab"    # dedicated probe name (AdGuard DNS rewrite)
 PROBE_EXPECT="198.51.100.53"  # sentinel A it MUST return — RFC 5737 TEST-NET-2,

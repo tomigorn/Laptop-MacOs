@@ -65,7 +65,8 @@ printf 'en0: flags=8863\n\tinet 192.0.2.50 netmask 0xffffff00\n'
 STUB
 chmod +x "$WORK/bin/"*
 
-sed -e "s|^LOG=.*|LOG=\"$WORK/homelab-dns.log\"|" -e "s|^STOP_FLAG=.*|STOP_FLAG=\"$WORK/stopped\"|" "$DNS_SRC" > "$WORK/homelab-dns.sh"
+sed -e "s|^LOG=.*|LOG=\"$WORK/homelab-dns.log\"|" -e "s|^STOP_FLAG=.*|STOP_FLAG=\"$WORK/stopped\"|" -e "s|^INSTALLED_VERSION=.*|INSTALLED_VERSION=\"$WORK/installed-VERSION\"|" "$DNS_SRC" > "$WORK/homelab-dns.sh"
+grep -q "^INSTALLED_VERSION=\"$WORK/installed-VERSION\"" "$WORK/homelab-dns.sh" || { echo "FAIL  INSTALLED_VERSION substitution"; exit 1; }
 grep -q "^LOG=\"$WORK/homelab-dns.log\"" "$WORK/homelab-dns.sh" || { echo "FAIL  LOG substitution"; exit 1; }
 grep -q "^STOP_FLAG=\"$WORK/stopped\"" "$WORK/homelab-dns.sh" || { echo "FAIL  STOP_FLAG substitution"; exit 1; }
 sed -e "s|^ACTOR=\"[^\"]*\"|ACTOR=\"$WORK/actor.sh\"|" -e "s|^PRIORITY=\"[^\"]*\"|PRIORITY=\"$WORK/priority.sh\"|" "$WATCH_SRC" > "$WORK/watch.sh"
@@ -274,6 +275,31 @@ flag="$(sed -n 's/^STOP_FLAG="\(.*\)"$/\1/p' "$DNS_SRC")"
 check "scripts agree on the flag" eq "$flag" "$(sed -n 's/^STOP_FLAG="\(.*\)"$/\1/p' "$DIR/net-priority.sh")"
 check "daemon watches the flag folder" eq "$(plutil -extract WatchPaths.0 raw "$DIR/com.tomigorn.homelab-dns-control.plist")" "$(dirname "$flag")"
 check "daemon runs the control script" eq "$(plutil -extract ProgramArguments.0 raw "$DIR/com.tomigorn.homelab-dns-control.plist")" "/usr/local/sbin/homelab-dns-control.sh"
+
+# --version: installed copy, compared with the repo VERSION next to the script; no probe, no DNS change, no log
+check "repo VERSION is X.Y.Z" eval '[[ "$(cat "$DIR/VERSION" 2>/dev/null)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]'
+version_run() { "$WORK/homelab-dns.sh" --version; }
+PRESET=(); reset "$HOME_ANSWER"; rm -f "$WORK/installed-VERSION"; echo 1.0.0 > "$WORK/VERSION"
+out="$(version_run)"; rc=$?
+check "version: nothing installed" eq "$out" "homelab-dns ? (repo 1.0.0)"
+check "version: exit 0" eq "$rc" 0
+check "version: no probe, no DNS change" test -z "$(calls)"
+check "version: no log line" test -z "$(logtxt)"
+echo 1.0.0 > "$WORK/installed-VERSION"
+check "version: installed = repo" eq "$(version_run)" "homelab-dns 1.0.0"
+echo 0.9.0 > "$WORK/installed-VERSION"
+check "version: installed older than repo" eq "$(version_run)" "homelab-dns 0.9.0 (repo 1.0.0)"
+rm -f "$WORK/VERSION"
+check "version: run from sbin (no repo VERSION)" eq "$(version_run)" "homelab-dns 0.9.0"
+touch "$WORK/stopped"
+check "version: works while stopped" eq "$(version_run)" "homelab-dns 0.9.0"
+rm -f "$WORK/stopped"
+
+# install.sh puts VERSION where --version reads it, and logs the install
+installed="$(sed -n 's/^INSTALLED_VERSION="\(.*\)"$/\1/p' "$DNS_SRC")"
+check "install: VERSION_DEST matches the script" eq "$(sed -n 's/^VERSION_DEST="\(.*\)"$/\1/p' "$DIR/install.sh")" "$installed"
+check "install: copies VERSION" grep -q 'install -m 644 -o root -g wheel "${SCRIPT_DIR}/VERSION" "${VERSION_DEST}"' "$DIR/install.sh"
+check "install: logs installed <v>" grep -q 'installed %s' "$DIR/install.sh"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

@@ -213,6 +213,13 @@ sudo ./install.sh
 
 Installs the four scripts to `/usr/local/sbin/` and three daemons to `/Library/LaunchDaemons/` (`com.tomigorn.homelab-dns.plist`, the watcher, `com.tomigorn.homelab-dns-timer.plist`, the 5-min safety net, and `com.tomigorn.homelab-dns-control.plist`, for stop and start), creates the flag folder, then loads all three. Runs at boot, on every network change, and every 5 minutes. Safe to re-run. Run it from your own account, the flag folder gets your user as owner.
 
+Version: `VERSION` here; the install copies it to `/usr/local/share/homelab-dns/VERSION` and logs `installed <v>`.
+
+| Command | Shows |
+|---|---|
+| `homelab-dns/homelab-dns.sh --version` (repo) | `homelab-dns 1.0.0`, or `homelab-dns 0.9.0 (repo 1.0.0)`: installed copy is stale, re-run the install |
+| `/usr/local/sbin/homelab-dns.sh --version` | the installed version (`?`: installed before versions existed) |
+
 Tests: `homelab-dns/tests/homelab-dns.sh`, `net-priority.sh`, `log-launcher.sh`, `control-launcher.sh` and `build-launchers.sh` in the same folder (stubbed, no system changes), or all via `tests/test-all.sh`.
 
 ## Verify / operate

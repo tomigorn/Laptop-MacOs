@@ -36,3 +36,9 @@ Global rules apply (`~/.claude/CLAUDE.md`). Only what is special here:
 - tag: `mac-outdated-X.Y.Z`, annotated (`mac-outdated X.Y.Z`)
 - bumps: only changes under `software-updates/`
 - extra steps: `mac-outdated --version` shows it
+
+## Version (homelab-dns)
+- file: `homelab-dns/VERSION`
+- tag: `homelab-dns-X.Y.Z`, annotated (`homelab dns X.Y.Z`)
+- bumps: only changes under `homelab-dns/`
+- extra steps: `homelab-dns/homelab-dns.sh --version` shows it; the owner runs `sudo homelab-dns/install.sh` to deploy it
