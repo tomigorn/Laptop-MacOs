@@ -19,4 +19,7 @@ yabai -m signal --add label=arrange_added   event=display_added   action="$HOME/
 yabai -m signal --add label=arrange_removed event=display_removed action="$HOME/.config/yabai/yabai-snap.sh arrange"
 "$HOME/.config/yabai/yabai-snap.sh" arrange
 
+# Same backdrop photo on all displays and Spaces (backdrop-carousel); a new start replaces the running one.
+[ -x "$HOME/bin/backdrop-wallpaper" ] && { "$HOME/bin/backdrop-wallpaper" --watch --interval 600 >/dev/null 2>&1 & }
+
 echo "yabai configuration loaded"
