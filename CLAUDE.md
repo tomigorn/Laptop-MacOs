@@ -48,3 +48,9 @@ Global rules apply (`~/.claude/CLAUDE.md`). Only what is special here:
 - tag: `ssh-why-X.Y.Z`, annotated (`ssh-why X.Y.Z`)
 - bumps: only changes under `ssh/`
 - extra steps: `ssh-why --version` in a new fish shell shows it
+
+## Version (virt-manager)
+- file: `virt-manager/VERSION`
+- tag: `virt-manager-X.Y.Z`, annotated (`virt-manager X.Y.Z`)
+- bumps: only changes under `virt-manager/`
+- extra steps: none (`virt-manager/install.sh` prints it as its last line)

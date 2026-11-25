@@ -82,6 +82,8 @@ virt-manager/
   build.sh          (re)builds ~/Applications/Virt-Manager.app
   launcher.sh       sets env, execs virt-manager — symlinked into the .app
   Info.plist        bundle manifest — symlinked into the .app
+  VERSION           setup version, last line of install.sh (the .app stays 1.0)
+  tests/            launcher.sh, install.sh (stubbed), or all via tests/test-all.sh
 ```
 
 ### Symlinks created by `build.sh`
@@ -130,6 +132,7 @@ The script:
 5. Warns if fish doesn't export `XDG_DATA_DIRS=/opt/homebrew/share`
    (run [`terminal/install.sh`](../terminal/install.sh) to set that up via symlink)
 6. Runs `build.sh` to produce `~/Applications/Virt-Manager.app`
+7. Ends with `virt-manager setup <version>`
 
 Safe to re-run — every step is idempotent.
 
