@@ -172,7 +172,7 @@ Columns: `idx` is yabai's display index, `layout` the zone sizes the screen reso
 
 ## How it works
 
-- `yabairc` sets yabai to `layout float` (no auto-tiling) and a couple of options, adds the `display_added`/`display_removed` signals and runs `yabai-snap.sh arrange`. No scripting addition is loaded.
+- `yabairc` sets yabai to `layout float` (no auto-tiling) and a couple of options, adds the `display_added`/`display_removed` signals, runs `yabai-snap.sh arrange` and starts `~/bin/backdrop-wallpaper --watch --interval 600` if it exists (see `backdrop-carousel/backdrop-carousel.md`). No scripting addition is loaded.
 - `keys.conf` binds the keys to `yabai-snap.sh left|right|fill|extend-left|extend-right` (skhd reads it via the `~/.config/skhd/skhdrc` symlink).
 - `yabai-snap.sh`:
   - captures the focused window by **id** (focus doesn't reliably follow a

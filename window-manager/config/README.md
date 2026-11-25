@@ -13,7 +13,7 @@ Live config of the keyboard-driven window snapper (yabai + skhd).
 | `zones.conf`   | **Your monitors, split sizes, models, arrangements, Dock gap (`bottom`)** | ✅ yes — this is the main one |
 | `connected.txt`| Which monitors are connected right now (generated, local only) | no |
 | `keys.conf`    | Keyboard shortcuts (skhd reads it via the symlink `~/.config/skhd/skhdrc`) | ✅ to rebind keys |
-| `yabairc`      | yabai settings (float layout), arrange on start and plug in/out | rarely |
+| `yabairc`      | yabai settings (float layout), arrange on start and plug in/out, starts `backdrop-wallpaper` (backdrop-carousel) | rarely |
 | `yabai-snap.sh`| The snapping logic | no |
 | `README.md`    | This file | — |
 
