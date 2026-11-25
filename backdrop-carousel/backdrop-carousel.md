@@ -23,7 +23,7 @@ Then point the Shortcut's "Run Shell Script" action (shell `/bin/zsh`) at `~/bin
 
 | Case | Output |
 |---|---|
-| `--version` | `backdrop-carousel 1.0.0`, nothing synced |
+| `--version` | `backdrop-carousel 1.1.0`, nothing synced |
 | server unreachable or bad list | `ERROR: Failed to fetch photo list from server`, exit 1 |
 | Brave not installed | `Synced N photos to wallpaper. Brave not installed.` |
 | Brave running | `Synced N photos to wallpaper. Brave skipped (running).` |
