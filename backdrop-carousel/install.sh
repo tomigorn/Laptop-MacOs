@@ -1,7 +1,5 @@
 #!/bin/zsh
-# Installs a symlink to sync.sh in ~/bin so the Shortcut can run it from a
-# runner-friendly location (Control Center / menu bar background runner has
-# trouble with deep nested paths).
+# Symlinks sync.sh to ~/bin for the Shortcut (Control Center has trouble with deep paths) and builds backdrop-wallpaper into ~/bin.
 
 set -e
 
@@ -12,6 +10,14 @@ TARGET="$TARGET_DIR/backdrop-sync.sh"
 
 mkdir -p "$TARGET_DIR"
 ln -sf "$SOURCE" "$TARGET"
+
+WALLPAPER="$TARGET_DIR/backdrop-wallpaper"
+if ! command -v swiftc >/dev/null; then
+    echo "swiftc not found (Xcode or Command Line Tools): backdrop-wallpaper not built"
+    exit 1
+fi
+swiftc -O "$SCRIPT_DIR/wallpaper.swift" -o "$WALLPAPER"
+echo "Built: $WALLPAPER"
 
 echo "Symlink installed:"
 echo "  $TARGET -> $SOURCE"
