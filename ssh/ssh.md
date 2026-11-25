@@ -143,5 +143,6 @@ is visible in the config.
 
 | | |
 |---|---|
-| Install | `ssh/install.sh` (links `ssh-why` into fish) |
+| Install | `ssh/install.sh` (links `ssh-why` and its completion into fish) |
+| Version | `ssh/VERSION`, shown by `ssh-why --version` |
 | Tests | `ssh/tests/ssh-why.fish`, or all via `tests/test-all.sh` |

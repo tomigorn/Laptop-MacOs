@@ -197,7 +197,7 @@ Three things to know:
   performs no key exchange, so it would report no key at all. It costs one login
   per hop; mind fail2ban on hosts that ban repeated failures.
 
-The function lives in `ssh/ssh-why.fish` and is symlinked by `ssh/install.sh`.
+The function lives in `ssh/ssh-why.fish`, its tab completion in `ssh/completions/ssh-why.fish`; `ssh/install.sh` links both. `ssh-why --version` (`-V`) prints the version from `ssh/VERSION`.
 
 ### Raw ssh
 

@@ -42,3 +42,9 @@ Global rules apply (`~/.claude/CLAUDE.md`). Only what is special here:
 - tag: `homelab-dns-X.Y.Z`, annotated (`homelab dns X.Y.Z`)
 - bumps: only changes under `homelab-dns/`
 - extra steps: `homelab-dns/homelab-dns.sh --version` shows it; the owner runs `sudo homelab-dns/install.sh` to deploy it
+
+## Version (ssh-why)
+- file: `ssh/VERSION`
+- tag: `ssh-why-X.Y.Z`, annotated (`ssh-why X.Y.Z`)
+- bumps: only changes under `ssh/`
+- extra steps: `ssh-why --version` in a new fish shell shows it

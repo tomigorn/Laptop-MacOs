@@ -116,4 +116,29 @@ set out (ssh-why viacmd | plain | string collect)
 check "proxycommand shown" has $out "proxycommand   nc"
 check "proxycommand: chain not followed note" has $out "chain not followed"
 
+# --version, read next to the real file
+set -l v (string trim < $here/../VERSION 2>/dev/null)
+check "repo VERSION is X.Y.Z" string match -qr '^[0-9]+\.[0-9]+\.[0-9]+$' -- "$v"
+set out (ssh-why --version)
+check "--version prints name and version" test "$out" = "ssh-why $v"
+ssh-why --version >/dev/null
+check "--version: exit 0" test $status -eq 0
+check "-V same as --version" test "$(ssh-why -V)" = "ssh-why $v"
+check "--help lists --version" has (ssh-why --help | string collect) "-V, --version"
+mkdir -p $WORK/functions $WORK/copy
+ln -s (path resolve $SSHWHY_SRC) $WORK/functions/ssh-why.fish
+source $WORK/functions/ssh-why.fish
+check "--version through the fish-functions symlink" test "$(ssh-why --version)" = "ssh-why $v"
+cp $SSHWHY_SRC $WORK/copy/ssh-why.fish
+source $WORK/copy/ssh-why.fish
+check "no VERSION next to it: ?" test "$(ssh-why --version)" = "ssh-why ?"
+
+# completion: flags on a dash and on a bare tab
+source $here/../completions/ssh-why.fish
+set out (complete -C 'ssh-why -' | string collect)
+for f in --connect --help --version
+    check "completion offers $f" has $out $f
+end
+check "bare tab offers --version" has (complete -C 'ssh-why ' | string collect) --version
+
 test $fails -eq 0

@@ -16,6 +16,7 @@ symlink() {
 
 step "Symlinks — ssh-why"
 symlink "$SCRIPT_DIR/ssh-why.fish" ~/.config/fish/functions/ssh-why.fish
+symlink "$SCRIPT_DIR/completions/ssh-why.fish" ~/.config/fish/completions/ssh-why.fish
 
 echo
 echo "All done. Open a new fish shell and run: ssh-why <host>"

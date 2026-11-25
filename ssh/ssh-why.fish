@@ -1,9 +1,17 @@
 function ssh-why --description "Show which ssh config files, blocks and key are used to reach a host"
-    argparse c/connect h/help -- $argv
+    argparse c/connect h/help V/version -- $argv
     or return 1
+
+    if set -q _flag_version
+        set -l v (cat (path dirname (path resolve (functions --details ssh-why)))/VERSION 2>/dev/null | string trim)
+        test -n "$v"; or set v '?'
+        echo "ssh-why $v"
+        return 0
+    end
 
     if set -q _flag_help; or test (count $argv) -ne 1
         echo "usage: ssh-why [-c|--connect] <host>"
+        echo "       ssh-why -V|--version"
         echo
         echo "  Explains how ssh resolves <host>: which config files it reads, which"
         echo "  blocks actually apply, what they resolve to, and the full ProxyJump"
@@ -15,6 +23,8 @@ function ssh-why --description "Show which ssh config files, blocks and key are 
         echo "                  disabled) and report which key the server accepted."
         echo "                  Costs one login per hop -- mind fail2ban on hosts"
         echo "                  that ban repeated failures."
+        echo "  -V, --version   print the version."
+        echo "  -h, --help      this help."
         echo
         echo "  NOTE: 'Match ... exec' blocks run their command during config"
         echo "  parsing, so they fire even in offline mode. 'ssh-why beefy' will"
