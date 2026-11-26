@@ -25,7 +25,7 @@ Only with colour on (terminal, no `NO_COLOR`); piped output and `NO_COLOR` stay 
 - [x] Tests: the colour tests (`MAC_OUTDATED_COLOR=always`) assert the badges, bars and row parts; one test that output without colour is unchanged (no SGR, `═══` and `──` as today)
 - [x] `software-updates.md` colour section updated, 1.7.0 tagged
 - [x] Verify: tests by `verifier` (152 passed); real coloured and `NO_COLOR` check runs and their logs inspected by `verifier` (badges, bars, rows, no `═══` with colour, plain output and log unchanged in form)
-- [ ] Owner looks at a real `mac-outdated` and `mac-outdated --install` in Ghostty
+- [x] Owner looked at a real `mac-outdated --install` in Ghostty 2026-11-26: fine; asked for a clearer Summary → 1.7.1: Summary bar green / yellow / red by outcome, By hand bar yellow
 
 ## Untouched
 - Texts, counts, order, exit codes and output without colour

@@ -22,7 +22,6 @@
 - ❓ Bluetooth battery in the greeting: warning colour? Options: red below 20% ⭐ (low battery stands out) · another threshold · always the same colour (calmer, easy to miss a low device).
 
 ## By hand
-- ✋ mac-outdated 1.7.0 look: in Ghostty, any folder: `mac-outdated`, later `mac-outdated --install` (after Privileges); badges readable (red too), bars and aligned rows look right. Why: only raw colour codes could be checked here.
 - ✋ homelab-dns reinstall, now (1.0.1): on the Mac, `~/development/private/Laptop-MacOs`: `sudo homelab-dns/install.sh`, then `homelab-dns/homelab-dns.sh --version` shows `homelab-dns 1.0.1`. Why: the installed copy (2026-11-05) misses the stop-flag fix from 2026-11-06.
 - ✋ Before the itet-ifa-comp01 baseline: on the Mac (any folder) `ssh-add` the ETH server key (`~/.ssh/keys/eth/<user>.4la.ethServers`). Why: the key isn't in the agent, so every connect gets `Permission denied (publickey)`.
 - ✋ xxhc 3.2.2 live check: in a new Ghostty tab, `xxhc itet-ifa-comp01` (or root6); the remote greeting must show `Terminal: ghostty 1.4.0`, no tar warnings, no xxh "First time…" lines, and no `timeout` box on exit. Why: the Terminal line fix could only be tested against the Mac's fastfetch, not on Linux.
@@ -40,3 +39,4 @@
 - ✅ homelab-dns, ssh, virt-manager: versions (homelab-dns 1.0.1 with installed-copy check, ssh-why 1.0.0, virt-manager 1.0.0) → [specs/archive/tool-versions.md](specs/archive/tool-versions.md)
 - ✅ mac-outdated: apps to open in --install (Sparkle, self-updating, no-updater), 1.6.0 → [specs/archive/mac-outdated-install-open-apps.md](specs/archive/mac-outdated-install-open-apps.md)
 - ✅ mac-outdated: badges and section bars, both modes, 1.7.0 → [specs/archive/mac-outdated-badges.md](specs/archive/mac-outdated-badges.md)
+- ✅ mac-outdated: Summary bar tinted by outcome, By hand bar yellow, 1.7.1
