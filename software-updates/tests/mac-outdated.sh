@@ -527,7 +527,7 @@ check "colour: outdated count yellow badge" colored "1;30;43" " 4 OUTDATED "
 check "colour: outdated name bold" grep -q $'\033\\[1mghostty' "$WORK/out"
 check "colour: new version bold yellow" grep -q $'\033\\[1;33m1\\.4\\.0' "$WORK/out"
 check "colour: section bar" colored "1;97;48;5;237" "$(printf ' %-57s' 'brew · 4 outdated')"
-check "colour: summary bar" colored "1;97;48;5;237" "$(printf ' %-57s' 'Summary')"
+check "colour: summary bar yellow when outdated" grep -qF "$(printf '\033[1;97;48;5;237m\033[1;30;43m %-57s\033[0m' Summary)" "$WORK/out"
 check "colour: no rule lines with colour" no_match "$(cat "$WORK/out")" "═══"
 check "colour: new version not green" no_match "$(cat "$WORK/out")" $'\033\\[32m[0-9.]+\033'
 check "colour: old version dim" grep -q $'\033\\[2m1\\.3\\.1' "$WORK/out"
@@ -558,6 +558,7 @@ check "nothing outdated: stamp written" test -f "$HOME/.local/state/mac-outdated
 MAC_OUTDATED_COLOR=always run
 check "colour: up to date dim" grep -q $'\033\\[2mup to date' "$WORK/out"
 check "colour: everything up to date green" grep -q $'\033\\[32meverything up to date' "$WORK/out"
+check "colour: summary bar green when all up to date" grep -qF "$(printf '\033[1;97;48;5;237m\033[1;30;42m %-57s\033[0m' Summary)" "$WORK/out"
 make_app "Google Chrome" com.google.Chrome 150.0
 run
 check "nothing outdated: self-updating apps checked" has "$out" "^ Self-updating apps \\.+ 1 checked, all current$"
@@ -612,6 +613,7 @@ check "brew check failing: not up to date" lacks "$out" "everything up to date"
 check "brew check failing: no stamp" test ! -e "$HOME/.local/state/mac-outdated/last-check"
 MAC_OUTDATED_COLOR=always run
 check "brew check failing: red badge" grep -q $'\033\\[1;30;41m CHECK FAILED ' "$WORK/out"
+check "brew check failing: summary bar red" grep -qF "$(printf '\033[1;97;48;5;237m\033[1;30;41m %-57s\033[0m' Summary)" "$WORK/out"
 rm -f "$FIX/fail-brew-outdated"
 
 # offline: the App Store and macOS lists fail, the others still count
@@ -1654,6 +1656,7 @@ check "end: failed line has the log path" has "$out" "details: .*/logs/.*-instal
 check "end: failed line has the rerun hint" contains "$out" "rerun: mac-outdated --install"
 check "end: failed, nothing nothing-failed" lacks "$out" "nothing failed"
 touch "$FIX/su-norestart"; MAC_OUTDATED_COLOR=always run --install; rm -f "$FIX/su-norestart"
+check "end: summary bar red when something failed" grep -qF "$(printf '\033[1;97;48;5;237m\033[1;30;41m %-57s\033[0m' Summary)" "$WORK/out"
 check "end: failed line red badge" grep -qF $'\033[1;30;41m ✗ FAILED \033[0m \033[31mmacOS (still offered' "$WORK/out"
 check "end: failed summary row badge" grep -qE $'macOS +\033\\[1;30;41m FAILED ' "$WORK/out"
 
@@ -1744,7 +1747,9 @@ check "open: alone not a failure" equals "$rc" 0
 MAC_OUTDATED_COLOR=always run --install
 check "open: progress result yellow badge" grep -q $'\033\\[1;30;43m 3 TO OPEN ' "$WORK/out"
 check "open: step header bar" grep -qF "$(printf '\033[1;97;48;5;237m %-57s\033[0m' 'Apps to open')" "$WORK/out"
-check "open: By hand bar" grep -qF "$(printf '\033[1;97;48;5;237m %-57s\033[0m' 'By hand')" "$WORK/out"
+check "open: By hand bar yellow" grep -qF "$(printf '\033[1;97;48;5;237m\033[1;30;43m %-57s\033[0m' 'By hand')" "$WORK/out"
+check "open: summary bar green when nothing failed" grep -qF "$(printf '\033[1;97;48;5;237m\033[1;30;42m %-57s\033[0m' Summary)" "$WORK/out"
+check "open: log has the summary bar as dashes" grep -qx "── Summary" "$(logpath)"
 check "open: app line name bold, aligned" grep -qF "$(printf '\033[1m%-9s\033[0m' Fork)" "$WORK/out"
 check "open: app line new version bold yellow" grep -qF $'\033[1;33m2.71.1' "$WORK/out"
 check "open: app line hint dim" grep -qF $'\033[2mopen the app, it updates itself' "$WORK/out"

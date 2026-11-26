@@ -114,10 +114,14 @@ c() {  # c <sgr code> <text>: bold 1, dim 2, red 31, green 32, yellow 33
 badge() {  # badge <background: 41 red, 42 green, 43 yellow> <text>: bold black on the colour, upper case
   if [ "$COLOR" -eq 1 ]; then printf '\033[1;30;%sm %s \033[0m' "$1" "${2^^}"; else printf '%s' "$2"; fi
 }
-bar() { printf '\033[1;97;48;5;237m %-57s\033[0m' "$1"; }  # bar <text>: full-width grey bar (colour only)
+bar() {  # bar <text> [sgr]: full-width bar, grey or in the given colour (colour only)
+  local tint=""
+  [ -z "${2:-}" ] || tint=$'\033['"$2"'m'
+  printf '\033[1;97;48;5;237m%s %-57s\033[0m' "$tint" "$1"
+}
 header() { printf '%s · %s\n\n' "$(c 1 "$1")" "$(date '+%Y-%m-%d %H:%M')"; }
-section() {  # section <title> <detail>
-  if [ "$COLOR" -eq 1 ]; then printf '\n%s\n' "$(bar "$1${2:+ · $2}")"
+section() {  # section <title> <detail> [bar sgr]
+  if [ "$COLOR" -eq 1 ]; then printf '\n%s\n' "$(bar "$1${2:+ · $2}" "${3:-}")"
   else printf '\n%s\n %s%s\n%s\n' "$RULE" "$1" "${2:+ · $2}" "$RULE"
   fi
 }
@@ -231,7 +235,7 @@ $SIG{INT} = "IGNORE";
 open(my $log, ">>", $ARGV[0]) or exit 1;
 select((select($log), $| = 1)[0]);
 my ($bol, $hide, $line) = (1, 0, "");
-sub logline { my $l = shift; $l =~ s/\e\[1;30;4[123]m (.*?) \e\[0m/lc($1)/ge; $l =~ s/\e\[1;97;48;5;237m (.*?) *\e\[0m/── $1/g; $l =~ s/\e\[[0-9;?]*[A-Za-z]//g; $l =~ s/\r(?!\n)/\n/g; print $log $l; }
+sub logline { my $l = shift; $l =~ s/\e\[1;97;48;5;237m(?:\e\[[0-9;]*m)? (.*?) *\e\[0m/── $1/g; $l =~ s/\e\[1;30;4[123]m (.*?) \e\[0m/lc($1)/ge; $l =~ s/\e\[[0-9;?]*[A-Za-z]//g; $l =~ s/\r(?!\n)/\n/g; print $log $l; }
 while (sysread(STDIN, my $buf, 65536)) {
   my $out = "";
   for my $part (split /(?<=\n)/, $buf) {
@@ -956,7 +960,10 @@ check_mode() {
   done
   open_to_update "$(grep . <<< "$open" | sort -f -t'|' -k2,2)" "$(grep . <<< "$info")"
 
-  section "Summary" ""
+  local tint='1;30;42'
+  [ "$outdated" -eq 0 ] || tint='1;30;43'
+  [ "$nfailed" -eq 0 ] || tint='1;30;41'
+  section "Summary" "" "$tint"
   for src in "${SOURCES[@]}"; do
     if [ "${N_ITEMS[$src]}" -gt 0 ]; then summary_row "${LABELS[$src]}" "${N_ITEMS[$src]}" "${HINTS[$src]}"
     elif [ "${KIND[$src]}" = "?" ] || [ "${KIND[$src]}" = "–" ] || [ "${KIND[$src]}" = "!" ]; then summary_row "${LABELS[$src]}" "${KIND[$src]}" "${SHINT[$src]}" "$([ "${KIND[$src]}" = "!" ] && echo 31 || echo 33)"
@@ -1407,8 +1414,14 @@ result_word() {  # result_word <result>: a badge for what changed or needs you, 
 }
 
 install_summary() {
-  local src r word n_inst=0 n_up=0 n_fail=0 n_skip=0 n_int=0 n_not=0 n_open=0
-  section "Summary" ""
+  local src r word n_inst=0 n_up=0 n_fail=0 n_skip=0 n_int=0 n_not=0 n_open=0 tint='1;30;42'
+  for src in "${INSTALL_ORDER[@]}"; do
+    case ${RESULT[$src]:-not run} in
+      installed*|"up to date"|staged*|skipped*|*" to open") ;;
+      *) tint='1;30;41' ;;
+    esac
+  done
+  section "Summary" "" "$tint"
   for src in "${INSTALL_ORDER[@]}"; do
     r=${RESULT[$src]:-not run}
     case $r in
@@ -1456,7 +1469,7 @@ install_summary() {
     [ -z "$LOG" ] || printf '    details: %s\n' "$LOG"
     printf '    rerun: mac-outdated --install\n'
   fi
-  section "By hand" ""
+  section "By hand" "" '1;30;43'
   if [ "${#BY_HAND[@]}" -eq 0 ]; then printf '  %s\n' "nothing to do by hand"
   else app_lines '  ' "${BY_HAND[@]}"; fi
 }

@@ -153,7 +153,9 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 | badge, green | ` INSTALLED ` (`--install` result) |
 | badge, yellow | ` 4 OUTDATED `, ` 1 TO OPEN `, ` 2 BY HAND ` |
 | badge, red | ` CHECK FAILED `, ` FAILED ` (reason after it in red), ` INTERRUPTED `, ` NOT RUN `, ` ✗ FAILED ` line after the Summary |
-| grey bar | section titles (`brew · 4 outdated`, `Summary`, `By hand`) and `--install` step headers |
+| grey bar | section titles (`brew · 4 outdated`, `Open to update`) and `--install` step headers |
+| `Summary` bar | green: nothing failed (check: everything up to date); yellow: something outdated (check); red: a check or step failed |
+| `By hand` bar | yellow |
 | version rows | name bold, old version dim, new version bold yellow (brew result: bold green `✓` / bold red `✗`); app lines in `Apps to open` and By hand aligned, hint dim |
 | dim | `up to date`, notes, informational lines; `--install`: stale cask record, ETH-licensed app left to Jamf |
 | green text | `none installed`, `N checked, all current`, `staged, restart required`, `everything up to date`, `✓ nothing failed`; `--install`: leftover backup removed |
