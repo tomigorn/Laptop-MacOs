@@ -191,6 +191,23 @@ check "fastfetch: nothing forwarded -> plain fastfetch" eq (_xxhc_fastfetch) "ar
 set -e XDG_CONFIG_HOME
 rm $WORK/bin/fastfetch
 
+# plugin loader: without plugin build dirs, find must not run (it would search the cwd, e.g. a network share under the remote home)
+awk '/^set -l dirs/{p=1} p{print} p&&/^end/{exit}' $XXHCONF_SRC > $WORK/plugins.fish
+check "plugin loader extracted" test -s $WORK/plugins.fish
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "$FIND_LOG"\n' > $WORK/bin/find
+chmod +x $WORK/bin/find
+set -gx FIND_LOG $WORK/find.log
+set -g CURRENT_DIR $WORK/xh/.xxh/shells/fish/build
+mkdir -p $CURRENT_DIR
+: > $FIND_LOG
+source $WORK/plugins.fish
+check "plugins: none -> find not run" test ! -s $FIND_LOG
+mkdir -p $WORK/xh/.xxh/plugins/p1/build
+source $WORK/plugins.fish
+check "plugins: build dir -> find searches it" string match -q -- "$CURRENT_DIR/../../../plugins/p1/build -type f*" (cat $FIND_LOG)
+rm $WORK/bin/find
+set -e FIND_LOG CURRENT_DIR
+
 # full connect: xxh stubbed, the history export comes back through the scp stub
 set -l fish86 $HOME/.xxh-homes/x86_64/.xxh/shells/xxh-shell-fish/build/fish-portable/bin
 mkdir -p $fish86 $HOME/.local/share/atuin
