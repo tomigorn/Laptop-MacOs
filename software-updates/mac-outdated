@@ -1401,7 +1401,7 @@ app_lines() {  # app_lines <indent> <entries...>: app entries aligned (colour) o
 result_word() {  # result_word <result>: a badge for what changed or needs you, quiet text for the rest
   local r=$1
   case $r in
-    installed*) printf '%s%s' "$(badge 42 installed)" "$(c 32 "${r#installed}")" ;;
+    installed*) r=${r#installed}; [ "$COLOR" -eq 0 ] || r=${r/#,/}; printf '%s%s' "$(badge 42 installed)" "$(c 32 "$r")" ;;
     "up to date") c 2 "$r" ;;
     staged*) c 32 "$r" ;;
     skipped*|"some updates failed"*|"not verified"*) c 33 "$r" ;;

@@ -1797,6 +1797,12 @@ check "Ctrl-C: interrupted red badge" grep -qF $'\033[1;30;41m INTERRUPTED \033[
 check "Ctrl-C: not run red badge" grep -qE $'Apps to open +\033\\[1;30;41m NOT RUN ' "$WORK/out"
 check "open: Ctrl-C before it -> no apps listed" lacks "$out" "Fork 2.70.2 → 2.71.1: open the app"
 
+# result_word <colour: always|never> <result>
+result_word() { MAC_OUTDATED_COLOR=$1 NO_COLOR=1 /opt/homebrew/bin/bash -c 'source "$1"; setup_color; result_word "$2"' _ "$SCRIPT" "$2"; }
+check "badge: no comma after INSTALLED" equals "$(result_word always "installed, restart required")" "$(printf '\033[1;30;42m INSTALLED \033[0m\033[32m restart required\033[0m')"
+check "badge: plain keeps the comma" equals "$(result_word never "installed, restart required")" "installed, restart required"
+check "badge: bracket reason unchanged" equals "$(result_word always "failed (exit 1)")" "$(printf '\033[1;30;41m FAILED \033[0m\033[31m (exit 1)\033[0m')"
+
 # ── log: version, step times, exit codes, total time ────────────────────────
 logs_dir="$HOME/.local/state/mac-outdated/logs"
 fixtures_outdated; admin_setup admin 20
