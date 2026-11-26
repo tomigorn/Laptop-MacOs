@@ -32,6 +32,7 @@
 - ✅ mac-outdated: version check for self-updating and managed apps, 1.4.0 → [specs/archive/mac-outdated-self-updating-versions.md](specs/archive/mac-outdated-self-updating-versions.md)
 - ✅ window-manager: yabai-snap skips placeholder screens, `arrange Home` fixed, 1.3.1
 - ✅ terminal: xxhc tar warnings, xxh chatter, timeout box, remote Terminal line, 3.2.1–3.2.2
+- ✅ terminal: xxhc no longer hangs on hosts with network mounts in home (plugin find), 3.2.3 → [specs/archive/xxhc-plugin-find.md](specs/archive/xxhc-plugin-find.md)
 - ✅ mac-outdated: colours inside the --install blocks, brew result per package, 1.5.0 → [specs/archive/mac-outdated-install-colours.md](specs/archive/mac-outdated-install-colours.md)
 - ✅ mac-outdated: versions on self-updating cask lines in --install, 1.5.1 → [specs/archive/mac-outdated-self-updating-cask-versions.md](specs/archive/mac-outdated-self-updating-cask-versions.md)
 - ✅ backdrop-carousel: VERSION file and --version, 1.0.0 → [specs/archive/backdrop-versioning.md](specs/archive/backdrop-versioning.md)
