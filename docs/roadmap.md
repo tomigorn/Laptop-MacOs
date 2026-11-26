@@ -39,4 +39,4 @@
 - ✅ homelab-dns, ssh, virt-manager: versions (homelab-dns 1.0.1 with installed-copy check, ssh-why 1.0.0, virt-manager 1.0.0) → [specs/archive/tool-versions.md](specs/archive/tool-versions.md)
 - ✅ mac-outdated: apps to open in --install (Sparkle, self-updating, no-updater), 1.6.0 → [specs/archive/mac-outdated-install-open-apps.md](specs/archive/mac-outdated-install-open-apps.md)
 - ✅ mac-outdated: badges and section bars, both modes, 1.7.0 → [specs/archive/mac-outdated-badges.md](specs/archive/mac-outdated-badges.md)
-- ✅ mac-outdated: Summary bar tinted by outcome, By hand bar yellow, 1.7.1
+- ✅ mac-outdated: Summary bar tinted by outcome, By hand bar yellow, no comma after INSTALLED, 1.7.1–1.7.2
