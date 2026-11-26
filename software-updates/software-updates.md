@@ -146,14 +146,19 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
 - Ctrl-C during `--install` stops the whole run: the current step ends (brew: no cask upgrade after it; no sudo starts after a Ctrl-C), then `interrupted — remaining steps not run`, the summary so far (`interrupted` / `not run`), exit 130. A step ending with 130 counts the same.
 - Every run (check and `--install`) writes its full output without colour codes to `~/.local/state/mac-outdated/logs/<YYYY-MM-DD-HHMMSS>-<check|install>.log` (private: file 0600, dir 0700; a second run in the same second gets `-2`, `-3`, … before the mode); the newest 20 are kept. Temp files live in a private dir under `$TMPDIR`, removed on exit, also after Ctrl-C. Last line on the terminal: `log: <path>`. Log only: first line `mac-outdated <version> · <mode> · <date time>`, per `--install` step `step <src>: start <time>` and `step <src>: end <time>, <N>s, exit <rc>, <result>`, last line `end <time>, <N>s total`. sudo prompts go to the terminal only; `softwareupdate --list` before/after and the known lines of `softwareupdate --install` go to the log, only whole lines of these forms: `Software Update Tool`, `Finding available software`, `Done.`, `No new software available.`, `Downloading <name>`, `Downloading[ <name>]: N%`, `Downloaded: <title>`, `Installing[ <name>]: N%`, `Restart is required to complete installation.`, `Please restart immediately.`, `Restarting…`, `Error downloading <label>: …`, `Failed to download|install …`; `Password:` without what follows. Other echoed text (typed ahead) never; only these lines decide `restart required`.
 - Colours only on a terminal; `NO_COLOR=1` turns them off, `MAC_OUTDATED_COLOR=always` forces them.
-- Colours (traffic light):
+- Colours: badges only for what changed or needs you; without colour (pipe, `NO_COLOR`) the output keeps `═══` boxes, `── <step>` headers and plain words. The log has no colour codes: badges in lower case, bars as `── <title>`.
 
-| Colour | Means |
+| Element | Look |
 |---|---|
-| green | `up to date`, `installed`, `none installed` (uv tools); `--install`: leftover backup removed, brew result `✓` |
-| yellow | outdated: count, name, new version, `(older version …)`, by-hand hints, `skipped (…)`, `some updates failed (…)`, summary counts; `--install`: held formula, self-updating cask, ETH Self Service offers |
-| red | `check failed`, `failed (exit N)`, `interrupted`, `not run`, `!` rows; `--install`: tool errors (`brew update failed`, `jq not found`, `sudo failed`, …), brew result `✗` |
-| dim | installed version, notes, informational lines; `--install`: stale cask record, ETH-licensed app left to Jamf |
+| badge, green | ` INSTALLED ` (`--install` result) |
+| badge, yellow | ` 4 OUTDATED `, ` 1 TO OPEN `, ` 2 BY HAND ` |
+| badge, red | ` CHECK FAILED `, ` FAILED ` (reason after it in red), ` INTERRUPTED `, ` NOT RUN `, ` ✗ FAILED ` line after the Summary |
+| grey bar | section titles (`brew · 4 outdated`, `Summary`, `By hand`) and `--install` step headers |
+| version rows | name bold, old version dim, new version bold yellow (brew result: bold green `✓` / bold red `✗`); app lines in `Apps to open` and By hand aligned, hint dim |
+| dim | `up to date`, notes, informational lines; `--install`: stale cask record, ETH-licensed app left to Jamf |
+| green text | `none installed`, `N checked, all current`, `staged, restart required`, `everything up to date`, `✓ nothing failed`; `--install`: leftover backup removed |
+| yellow text | `skipped (…)`, `some updates failed (…)`, `(older version …)`, by-hand hints, summary counts; `--install`: held formula, self-updating cask, ETH Self Service offers |
+| red text | `!` rows; `--install`: tool errors (`brew update failed`, `jq not found`, `sudo failed`, …) |
 
 ## Sources
 

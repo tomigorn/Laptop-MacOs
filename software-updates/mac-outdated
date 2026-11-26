@@ -108,11 +108,18 @@ setup_color() {
   fi
 }
 c() {  # c <sgr code> <text>: bold 1, dim 2, red 31, green 32, yellow 33
+  [ -n "$2" ] || return 0
   if [ "$COLOR" -eq 1 ]; then printf '\033[%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi
 }
+badge() {  # badge <background: 41 red, 42 green, 43 yellow> <text>: bold black on the colour, upper case
+  if [ "$COLOR" -eq 1 ]; then printf '\033[1;30;%sm %s \033[0m' "$1" "${2^^}"; else printf '%s' "$2"; fi
+}
+bar() { printf '\033[1;97;48;5;237m %-57s\033[0m' "$1"; }  # bar <text>: full-width grey bar (colour only)
 header() { printf '%s · %s\n\n' "$(c 1 "$1")" "$(date '+%Y-%m-%d %H:%M')"; }
 section() {  # section <title> <detail>
-  printf '\n%s\n %s%s\n%s\n' "$RULE" "$(c 1 "$1")" "${2:+ · $2}" "$RULE"
+  if [ "$COLOR" -eq 1 ]; then printf '\n%s\n' "$(bar "$1${2:+ · $2}")"
+  else printf '\n%s\n %s%s\n%s\n' "$RULE" "$1" "${2:+ · $2}" "$RULE"
+  fi
 }
 progress_start() {  # progress_start <label>: dots to a fixed column, the result follows on the same line
   local dots=$((29 - ${#1}))
@@ -120,7 +127,7 @@ progress_start() {  # progress_start <label>: dots to a fixed column, the result
   printf '  %s %s ' "$1" "$(printf '.%.0s' $(seq "$dots"))"
 }
 row() {  # row <name> <installed> <latest> <name width> <version width> [tag]
-  printf '    %s %s  →  %s%s\n' "$(c 33 "$(printf '%-*s' "$4" "$1")")" "$(c 2 "$(printf '%-*s' "$5" "$2")")" "$(c 33 "$3")" "${6:+  $(c 33 "$6")}"
+  printf '    %s %s  →  %s%s\n' "$(c 1 "$(printf '%-*s' "$4" "$1")")" "$(c 2 "$(printf '%-*s' "$5" "$2")")" "$(c '1;33' "$3")" "${6:+  $(c 33 "$6")}"
 }
 summary_row() {  # summary_row <label> <count> <hint> [count colour, default yellow]
   printf '  %-28s%s%s   %s\n' "$1" "$(printf '%*s' $((4 - ${#2})) '')" "$(c "${4:-33}" "$2")" "$(c 2 "$3")"
@@ -216,7 +223,7 @@ code_cmd() {
   return 1
 }
 
-# ── log: the terminal gets the output as it comes, the log every line without colour codes ──
+# ── log: the terminal gets the output as it comes, the log every line without colour codes (badges in lower case, bars as "── <title>") ──
 # a line starting with \x1f goes to the log only (folded tool output)
 # shellcheck disable=SC2016
 SPLITTER='
@@ -224,7 +231,7 @@ $SIG{INT} = "IGNORE";
 open(my $log, ">>", $ARGV[0]) or exit 1;
 select((select($log), $| = 1)[0]);
 my ($bol, $hide, $line) = (1, 0, "");
-sub logline { my $l = shift; $l =~ s/\e\[[0-9;?]*[A-Za-z]//g; $l =~ s/\r(?!\n)/\n/g; print $log $l; }
+sub logline { my $l = shift; $l =~ s/\e\[1;30;4[123]m (.*?) \e\[0m/lc($1)/ge; $l =~ s/\e\[1;97;48;5;237m (.*?) *\e\[0m/── $1/g; $l =~ s/\e\[[0-9;?]*[A-Za-z]//g; $l =~ s/\r(?!\n)/\n/g; print $log $l; }
 while (sysread(STDIN, my $buf, 65536)) {
   my $out = "";
   for my $part (split /(?<=\n)/, $buf) {
@@ -849,17 +856,17 @@ analyze() {  # analyze <src> <lines>: fills the counters and the short result of
 }
 result_text() {  # result_text <src>: the coloured short result for the progress line
   local src=$1
-  if [ "${N_ITEMS[$src]}" -gt 0 ] || [ "${N_HAND[$src]}" -gt 0 ]; then c 33 "$(counts_text "$src")"
-  elif [ "${N_OPEN[$src]}" -gt 0 ] && [[ $MANUAL_SOURCES == *" $src "* ]]; then c 33 "${N_OPEN[$src]} to open"
+  if [ "${N_ITEMS[$src]}" -gt 0 ] || [ "${N_HAND[$src]}" -gt 0 ]; then badge 43 "$(counts_text "$src")"
+  elif [ "${N_OPEN[$src]}" -gt 0 ] && [[ $MANUAL_SOURCES == *" $src "* ]]; then badge 43 "${N_OPEN[$src]} to open"
   elif [ -n "${SHORT[$src]}" ]; then
     case ${KIND[$src]} in
-      "!") c 31 "${SHORT[$src]}" ;;
+      "!") badge 41 "${SHORT[$src]}" ;;
       =) c 32 "${SHORT[$src]}" ;;
       "") c 2 "${SHORT[$src]}" ;;
       *) c 33 "${SHORT[$src]}" ;;
     esac
   elif [ "${N_NOTES[$src]}" -gt 0 ]; then c 33 "${N_NOTES[$src]} note$([ "${N_NOTES[$src]}" -gt 1 ] && echo s)"
-  else c 32 "up to date"
+  else c 2 "up to date"
   fi
 }
 
@@ -1143,7 +1150,7 @@ install_brew() {
     rm -f "$out"
     [ "$rc" -ne 0 ] || rc=$r
   fi
-  for r in "${selfs[@]}"; do hand "$r: open the app, it updates itself"; done
+  for r in "${selfs[@]}"; do read -r name inst _ latest <<< "$r"; hand_app "$name" "$inst" "$latest" "open the app, it updates itself"; done
   brew_results
   [ "$did" -eq 1 ] || [ "$rc" -ne 0 ] || STEP_STATUS=uptodate
   return "$rc"
@@ -1164,13 +1171,15 @@ install_open() {  # the Sparkle, no-updater and self-updating checks after the i
       *) c 2 "$text"; echo ;;
     esac
   done <<< "$lines"
+  local apps=()
   while IFS='|' read -r s name inst latest action _; do
     [ -n "$latest" ] || continue
     [ "$action" = open ] && action="open the app, it updates itself"
-    c 33 "$name $inst → $latest: $action"; echo
-    hand "$name $inst → $latest: $action"
+    apps+=("$APP$name$APP$inst$APP$latest$APP$action")
+    hand_app "$name" "$inst" "$latest" "$action"
     n=$((n + 1))
   done < <(grep -E '^([^|]*\|){3}[^|]' <<< "$lines" | sort -f -t'|' -k2,2)
+  [ "$n" -eq 0 ] || app_lines '' "${apps[@]}"
   if [ "$n" -gt 0 ]; then STEP_STATUS="open $n"; else STEP_STATUS=uptodate; fi
 }
 BREW_ROWS_JQ='.formulae[] | select(.pinned | not) | [.name, (.installed_versions[-1] // ""), .current_version] | @tsv'
@@ -1187,9 +1196,9 @@ brew_results() {  # one line per upgraded package: green when a second brew outd
   done
   for t in "${TRIED[@]}"; do
     IFS=$'\t' read -r name inst latest <<< "$t"
-    line=$(printf '%-*s %-*s  →  %s' "$nw" "$name" "$vw" "$inst" "$latest")
-    if is_listed "$still" "$name"; then c 31 "$line ✗"; else c 32 "$line ✓"; fi
-    echo
+    printf '%s %s  →  ' "$(c 1 "$(printf '%-*s' "$nw" "$name")")" "$(c 2 "$(printf '%-*s' "$vw" "$inst")")"
+    if is_listed "$still" "$name"; then printf '%s %s\n' "$(c '1;31' "$latest")" "$(c 31 ✗)"
+    else printf '%s %s\n' "$(c '1;32' "$latest")" "$(c 32 ✓)"; fi
   done
 }
 blocked_casks() {  # blocked_casks <brew upgrade output>: per cask macOS refused to replace, remove brew's leftover backup and add a by-hand line
@@ -1359,7 +1368,43 @@ indent() {  # indents tool output as it arrives; a line without newline (a promp
 declare -A RESULT
 STEP="" FAILED=0 INTERRUPTED=0
 BY_HAND=()
+APP=$'\x1f'  # marks a By hand entry as an app version line: <APP>name<APP>installed<APP>latest<APP>hint
 hand() { BY_HAND+=("$1"); }
+hand_app() { BY_HAND+=("$APP$1$APP$2$APP$3$APP$4"); }  # hand_app <name> <installed> <latest> <hint>
+app_lines() {  # app_lines <indent> <entries...>: app entries aligned (colour) or "name old → new: hint" (plain); other entries yellow
+  local ind=$1 e name inst latest hint nw=0 vw=0 lw=0
+  shift
+  for e in "$@"; do
+    [[ $e == "$APP"* ]] || continue
+    IFS=$APP read -r _ name inst latest hint <<< "$e"
+    [ "${#name}" -le "$nw" ] || nw=${#name}
+    [ "${#inst}" -le "$vw" ] || vw=${#inst}
+    [ "${#latest}" -le "$lw" ] || lw=${#latest}
+  done
+  for e in "$@"; do
+    if [[ $e != "$APP"* ]]; then printf '%s%s\n' "$ind" "$(c 33 "$e")"; continue; fi
+    IFS=$APP read -r _ name inst latest hint <<< "$e"
+    if [ "$COLOR" -eq 1 ]; then
+      printf '%s%s %s → %s  %s\n' "$ind" "$(c 1 "$(printf '%-*s' "$nw" "$name")")" "$(c 2 "$(printf '%*s' "$vw" "$inst")")" "$(c '1;33' "$(printf '%-*s' "$lw" "$latest")")" "$(c 2 "$hint")"
+    else
+      printf '%s%s\n' "$ind" "$name $inst → $latest: $hint"
+    fi
+  done
+}
+result_word() {  # result_word <result>: a badge for what changed or needs you, quiet text for the rest
+  local r=$1
+  case $r in
+    installed*) printf '%s%s' "$(badge 42 installed)" "$(c 32 "${r#installed}")" ;;
+    "up to date") c 2 "$r" ;;
+    staged*) c 32 "$r" ;;
+    skipped*|"some updates failed"*|"not verified"*) c 33 "$r" ;;
+    *" to open") badge 43 "$r" ;;
+    "check failed"*) printf '%s%s' "$(badge 41 "check failed")" "$(c 31 "${r#check failed}")" ;;
+    failed*) printf '%s%s' "$(badge 41 failed)" "$(c 31 "${r#failed}")" ;;
+    interrupted|"not run") badge 41 "$r" ;;
+    *) c 31 "$r" ;;
+  esac
+}
 
 install_summary() {
   local src r word n_inst=0 n_up=0 n_fail=0 n_skip=0 n_int=0 n_not=0 n_open=0
@@ -1367,26 +1412,25 @@ install_summary() {
   for src in "${INSTALL_ORDER[@]}"; do
     r=${RESULT[$src]:-not run}
     case $r in
-      installed*) n_inst=$((n_inst + 1)); word=$(c 32 "$r") ;;
-      "up to date"|staged*) n_up=$((n_up + 1)); word=$(c 32 "$r") ;;
-      skipped*) n_skip=$((n_skip + 1)); word=$(c 33 "$r") ;;
-      "some updates failed"*|"not verified"*) n_fail=$((n_fail + 1)); word=$(c 33 "$r") ;;
-      interrupted) n_int=$((n_int + 1)); word=$(c 31 "$r") ;;
-      "not run") n_not=$((n_not + 1)); word=$(c 31 "$r") ;;
-      *" to open") n_open=$((n_open + ${r%% *})); word=$(c 33 "$r") ;;
-      *) n_fail=$((n_fail + 1)); word=$(c 31 "$r") ;;
+      installed*) n_inst=$((n_inst + 1)) ;;
+      "up to date"|staged*) n_up=$((n_up + 1)) ;;
+      skipped*) n_skip=$((n_skip + 1)) ;;
+      interrupted) n_int=$((n_int + 1)) ;;
+      "not run") n_not=$((n_not + 1)) ;;
+      *" to open") n_open=$((n_open + ${r%% *})) ;;
+      *) n_fail=$((n_fail + 1)) ;;
     esac
-    printf '  %-26s%s\n' "${LABELS[$src]}" "$word"
+    printf '  %-26s%s\n' "${LABELS[$src]}" "$(result_word "$r")"
   done
   printf '  %s\n' "$THIN"
   local parts=()
-  [ "$n_inst" -eq 0 ] || parts+=("$n_inst installed")
-  [ "$n_up" -eq 0 ] || parts+=("$n_up up to date")
-  [ "$n_fail" -eq 0 ] || parts+=("$n_fail failed")
-  [ "$n_skip" -eq 0 ] || parts+=("$n_skip skipped")
-  [ "$n_int" -eq 0 ] || parts+=("$n_int interrupted")
-  [ "$n_not" -eq 0 ] || parts+=("$n_not not run")
-  [ "$n_open" -eq 0 ] || parts+=("$n_open to open")
+  [ "$n_inst" -eq 0 ] || parts+=("$(c 32 "$n_inst installed")")
+  [ "$n_up" -eq 0 ] || parts+=("$(c 2 "$n_up up to date")")
+  [ "$n_fail" -eq 0 ] || parts+=("$(c 31 "$n_fail failed")")
+  [ "$n_skip" -eq 0 ] || parts+=("$(c 33 "$n_skip skipped")")
+  [ "$n_int" -eq 0 ] || parts+=("$(c 31 "$n_int interrupted")")
+  [ "$n_not" -eq 0 ] || parts+=("$(c 31 "$n_not not run")")
+  [ "$n_open" -eq 0 ] || parts+=("$(c 33 "$n_open to open")")
   local joined=${parts[0]-} i
   for i in "${parts[@]:1}"; do joined+=" · $i"; done
   printf '  %-26s%s\n' total "$joined"
@@ -1407,13 +1451,14 @@ install_summary() {
   else
     joined=${failed[0]}
     for f in "${failed[@]:1}"; do joined+=", $f"; done
-    printf '  %s\n' "$(c 31 "✗ failed: $joined")"
+    if [ "$COLOR" -eq 1 ]; then printf '  %s %s\n' "$(badge 41 "✗ failed")" "$(c 31 "$joined")"
+    else printf '  %s\n' "✗ failed: $joined"; fi
     [ -z "$LOG" ] || printf '    details: %s\n' "$LOG"
     printf '    rerun: mac-outdated --install\n'
   fi
   section "By hand" ""
   if [ "${#BY_HAND[@]}" -eq 0 ]; then printf '  %s\n' "nothing to do by hand"
-  else for h in "${BY_HAND[@]}"; do printf '  %s\n' "$(c 33 "$h")"; done; fi
+  else app_lines '  ' "${BY_HAND[@]}"; fi
 }
 
 install_abort() {  # Ctrl-C or a step ending with 130: no further steps
@@ -1435,7 +1480,7 @@ install_mode() {
     [ "$INTERRUPTED" -eq 0 ] || install_abort
     label=${LABELS[$src]}
     STEP=$src
-    printf '\n%s\n' "$(c 1 "── $label")"
+    if [ "$COLOR" -eq 1 ]; then printf '\n%s\n' "$(bar "$label")"; else printf '\n%s\n' "── $label"; fi
     STEP_STATUS=""
     t0=$SECONDS; log_only "step $src: start $(date +%H:%M:%S)"
     if [ "$src" = macos ]; then
@@ -1470,13 +1515,8 @@ install_mode() {
       *) RESULT[$src]="failed (exit $rc)"; FAILED=1 ;;
     esac
     log_only "step $src: end $(date +%H:%M:%S), $((SECONDS - t0))s, exit $rc, ${RESULT[$src]}"
-    case ${RESULT[$src]} in
-      installed*|"up to date"|staged*) word=$(c 32 "${RESULT[$src]}") ;;
-      skipped*|"some updates failed"*|"not verified"*|*" to open") word=$(c 33 "${RESULT[$src]}") ;;
-      *) word=$(c 31 "${RESULT[$src]}") ;;
-    esac
     progress_start "$label"
-    printf '%s\n' "$word"
+    printf '%s\n' "$(result_word "${RESULT[$src]}")"
     [ "${RESULT[$src]}" != interrupted ] || install_abort
   done
   STEP=""

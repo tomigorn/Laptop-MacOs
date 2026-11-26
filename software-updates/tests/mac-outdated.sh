@@ -519,16 +519,21 @@ check "downgrade: 1.9.3 -> 1.9.3b is not one" lacks "$out" "(older version"
 cp "$FIXTURES/brew-outdated.json" "$FIX/brew-outdated.json"
 
 # colours
+colored() { grep -qF "$(printf '\033[%sm%s\033[0m' "$1" "$2")" "$WORK/out"; }  # colored <sgr code> <text>
+stripped() { sed $'s/\033\\[[0-9;]*m//g' "$WORK/out"; }  # the coloured output without its codes
 MAC_OUTDATED_COLOR=always run
 check "colour: forced escape sequence" grep -q $'\033\\[' "$WORK/out"
-check "colour: outdated count yellow" grep -q $'\033\\[33m4 outdated' "$WORK/out"
-check "colour: outdated name yellow" grep -q $'\033\\[33mghostty' "$WORK/out"
-check "colour: new version yellow" grep -q $'\033\\[33m1\\.4\\.0' "$WORK/out"
+check "colour: outdated count yellow badge" colored "1;30;43" " 4 OUTDATED "
+check "colour: outdated name bold" grep -q $'\033\\[1mghostty' "$WORK/out"
+check "colour: new version bold yellow" grep -q $'\033\\[1;33m1\\.4\\.0' "$WORK/out"
+check "colour: section bar" colored "1;97;48;5;237" "$(printf ' %-57s' 'brew · 4 outdated')"
+check "colour: summary bar" colored "1;97;48;5;237" "$(printf ' %-57s' 'Summary')"
+check "colour: no rule lines with colour" no_match "$(cat "$WORK/out")" "═══"
 check "colour: new version not green" no_match "$(cat "$WORK/out")" $'\033\\[32m[0-9.]+\033'
 check "colour: old version dim" grep -q $'\033\\[2m1\\.3\\.1' "$WORK/out"
 check "colour: informational dim" grep -q $'\033\\[2mchecked during --install' "$WORK/out"
 check "colour: open to update line yellow" grep -q $'\033\\[33mThese apps update themselves on start' "$WORK/out"
-check "colour: to open yellow" grep -q $'\033\\[33m1 to open' "$WORK/out"
+check "colour: to open yellow badge" colored "1;30;43" " 1 TO OPEN "
 check "colour: install hint yellow" grep -q $'\033\\[33mbrew install --cask --force keepassxc' "$WORK/out"
 check "colour: note dim" grep -q $'\033\\[2mbrew update failed' "$WORK/out"
 check "colour: summary count yellow" grep -qE $'brew +\033\\[33m4\033' "$WORK/out"
@@ -536,6 +541,8 @@ check "colour: uv none installed green" grep -q $'\033\\[32mnone installed' "$WO
 check "colour: extension version dim" grep -q $'\033\\[2m3\\.19\\.0' "$WORK/out"
 NO_COLOR=1 run
 check "colour: NO_COLOR none" no_match "$(cat "$WORK/out")" $'\033'
+check "colour: NO_COLOR rule lines as before" grep -qxF "$(printf '═%.0s' {1..58})" "$WORK/out"
+check "colour: NO_COLOR rows as before" has "$(cat "$WORK/out")" "^    ghostty +1\\.3\\.1 +→  1\\.4\\.0$"
 
 # ── check mode: nothing outdated ─────────────────────────────────────────────
 fixtures_current
@@ -549,7 +556,7 @@ check "nothing outdated: extensions still listed" has "$out" "^ johnpapa.vscode-
 check "nothing outdated: no install hint" lacks "$out" "next:"
 check "nothing outdated: stamp written" test -f "$HOME/.local/state/mac-outdated/last-check"
 MAC_OUTDATED_COLOR=always run
-check "colour: up to date green" grep -q $'\033\\[32mup to date' "$WORK/out"
+check "colour: up to date dim" grep -q $'\033\\[2mup to date' "$WORK/out"
 check "colour: everything up to date green" grep -q $'\033\\[32meverything up to date' "$WORK/out"
 make_app "Google Chrome" com.google.Chrome 150.0
 run
@@ -581,7 +588,7 @@ check "open only: no brew row" no_match "$out" "^ brew [0-9]"
 check "open only: stale not by hand" has "$out" "^ total 1 0 via --install · 1 by hand$"
 check "open only: no install hint" lacks "$out" "next:"
 MAC_OUTDATED_COLOR=always run
-check "open only: brew up to date green" grep -qE $'brew \\.+ \033\\[32mup to date' "$WORK/out"
+check "open only: brew up to date dim" grep -qE $'brew \\.+ \033\\[2mup to date' "$WORK/out"
 cp "$FIX/brew-outdated-none.json" "$FIX/brew-outdated.json"
 rm -rf "$APPS/UTM.app" "$APPS/Discord.app"
 
@@ -604,7 +611,7 @@ check "brew check failing: total" has "$out" "^ total 0 1 check failed$"
 check "brew check failing: not up to date" lacks "$out" "everything up to date"
 check "brew check failing: no stamp" test ! -e "$HOME/.local/state/mac-outdated/last-check"
 MAC_OUTDATED_COLOR=always run
-check "brew check failing: red" grep -q $'\033\\[31mcheck failed' "$WORK/out"
+check "brew check failing: red badge" grep -q $'\033\\[1;30;41m CHECK FAILED ' "$WORK/out"
 rm -f "$FIX/fail-brew-outdated"
 
 # offline: the App Store and macOS lists fail, the others still count
@@ -794,7 +801,7 @@ check "self: summary counts them as open" has "$out" "^ open to update 3 open th
 check "self: no install hint for them" no_match "$out" "cask --force (signal|windows-app)"
 check "self: no brew info per app" no_match "$(calls)" '^brew info --cask --json=v2 [^-]'
 MAC_OUTDATED_COLOR=always run
-check "self: outdated row yellow" grep -q $'\033\\[33mSignal' "$WORK/out"
+check "self: outdated row name bold" grep -q $'\033\\[1mSignal' "$WORK/out"
 check "self: not-checkable line dim" grep -q $'\033\\[2mnot checkable (no upstream source)' "$WORK/out"
 # the cask list is read again after brew update
 cask_cache "$(jq '.casks.signal.version = "8.35.0" | .casks["windows-app"].version = "11.4.4"' <<< "$SELF_CASKS")"
@@ -1500,7 +1507,7 @@ echo 1 > "$FIX/exit-rum"
 run --install
 check "Adobe exit 1: failed" has "$out" "Adobe \\.+ failed \\(exit 1\\)"
 MAC_OUTDATED_COLOR=always run --install
-check "Adobe exit 1: red" grep -q $'\033\\[31mfailed (exit 1)' "$WORK/out"
+check "Adobe exit 1: red badge, reason red" grep -q $'\033\\[1;30;41m FAILED \033\\[0m\033\\[31m (exit 1)' "$WORK/out"
 rm -f "$FIX/exit-rum"
 
 # a real exit 3 from a tool is a failure, not a skip
@@ -1570,7 +1577,7 @@ check "nothing updated: brew still installed" has "$out" "^ brew \\.+ installed$
 check "nothing updated: summary row" has "$out" "^ pipx up to date$"
 check "nothing updated: total" has "$out" "^ total 3 installed · 5 up to date · 2 to open$"
 MAC_OUTDATED_COLOR=always run --install
-check "nothing updated: green" grep -q $'pipx \\.* \033\\[32mup to date' "$WORK/out"
+check "nothing updated: dim" grep -q $'pipx \\.* \033\\[2mup to date' "$WORK/out"
 touch "$FIX/fail-pipx" "$FIX/fail-mas-outdated"
 cp "$FIXTURES/mas-outdated.json" "$FIX/mas-outdated.json"
 run --install
@@ -1646,6 +1653,9 @@ check "end: failed line names macOS" contains "$out" "✗ failed: macOS (still o
 check "end: failed line has the log path" has "$out" "details: .*/logs/.*-install\\.log"
 check "end: failed line has the rerun hint" contains "$out" "rerun: mac-outdated --install"
 check "end: failed, nothing nothing-failed" lacks "$out" "nothing failed"
+touch "$FIX/su-norestart"; MAC_OUTDATED_COLOR=always run --install; rm -f "$FIX/su-norestart"
+check "end: failed line red badge" grep -qF $'\033[1;30;41m ✗ FAILED \033[0m \033[31mmacOS (still offered' "$WORK/out"
+check "end: failed summary row badge" grep -qE $'macOS +\033\\[1;30;41m FAILED ' "$WORK/out"
 
 fixtures_outdated; admin_setup admin 20
 rm -f "$FIX/softwareupdate-after.txt"
@@ -1732,7 +1742,21 @@ check "open: not-checkable note left out" lacks "$out" "not checkable"
 check "open: unreachable appcast noted in the step" contains "$(sed -n '/── Apps to open/,/Summary/p' "$WORK/out")" "Broken: appcast not reachable"
 check "open: alone not a failure" equals "$rc" 0
 MAC_OUTDATED_COLOR=always run --install
-check "open: progress result yellow" grep -q $'\033\\[33m3 to open' "$WORK/out"
+check "open: progress result yellow badge" grep -q $'\033\\[1;30;43m 3 TO OPEN ' "$WORK/out"
+check "open: step header bar" grep -qF "$(printf '\033[1;97;48;5;237m %-57s\033[0m' 'Apps to open')" "$WORK/out"
+check "open: By hand bar" grep -qF "$(printf '\033[1;97;48;5;237m %-57s\033[0m' 'By hand')" "$WORK/out"
+check "open: app line name bold, aligned" grep -qF "$(printf '\033[1m%-9s\033[0m' Fork)" "$WORK/out"
+check "open: app line new version bold yellow" grep -qF $'\033[1;33m2.71.1' "$WORK/out"
+check "open: app line hint dim" grep -qF $'\033[2mopen the app, it updates itself' "$WORK/out"
+check "open: summary row badge" grep -qE $'Apps to open +\033\\[1;30;43m 3 TO OPEN ' "$WORK/out"
+check "open: total parts coloured" grep -qE $'total .*\033\\[33m3 to open\033\\[0m' "$WORK/out"
+check "open: total installed green" grep -qE $'total +\033\\[32m[0-9]+ installed' "$WORK/out"
+check "open: no step dashes with colour" no_match "$(cat "$WORK/out")" "^── "
+check "open: log has the badge in lower case" has "$(cat "$(logpath)")" "Apps to open \\.+ 3 to open$"
+check "open: log has bars as dashes" grep -qx "── By hand" "$(logpath)"
+run --install
+check "open: plain step header as before" has "$(cat "$WORK/out")" "^── Apps to open$"
+check "open: plain app line as before" contains "$(cat "$WORK/out")" "  Fork 2.70.2 → 2.71.1: open the app, it updates itself"
 
 fixtures_outdated; admin_setup admin 20
 jq '.casks += [{name: "discord", installed_versions: ["0.0.389"], current_version: "0.0.421", pinned: false}]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
@@ -1763,6 +1787,9 @@ check "open: brew missing, check failed" has "$out" "^ Apps to open \\.+ check f
 fixtures_outdated; admin_setup admin 20
 touch "$FIX/interrupt-script"; run --install; rm -f "$FIX/interrupt-script"
 check "open: Ctrl-C before it -> not run" has "$out" "^ Apps to open not run$"
+touch "$FIX/interrupt-script"; MAC_OUTDATED_COLOR=always run --install; rm -f "$FIX/interrupt-script"
+check "Ctrl-C: interrupted red badge" grep -qF $'\033[1;30;41m INTERRUPTED \033[0m' "$WORK/out"
+check "Ctrl-C: not run red badge" grep -qE $'Apps to open +\033\\[1;30;41m NOT RUN ' "$WORK/out"
 check "open: Ctrl-C before it -> no apps listed" lacks "$out" "Fork 2.70.2 → 2.71.1: open the app"
 
 # ── log: version, step times, exit codes, total time ────────────────────────
@@ -1955,18 +1982,16 @@ check "restart only in typed text: nothing remembered" test ! -e "$STAGED"
 rm -f "$STAGED"
 
 # ── install: own lines coloured, tool output plain, brew result per package ─
-colored() { grep -qF "$(printf '\033[%sm%s\033[0m' "$1" "$2")" "$WORK/out"; }  # colored <sgr code> <text>
 fixtures_outdated; admin_setup admin 20
 jq -n '{formulae: [{name: "aom", installed_versions: ["3.15.2"], current_version: "3.15.3", pinned: false}], casks: []}' > "$FIX/brew-outdated-after.json"
 MAC_OUTDATED_COLOR=always run --install
-check "results: upgraded formula green" colored 32 "bash    5.3.15  →  5.3.20 ✓"
-check "results: second upgraded formula green" colored 32 "btop    1.4.7   →  1.4.8 ✓"
-check "results: upgraded cask green" colored 32 "ghostty 1.3.1   →  1.4.0 ✓"
-check "results: still outdated red" colored 31 "aom     3.15.2  →  3.15.3 ✗"
+check "results: upgraded formula, name bold, old dim, new bold green ✓" grep -qF "$(printf '\033[1m%s\033[0m \033[2m%s\033[0m  →  \033[1;32m%s\033[0m \033[32m✓\033[0m' 'bash   ' 5.3.15 5.3.20)" "$WORK/out"
+check "results: upgraded cask" grep -qF "$(printf '\033[1m%s\033[0m \033[2m%s\033[0m  →  \033[1;32m%s\033[0m \033[32m✓\033[0m' ghostty '1.3.1 ' 1.4.0)" "$WORK/out"
+check "results: still outdated, new red ✗" grep -qF "$(printf '\033[1m%s\033[0m \033[2m%s\033[0m  →  \033[1;31m%s\033[0m \033[31m✗\033[0m' 'aom    ' 3.15.2 3.15.3)" "$WORK/out"
 check "results: pinned formula has no line" lacks "$(cat "$WORK/out")" "node@20"
-check "results: formulae first, then casks" equals "$(grep -oE '(aom|bash|btop|ghostty) +[0-9.]+ +→' "$WORK/out" | cut -d' ' -f1 | tr '\n' ' ')" "aom bash btop ghostty "
-brew_end=$(grep -n 'brew \.\.' "$WORK/out" | head -n 1 | cut -d: -f1)
-check "results: at the end of the brew block" test "$(grep -n 'ghostty .*1\.4\.0 ✓' "$WORK/out" | cut -d: -f1)" -eq $((brew_end - 1))
+check "results: formulae first, then casks" equals "$(stripped | grep -oE '(aom|bash|btop|ghostty) +[0-9.]+ +→' | cut -d' ' -f1 | tr '\n' ' ')" "aom bash btop ghostty "
+brew_end=$(stripped | grep -n 'brew \.\.' | head -n 1 | cut -d: -f1)
+check "results: at the end of the brew block" test "$(stripped | grep -n 'ghostty .*1\.4\.0 ✓' | cut -d: -f1)" -eq $((brew_end - 1))
 check "tool output: brew plain" grep -q '^    ==> Upgrading 1 outdated package' "$WORK/out"
 check "tool output: Adobe plain" grep -q '^    Successfully installed (AdobeAcrobatDC)' "$WORK/out"
 log=$(logpath)
@@ -1982,7 +2007,7 @@ MAC_OUTDATED_COLOR=always run --install
 rm -f "$FIX/fail-brew-outdated-after"
 check "results unknown: red" colored 31 "brew outdated failed, results unknown"
 check "results unknown: no result lines" no_match "$(cat "$WORK/out")" '(✓|✗)'$'\033'
-check "results unknown: step result unchanged" has "$out" "^ brew \\.+ "$'\033'"\\[32minstalled"
+check "results unknown: step result green badge" has "$out" "^ brew \\.+ "$'\033'"\\[1;30;42m INSTALLED "
 
 fixtures_current; admin_setup admin 20
 run --install
@@ -1999,14 +2024,14 @@ make_app BetterDisplay pro.betterdisplay.BetterDisplay 4.2.3
 MAC_OUTDATED_COLOR=always run --install
 check "stale cask install line: dim" colored 2 "utm: app already current, brew's record is stale"
 check "self-updating cask install line: yellow, real app version" colored 33 "discord 0.0.420 → 0.0.421: updates itself on start, open the app"
-check "results: tried cask listed" grep -qE 'betterdisplay +4\.2\.3 +→  5\.2\.1 ✓' "$WORK/out"
+check "results: tried cask listed" has "$(stripped)" 'betterdisplay +4\.2\.3 +→  5\.2\.1 ✓'
 check "results: stale cask has no line" no_match "$(cat "$WORK/out")" 'utm +4\.7\.5'
 check "results: self-updating cask has no line" no_match "$(cat "$WORK/out")" 'discord +0\.0\.389'
 
 held_setup; admin_setup admin 20
 MAC_OUTDATED_COLOR=always run --install
 check "held install line: yellow" colored 33 "yabai: third-party tap, held for review (see mac-outdated)"
-check "results: only the upgraded formula" colored 32 "aom 3.15.2  →  3.15.3 ✓"
+check "results: only the upgraded formula" contains "$(stripped)" "aom 3.15.2  →  3.15.3 ✓"
 check "results: held formula has no line" no_match "$(cat "$WORK/out")" 'yabai +7\.1\.25'
 
 fixtures_outdated; admin_setup admin 20
