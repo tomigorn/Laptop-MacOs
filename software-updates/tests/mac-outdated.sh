@@ -1568,7 +1568,7 @@ check "nothing updated: VS Code extensions up to date" has "$out" "^ VS Code ext
 check "nothing updated: tool output still shown" contains "$out" "Nothing to upgrade"
 check "nothing updated: brew still installed" has "$out" "^ brew \\.+ installed$"
 check "nothing updated: summary row" has "$out" "^ pipx up to date$"
-check "nothing updated: total" has "$out" "^ total 3 installed · 5 up to date$"
+check "nothing updated: total" has "$out" "^ total 3 installed · 5 up to date · 2 to open$"
 MAC_OUTDATED_COLOR=always run --install
 check "nothing updated: green" grep -q $'pipx \\.* \033\\[32mup to date' "$WORK/out"
 touch "$FIX/fail-pipx" "$FIX/fail-mas-outdated"
@@ -1712,6 +1712,58 @@ held_setup
 admin_setup admin 20
 run --install
 check "end: held formula by hand" has "$(sed -n '/By hand/,$p' "$WORK/out")" "yabai: third-party tap, held for review"
+
+# ── apps to open: self-updating, Sparkle and no-updater apps, checked after the installs ──
+fixtures_outdated; admin_setup admin 20
+make_app Signal org.whispersystems.signal-desktop 8.35.0
+cask_like signal Signal 8.36.0
+run --install
+hand_block=$(sed -n '/By hand/,$p' "$WORK/out")
+check "open: step right after macOS" equals "$(grep -E '^── ' "$WORK/out" | tail -2 | tr '\n' '/')" "── macOS/── Apps to open/"
+check "open: progress line" has "$out" "^ Apps to open \\.+ 3 to open$"
+check "open: summary row" has "$(sed -n '/Summary/,/By hand/p' <<< "$out")" "^ Apps to open 3 to open$"
+check "open: total counts them" has "$out" "^ total .* · 3 to open$"
+check "open: self-updating app" contains "$hand_block" "  Signal 8.35.0 → 8.36.0: open the app, it updates itself"
+check "open: Sparkle app" contains "$hand_block" "  Fork 2.70.2 → 2.71.1: open the app, it updates itself"
+check "open: no-updater app with its command" contains "$hand_block" "  KeePassXC 2.7.9 → 2.8.0: brew install --cask --force keepassxc"
+check "open: sorted by name" equals "$(grep -oE '^  (Fork|KeePassXC|Signal) ' <<< "$hand_block" | tr -d ' ' | tr '\n' ,)" "Fork,KeePassXC,Signal,"
+check "open: command never run" no_match "$(calls)" "^brew install"
+check "open: not-checkable note left out" lacks "$out" "not checkable"
+check "open: unreachable appcast noted in the step" contains "$(sed -n '/── Apps to open/,/Summary/p' "$WORK/out")" "Broken: appcast not reachable"
+check "open: alone not a failure" equals "$rc" 0
+MAC_OUTDATED_COLOR=always run --install
+check "open: progress result yellow" grep -q $'\033\\[33m3 to open' "$WORK/out"
+
+fixtures_outdated; admin_setup admin 20
+jq '.casks += [{name: "discord", installed_versions: ["0.0.389"], current_version: "0.0.421", pinned: false}]' "$FIXTURES/brew-outdated.json" > "$FIX/brew-outdated.json"
+make_app Discord com.hammerandchisel.discord 0.0.420
+run --install
+check "open: brew's self-updating cask listed once" equals "$(grep -ic 'discord 0.0.420' <<< "$(sed -n '/By hand/,$p' "$WORK/out")")" 1
+
+fixtures_current; admin_setup admin 20
+run --install
+check "open: nothing to open, up to date" has "$out" "^ Apps to open \\.+ up to date$"
+check "open: nothing to open, summary row" has "$(sed -n '/Summary/,/By hand/p' <<< "$out")" "^ Apps to open up to date$"
+check "open: nothing to open, no count in total" no_match "$(grep "^ total" <<< "$out")" "to open"
+
+fixtures_outdated; admin_setup admin 20
+mkdir -p "$WORK/nojq"
+for f in /bin/* /usr/bin/* "$BIN"/*; do [ "$(basename "$f")" = jq ] || ln -sf "$f" "$WORK/nojq/"; done
+PATH="$WORK/nojq" run --install
+rm -rf "$WORK/nojq"
+check "open: jq missing, check failed" has "$out" "^ Apps to open \\.+ check failed \\(jq not found: brew install jq\\)$"
+check "open: jq missing, in the failed line" has "$out" "✗ failed: .*Apps to open \\(check failed\\)"
+check "open: jq missing, exit 1" equals "$rc" 1
+mkdir -p "$WORK/nobrew"
+for f in "$BIN"/*; do [ "$(basename "$f")" = brew ] || ln -sf "$f" "$WORK/nobrew/"; done
+PATH="$WORK/nobrew:/usr/bin:/bin" run --install
+rm -rf "$WORK/nobrew"
+check "open: brew missing, check failed" has "$out" "^ Apps to open \\.+ check failed \\(brew not installed\\)$"
+
+fixtures_outdated; admin_setup admin 20
+touch "$FIX/interrupt-script"; run --install; rm -f "$FIX/interrupt-script"
+check "open: Ctrl-C before it -> not run" has "$out" "^ Apps to open not run$"
+check "open: Ctrl-C before it -> no apps listed" lacks "$out" "Fork 2.70.2 → 2.71.1: open the app"
 
 # ── log: version, step times, exit codes, total time ────────────────────────
 logs_dir="$HOME/.local/state/mac-outdated/logs"

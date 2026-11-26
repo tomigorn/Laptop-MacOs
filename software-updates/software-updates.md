@@ -112,6 +112,7 @@ mac-outdated v1.0.0 · 2026-11-03 11:20
   | By hand lists | Example |
   |---|---|
   | self-updating apps, one line each (version of the real app, else brew's record) | `discord 0.0.420 → 0.0.421: open the app, it updates itself` |
+  | apps to open (Sparkle, self-updating, no updater; sorted by name) | `Fork 2.71.1 → 2.72.0: open the app, it updates itself`, `KeePassXC 2.7.9 → 2.8.0: brew install --cask --force keepassxc` (shown, never run) |
   | restart required (only labels marked `Action: restart`) | `macOS <label>: restart the Mac when it suits you` |
   | skipped (admin expired) | `App Store: skipped, admin expired: click Privileges, then mac-outdated --install` |
   | skipped (admin nearly out) | `App Store: skipped, admin expires in 1 min: click Privileges, then mac-outdated --install` |
@@ -197,7 +198,15 @@ App -> cask lookup (no network, no `brew info` per app):
 | 3 | several casks for one app: the token named like the app, then one without `@` (`firefox` before `firefox@beta`); disabled casks skipped |
 | no cache | the cask named like the app (`brew info --cask <name>`) |
 
-Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, uv tools, VS Code, macOS last (sudo, longest). A failing source does not stop the others; a summary follows.
+Run it as your own user, never with sudo: `--install` asks for the password itself. Install order: Adobe, App Store (sudo, short), brew, Microsoft, pipx, uv tools, VS Code, macOS (sudo, longest), then `Apps to open`. A failing source does not stop the others; a summary follows.
+
+`Apps to open` (`--install` only, last step, no admin): the Sparkle, no-updater and self-updating checks of check mode, after brew so freshly upgraded casks are not listed; brew's own casks stay in the brew step. Installs nothing; the "not checkable" note stays in check mode.
+
+| Result | When | Summary |
+|---|---|---|
+| `N to open` (yellow) | N apps listed under By hand | `total … · N to open`, exit unchanged |
+| `up to date` | nothing to open | counts as up to date |
+| `check failed (brew not installed)`, `check failed (jq not found: brew install jq)` | no brew or jq | counts as failed, exit 1 |
 
 `brew upgrade --cask` runs each cask's own uninstall/quit steps: it may quit running apps and show macOS Automation/App Management prompts, and pkg casks (e.g. XQuartz) call sudo themselves. Quit Discord, BetterDisplay, Hiddenbar, UTM, XQuartz and apps launched from Ghostty before running.
 
