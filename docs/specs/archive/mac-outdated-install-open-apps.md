@@ -20,7 +20,7 @@ Date: 2026-11-26. Version 1.6.0.
 - [x] Tests (`tests/test-all.sh`, offline fixtures): each of the lines above, the duplicate case, the failed case
 - [x] `software-updates.md` updated (install order, Summary, By hand), 1.6.0 tagged
 - [x] Verify: tests by `verifier` (152 passed), the step run alone on this Mac matches the plain check (Fork, iStat Menus, Teams, OneDrive; Shottr from the brew step)
-- [ ] Real `mac-outdated --install` run by the owner (needs Privileges): the apps outdated then appear under By hand
+- [x] Real `mac-outdated --install` run by the owner 2026-11-26: Fork, iStat Menus, Teams, OneDrive in the step, Summary (`4 to open`) and By hand
 
 ## Untouched
 - Check mode output and logic

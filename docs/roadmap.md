@@ -22,7 +22,6 @@
 - ❓ Bluetooth battery in the greeting: warning colour? Options: red below 20% ⭐ (low battery stands out) · another threshold · always the same colour (calmer, easy to miss a low device).
 
 ## By hand
-- ✋ mac-outdated 1.6.0 live check: on the Mac, any folder, after a click on Privileges: `mac-outdated --install`; the last step `── Apps to open` lists the apps the plain `mac-outdated` shows under "Open to update" (minus brew casks, which the brew step lists), each under By hand. Why: `--install` needs admin, only the step alone could be run here.
 - ✋ homelab-dns reinstall, now (1.0.1): on the Mac, `~/development/private/Laptop-MacOs`: `sudo homelab-dns/install.sh`, then `homelab-dns/homelab-dns.sh --version` shows `homelab-dns 1.0.1`. Why: the installed copy (2026-11-05) misses the stop-flag fix from 2026-11-06.
 - ✋ Before the itet-ifa-comp01 baseline: on the Mac (any folder) `ssh-add` the ETH server key (`~/.ssh/keys/eth/<user>.4la.ethServers`). Why: the key isn't in the agent, so every connect gets `Permission denied (publickey)`.
 - ✋ xxhc 3.2.2 live check: in a new Ghostty tab, `xxhc itet-ifa-comp01` (or root6); the remote greeting must show `Terminal: ghostty 1.4.0`, no tar warnings, no xxh "First time…" lines, and no `timeout` box on exit. Why: the Terminal line fix could only be tested against the Mac's fastfetch, not on Linux.
